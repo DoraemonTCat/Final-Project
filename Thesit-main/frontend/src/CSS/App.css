@@ -1,3 +1,66 @@
+/* Sidebar Styles - แก้ไขให้ไม่กระทบ layout */
+.sidebar {
+  width: 250px;
+  background-color: #2c3e50;
+  color: white;
+  padding: 20px;
+  position: fixed;
+  height: 100vh;
+  overflow-y: auto;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  box-sizing: border-box;
+}
+
+.sidebar-title {
+  color: #ecf0f1;
+  margin-bottom: 15px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.BT {
+  background-color: #3b5998;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 15px;
+  width: 20%;
+  transition: background-color 0.2s ease;
+}
+.BT:hover {
+  background-color: #2d4373;
+}
+
+.fb-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.select-page {
+  width: 100%;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  background-color: #34495e;
+  color: white;
+  border: 1px solid #3d566e;
+  box-sizing: border-box;
+  font-size: 14px;
+}
+
+.select-page:focus {
+  outline: none;
+  border-color: #3498db;
+}
+
 .App {
   text-align: center;
 }
@@ -177,35 +240,6 @@
   display: flex;
   min-height: 100vh;
   background-color: #222;
-}
-
-/* Sidebar */
-.sidebar {
-  width: 200px;
-  background-color: #ccc;
-  padding: 20px;
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  overflow-y: auto;
-  z-index: 1000;
-}
-
-.sidebar-title {
-  margin-left: 35px;
-}
-
-.select-page {
-  width: 100%;
-  padding: 8px;
-  margin-top: 10px;
-}
-
-.fb-icon {
-  background: #1877f3;
-  border-radius: 3px;
- 
 }
 
 /* Main content */

@@ -135,7 +135,7 @@ function ManageMessageSets() {
                 <a href="#" className="title" style={{ marginLeft: "53px" }}>Dashboard</a><br />
                 <a href="#" className="title" style={{ marginLeft: "66px" }}>Setting</a><br />
             </aside>
-            <div className="message-settings-container">
+            <div className="message-container">
                 <h1 className="header">📂 รายการชุดข้อความที่ตั้งไว้</h1>
                 <p style={{ textAlign: "center" }}><strong>เพจที่เลือก:</strong> {pages.find(p => p.id === selectedPage)?.name || 'ยังไม่ได้เลือกเพจ'}</p>
 
