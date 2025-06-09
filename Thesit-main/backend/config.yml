@@ -1,0 +1,7 @@
+tunnel: my-fastapi-tunnel
+credentials-file: /Users/your-user/.cloudflared/xxxx-credentials.json
+
+ingress:
+  - hostname: miner.com
+    service: http://localhost:8000
+  - service: http_status:404
