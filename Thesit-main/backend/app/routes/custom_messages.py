@@ -23,6 +23,10 @@ class MessageSetCreate(BaseModel):
     page_id: str
     set_name: str
 
+# 🔶 Schema สำหรับแก้ไขชุดข้อความ
+class MessageSetUpdate(BaseModel):
+    set_name: str
+
 @router.post("/message_set")
 def create_message_set(data: MessageSetCreate, db: Session = Depends(get_db)):
     new_set = MessageSets(
@@ -38,6 +42,30 @@ def create_message_set(data: MessageSetCreate, db: Session = Depends(get_db)):
 def get_message_sets_by_page(page_id: str, db: Session = Depends(get_db)):
     sets = db.query(MessageSets).filter(MessageSets.page_id == page_id).order_by(MessageSets.created_at.desc()).all()
     return sets
+
+# ✅ แก้ไขชื่อชุดข้อความ
+@router.put("/message_set/{set_id}")
+def update_message_set(set_id: int, data: MessageSetUpdate, db: Session = Depends(get_db)):
+    message_set = db.query(MessageSets).filter(MessageSets.id == set_id).first()
+    if not message_set:
+        raise HTTPException(status_code=404, detail="Message set not found")
+    
+    message_set.set_name = data.set_name
+    db.commit()
+    db.refresh(message_set)
+    return message_set
+
+# ✅ ลบชุดข้อความ (จะลบข้อความทั้งหมดในชุดด้วย cascade)
+@router.delete("/message_set/{set_id}")
+def delete_message_set(set_id: int, db: Session = Depends(get_db)):
+    message_set = db.query(MessageSets).filter(MessageSets.id == set_id).first()
+    if not message_set:
+        raise HTTPException(status_code=404, detail="Message set not found")
+    
+    # ลบชุดข้อความ (cascade จะลบ messages ที่เกี่ยวข้องอัตโนมัติ)
+    db.delete(message_set)
+    db.commit()
+    return {"status": "deleted", "id": set_id}
 
 # ✅ เพิ่มข้อความใหม่ (เดี่ยว)
 @router.post("/custom_message")

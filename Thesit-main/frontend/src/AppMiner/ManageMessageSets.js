@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { fetchPages, getMessageSetsByPage, connectFacebook } from '../Features/Tool';
+import { fetchPages, getMessageSetsByPage, connectFacebook, updateMessageSet, deleteMessageSet } from '../Features/Tool';
 import '../CSS/Default.css';
 
 function ManageMessageSets() {
@@ -8,6 +8,9 @@ function ManageMessageSets() {
     const [selectedPage, setSelectedPage] = useState('');
     const [messageSets, setMessageSets] = useState([]);
     const [loading, setLoading] = useState(false);
+    // เพิ่ม state สำหรับการแก้ไข
+    const [editingId, setEditingId] = useState(null);
+    const [editingName, setEditingName] = useState('');
 
     const navigate = useNavigate();
 
@@ -52,6 +55,63 @@ function ManageMessageSets() {
         localStorage.setItem('selectedPage', pageId);
     };
 
+    // ฟังก์ชันเริ่มแก้ไข
+    const handleStartEdit = (set) => {
+        setEditingId(set.id);
+        setEditingName(set.set_name);
+    };
+
+    // ฟังก์ชันยกเลิกการแก้ไข
+    const handleCancelEdit = () => {
+        setEditingId(null);
+        setEditingName('');
+    };
+
+    // ฟังก์ชันบันทึกการแก้ไข
+    const handleSaveEdit = async (setId) => {
+        if (!editingName.trim()) {
+            alert('กรุณากรอกชื่อชุดข้อความ');
+            return;
+        }
+
+        try {
+            await updateMessageSet(setId, editingName);
+            
+            // อัพเดท state
+            setMessageSets(prevSets => 
+                prevSets.map(set => 
+                    set.id === setId ? { ...set, set_name: editingName } : set
+                )
+            );
+            
+            setEditingId(null);
+            setEditingName('');
+            alert('แก้ไขชื่อชุดข้อความสำเร็จ');
+        } catch (err) {
+            console.error('ไม่สามารถแก้ไขชุดข้อความได้:', err);
+            alert('เกิดข้อผิดพลาดในการแก้ไขชุดข้อความ');
+        }
+    };
+
+    // ฟังก์ชันลบชุดข้อความ (แก้ไข syntax)
+    const handleDelete = async (setId, setName) => {
+        if (!window.confirm(`คุณต้องการลบชุดข้อความ "${setName}" หรือไม่?\nการลบจะไม่สามารถย้อนกลับได้`)) {
+            return;
+        }
+
+        try {
+            await deleteMessageSet(setId);
+            
+            // อัพเดท state
+            setMessageSets(prevSets => prevSets.filter(set => set.id !== setId));
+            
+            alert('ลบชุดข้อความสำเร็จ');
+        } catch (err) {
+            console.error('ไม่สามารถลบชุดข้อความได้:', err);
+            alert('เกิดข้อผิดพลาดในการลบชุดข้อความ');
+        }
+    };
+
     return (
         <div className="app-container">
             <aside className="sidebar">
@@ -68,9 +128,7 @@ function ManageMessageSets() {
                         <option key={page.id} value={page.id}>
                             {page.name}
                         </option>
-                    )
-                    )
-                    }
+                    ))}
                 </select>
                 <Link to="/App" className="title" style={{ marginLeft: "64px" }}>หน้าแรก</Link><br />
                 <Link to="/Set_Miner" className="title" style={{ marginLeft: "50px" }}>ตั้งค่าระบบขุด</Link><br />
@@ -98,10 +156,54 @@ function ManageMessageSets() {
                                     <div className="sequence-type">📌 ชุดข้อความ</div>
                                     <div className="sequence-text">{set.set_name}</div>
                                 </div>
+                                
+                                {/* ปุ่มควบคุม */}
+                                <div style={{ 
+                                    display: 'flex', 
+                                    gap: '8px',
+                                    marginLeft: 'auto'
+                                }}>
+                                    <button
+                                        onClick={() => navigate(`/default?setId=${set.id}`)}
+                                        style={{
+                                            backgroundColor: '#f39c12',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '4px',
+                                            padding: '6px 12px',
+                                            cursor: 'pointer',
+                                            fontSize: '12px'
+                                        }}
+                                        title="แก้ไขชุดข้อความ"
+                                    >
+                                        ✏️ แก้ไขชุด
+                                    </button>
+                                    <button
+                                        onClick={() => handleDelete(set.id, set.set_name)}
+                                        style={{
+                                            backgroundColor: '#e74c3c',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '4px',
+                                            padding: '6px 12px',
+                                            cursor: 'pointer',
+                                            fontSize: '12px'
+                                        }}
+                                        title="ลบชุดข้อความ"
+                                    >
+                                        🗑️ ลบ
+                                    </button>
+                                </div>
                             </li>
                         ))}
                     </ul>
                 )}
+
+                <div style={{ marginTop: '30px', textAlign: 'center' }}>
+                    <Link to="/Set_Miner" className="back-button">
+                        ← กลับไปหน้าตั้งค่าระบบขุด
+                    </Link>
+                </div>
             </div>
         </div>
     );

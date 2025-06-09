@@ -118,3 +118,23 @@ export async function getMessageSetsByPage(pageId) {
   if (!res.ok) throw new Error("ไม่สามารถโหลดชุดข้อความได้");
   return res.json();
 }
+
+// 🔸 ✨ ฟังก์ชันใหม่: แก้ไขชื่อชุดข้อความ
+export async function updateMessageSet(setId, newName) {
+  const res = await fetch(`http://localhost:8000/message_set/${setId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ set_name: newName }),
+  });
+  if (!res.ok) throw new Error("ไม่สามารถแก้ไขชุดข้อความได้");
+  return res.json();
+}
+
+// 🔸 ✨ ฟังก์ชันใหม่: ลบชุดข้อความ
+export async function deleteMessageSet(setId) {
+  const res = await fetch(`http://localhost:8000/message_set/${setId}`, {
+    method: "DELETE"
+  });
+  if (!res.ok) throw new Error("ไม่สามารถลบชุดข้อความได้");
+  return res.json();
+}

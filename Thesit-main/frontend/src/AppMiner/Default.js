@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import '../CSS/Default.css';
 import {
   fetchPages, connectFacebook, saveMessageToDB, saveMessagesBatch
-  , getMessagesBySetId, deleteMessageFromDB, createMessageSet, getMessageSetsByPage
+  , getMessagesBySetId, deleteMessageFromDB, createMessageSet, getMessageSetsByPage, updateMessageSet
 } from "../Features/Tool";
-import MessageSetSelector from "./MessageSetSelector";
 
 function SetDefault() {
   const [pages, setPages] = useState([]);
@@ -14,6 +13,8 @@ function SetDefault() {
   const [messageSequence, setMessageSequence] = useState([]);
   const [selectedMessageSetId, setSelectedMessageSetId] = useState(null);
   const [messageSetName, setMessageSetName] = useState("");
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [searchParams] = useSearchParams();
   const [currentInput, setCurrentInput] = useState({
     type: 'text',
     content: '',
@@ -39,9 +40,48 @@ function SetDefault() {
     loadPages();
   }, []);
 
+  // โหลดข้อมูลถ้ามาจากโหมดแก้ไข
+  useEffect(() => {
+    const setId = searchParams.get('setId');
+    if (setId && selectedPage) {
+      loadExistingMessageSet(setId);
+    }
+  }, [searchParams, selectedPage]);
+
+  const loadExistingMessageSet = async (setId) => {
+    try {
+      setLoading(true);
+      setIsEditMode(true);
+      setSelectedMessageSetId(parseInt(setId));
+
+      // โหลดข้อมูลชุดข้อความ
+      const sets = await getMessageSetsByPage(selectedPage);
+      const currentSet = sets.find(s => s.id === parseInt(setId));
+      if (currentSet) {
+        setMessageSetName(currentSet.set_name);
+      }
+
+      // โหลดข้อความในชุด
+      const messages = await getMessagesBySetId(setId);
+      const sequenceData = messages.map((msg, index) => ({
+        id: msg.id || Date.now() + index,
+        type: msg.message_type || 'text',
+        content: msg.content || msg.message,
+        order: msg.display_order || index,
+        originalData: msg
+      }));
+      setMessageSequence(sequenceData);
+    } catch (err) {
+      console.error("โหลดข้อมูลชุดข้อความล้มเหลว:", err);
+      alert("ไม่สามารถโหลดข้อมูลชุดข้อความได้");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     const loadMessages = async () => {
-      if (selectedPage) {
+      if (selectedPage && !isEditMode) {
         setLoading(true);
         try {
           console.log(`🔄 กำลังโหลดข้อความสำหรับ page_id: ${selectedPage}`);
@@ -62,13 +102,13 @@ function SetDefault() {
         } finally {
           setLoading(false);
         }
-      } else {
-        setMessageSequence([]);
       }
     };
 
-    loadMessages();
-  }, [selectedPage]);
+    if (!isEditMode) {
+      loadMessages();
+    }
+  }, [selectedPage, isEditMode]);
 
   const handlePageChange = (e) => {
     const pageId = e.target.value;
@@ -196,29 +236,6 @@ function SetDefault() {
     });
   };
 
-  const handleCreateMessageSet = async () => {
-    if (!messageSetName.trim()) {
-      alert("กรุณากรอกชื่อชุดข้อความ");
-      return;
-    }
-    if (!selectedPage) {
-      alert("กรุณาเลือกเพจก่อน");
-      return;
-    }
-
-    try {
-      const newSet = await createMessageSet({
-        page_id: selectedPage,
-        set_name: messageSetName.trim()
-      });
-      alert("สร้างชุดข้อความสำเร็จ!");
-      setSelectedMessageSetId(newSet.id);
-    } catch (err) {
-      console.error("ไม่สามารถสร้างชุดข้อความได้:", err);
-      alert("เกิดข้อผิดพลาดในการสร้างชุดข้อความ");
-    }
-  };
-
   const saveMessageSequence = async () => {
     if (!messageSetName.trim()) {
       alert("กรุณากรอกชื่อชุดข้อความ");
@@ -232,28 +249,29 @@ function SetDefault() {
     try {
       let setId = selectedMessageSetId;
 
-      // ถ้ายังไม่มีชุดข้อความ ให้สร้างก่อน
-      if (!setId) {
+      // ถ้าเป็นโหมดแก้ไข อัพเดทชื่อชุดข้อความ
+      if (isEditMode && setId) {
+        await updateMessageSet(setId, messageSetName.trim());
+        
+        // ลบข้อความเดิมทั้งหมดก่อน
+        const oldMessages = messageSequence.filter(item => item.originalData);
+        for (const msg of oldMessages) {
+          if (msg.originalData?.id) {
+            await deleteMessageFromDB(msg.originalData.id);
+          }
+        }
+      } else if (!setId) {
+        // ถ้ายังไม่มีชุดข้อความ ให้สร้างก่อน
         const newSet = await createMessageSet({
           page_id: selectedPage,
           set_name: messageSetName.trim()
         });
         setId = newSet.id;
         setSelectedMessageSetId(setId);
-        alert("สร้างชุดข้อความสำเร็จ!");
       }
 
-      // ข้อความใหม่ที่ยังไม่บันทึก
-      const newMessages = messageSequence.filter(item => !item.originalData);
-
-      if (newMessages.length === 0) {
-        alert("ไม่มีข้อความใหม่ให้บันทึก");
-        return;
-      }
-
-      console.log("🔄 กำลังบันทึกข้อความใหม่:", newMessages);
-
-      const payloads = await Promise.all(newMessages.map(async (item, index) => {
+      // บันทึกข้อความทั้งหมดใหม่
+      const payloads = await Promise.all(messageSequence.map(async (item, index) => {
         let mediaData = null;
 
         if (item.file) {
@@ -276,7 +294,7 @@ function SetDefault() {
         const content = item.type === 'text' ? item.content : `[${item.type.toUpperCase()}] ${item.content}`;
 
         return {
-          message_set_id: setId,        // ใช้ id ชุดข้อความที่สร้าง/มีอยู่
+          message_set_id: setId,
           page_id: selectedPage,
           message_type: item.type,
           content,
@@ -285,19 +303,20 @@ function SetDefault() {
       }));
 
       await saveMessagesBatch(payloads);
-      alert(`บันทึกข้อความใหม่สำเร็จ! จำนวน ${newMessages.length} รายการ`);
+      alert(isEditMode ? "แก้ไขชุดข้อความสำเร็จ!" : "บันทึกข้อความสำเร็จ!");
 
       // โหลดข้อความใหม่
-      const data = await getMessagesBySetId(selectedPage);
-      const sequenceData = Array.isArray(data) ? data.map((msg, index) => ({
+      const data = await getMessagesBySetId(setId);
+      const sequenceData = data.map((msg, index) => ({
         id: msg.id || Date.now() + index,
-        type: 'text',
-        content: msg.message,
-        order: index,
+        type: msg.message_type || 'text',
+        content: msg.content || msg.message,
+        order: msg.display_order || index,
         originalData: msg
-      })) : [];
+      }));
 
       setMessageSequence(sequenceData);
+      setIsEditMode(true);
     } catch (error) {
       console.error("เกิดข้อผิดพลาดในการบันทึก:", error);
       alert("เกิดข้อผิดพลาดในการบันทึก: " + error.message);
@@ -334,7 +353,6 @@ function SetDefault() {
   const selectedPageName = pages.find(page => page.id === selectedPage)?.name || "ไม่ได้เลือกเพจ";
 
   return (
-    // Sidebar
     <div className="app-container">
       <aside className="sidebar">
         <h3 className="sidebar-title">ช่องทางเชื่อมต่อ</h3>
@@ -345,7 +363,7 @@ function SetDefault() {
         </button>
         <hr />
         <select value={selectedPage} onChange={handlePageChange} className="select-page">
-
+          <option value="">-- เลือกเพจ --</option>
           {pages.map((page) => (
             <option key={page.id} value={page.id}>
               {page.name}
@@ -359,7 +377,9 @@ function SetDefault() {
       </aside>
 
       <div className="message-settings-container">
-        <h1 className="header">ตั้งค่าลำดับข้อความ Default</h1>
+        <h1 className="header">
+          {isEditMode ? "แก้ไขชุดข้อความ" : "ตั้งค่าลำดับข้อความ Default"}
+        </h1>
 
         <div className="page-info">
           <p style={{ textAlign: "center" }}><strong>เพจที่เลือก:</strong> {selectedPageName}</p>
@@ -367,7 +387,7 @@ function SetDefault() {
 
         <div className="sequence-container">
           <div className="sequence-card">
-            <h3 className="sequence-header">📝 ตั้งชื่อชุดข้อความ</h3>
+            <h3 className="sequence-header">📝 {isEditMode ? "แก้ไขชื่อชุดข้อความ" : "ตั้งชื่อชุดข้อความ"}</h3>
             <div className="input-form">
               <label className="input-label">ชื่อชุดข้อความ:</label>
               <input
@@ -450,14 +470,12 @@ function SetDefault() {
           <div className="sequence-card">
             <div className="sequence-header-container">
               <h3 className="sequence-header">📋 ลำดับการส่ง </h3>
-              {messageSequence.filter(item => !item.originalData).length > 0 && (
-                <button
-                  onClick={saveMessageSequence}
-                  className="save-btn"
-                >
-                  💾 บันทึกทั้งหมด
-                </button>
-              )}
+              <button
+                onClick={saveMessageSequence}
+                className="save-btn"
+              >
+                💾 {isEditMode ? "บันทึกการแก้ไข" : "บันทึกทั้งหมด"}
+              </button>
             </div>
 
             <div className="sequence-hint">
@@ -522,8 +540,8 @@ function SetDefault() {
           </div>
         </div>
 
-        <Link to="/Set_Miner" className="back-button">
-          กลับไปหน้าก่อนหน้า
+        <Link to="/manage-message-sets" className="back-button">
+          ← กลับไปหน้ารายการชุดข้อความ
         </Link>
       </div>
     </div>
