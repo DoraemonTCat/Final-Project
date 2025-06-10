@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import '../CSS/Default.css';
 import {
-  fetchPages, connectFacebook, saveMessageToDB, saveMessagesBatch
-  , getMessagesBySetId, deleteMessageFromDB, createMessageSet, getMessageSetsByPage, updateMessageSet
+  fetchPages, connectFacebook, saveMessageToDB, saveMessagesBatch,
+  getMessagesBySetId, deleteMessageFromDB, createMessageSet, getMessageSetsByPage, 
+  updateMessageSet, uploadMedia
 } from "../Features/Tool";
 
 
@@ -16,11 +17,14 @@ function SetDefault() {
   const [messageSetName, setMessageSetName] = useState("");
   const [isEditMode, setIsEditMode] = useState(false);
   const [searchParams] = useSearchParams();
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [currentInput, setCurrentInput] = useState({
     type: 'text',
     content: '',
     file: null,
-    preview: null
+    preview: null,
+    mediaData: null,
+    filename: null
   });
 
   useEffect(() => {
@@ -69,7 +73,9 @@ function SetDefault() {
         type: msg.message_type || 'text',
         content: msg.content || msg.message,
         order: msg.display_order || index,
-        originalData: msg
+        originalData: msg,
+        mediaUrl: msg.media_url,
+        filename: msg.filename
       }));
       setMessageSequence(sequenceData);
     } catch (err) {
@@ -91,10 +97,12 @@ function SetDefault() {
 
           const sequenceData = Array.isArray(data) ? data.map((msg, index) => ({
             id: msg.id || Date.now() + index,
-            type: 'text',
-            content: msg.message,
-            order: index,
-            originalData: msg
+            type: msg.message_type || 'text',
+            content: msg.content || msg.message,
+            order: msg.display_order || index,
+            originalData: msg,
+            mediaUrl: msg.media_url,
+            filename: msg.filename
           })) : [];
           setMessageSequence(sequenceData);
         } catch (err) {
@@ -126,21 +134,48 @@ function SetDefault() {
       type: 'text',
       content: '',
       file: null,
-      preview: null
+      preview: null,
+      mediaData: null,
+      filename: null
     });
   };
 
-  const handleFileUpload = (event) => {
+  const handleFileUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    const preview = URL.createObjectURL(file);
-    setCurrentInput(prev => ({
-      ...prev,
-      file,
-      preview,
-      content: file.name
-    }));
+    setUploadingFile(true);
+    
+    try {
+      // ตรวจสอบขนาดไฟล์ (จำกัดที่ 25MB)
+      if (file.size > 100 * 1024 * 1024) {
+        alert("ไฟล์มีขนาดใหญ่เกินไป กรุณาเลือกไฟล์ที่มีขนาดไม่เกิน 25MB");
+        return;
+      }
+
+      // อ่านไฟล์เป็น base64
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const base64Data = e.target.result;
+        const preview = URL.createObjectURL(file);
+        
+        setCurrentInput(prev => ({
+          ...prev,
+          file,
+          preview,
+          content: file.name,
+          mediaData: base64Data,
+          filename: file.name
+        }));
+      };
+      
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      alert("เกิดข้อผิดพลาดในการอัพโหลดไฟล์");
+    } finally {
+      setUploadingFile(false);
+    }
   };
 
   const addToSequence = () => {
@@ -165,6 +200,8 @@ function SetDefault() {
       content: currentInput.content || currentInput.file?.name || '',
       file: currentInput.file,
       preview: currentInput.preview,
+      mediaData: currentInput.mediaData,
+      filename: currentInput.filename,
       order: messageSequence.length
     };
 
@@ -177,7 +214,9 @@ function SetDefault() {
       type: 'text',
       content: '',
       file: null,
-      preview: null
+      preview: null,
+      mediaData: null,
+      filename: null
     });
   };
 
@@ -228,15 +267,6 @@ function SetDefault() {
     setMessageSequence(newSequence);
   };
 
-  const convertFileToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = error => reject(error);
-    });
-  };
-
   const saveMessageSequence = async () => {
     if (!messageSetName.trim()) {
       alert("กรุณากรอกชื่อชุดข้อความ");
@@ -248,6 +278,7 @@ function SetDefault() {
     }
 
     try {
+      setLoading(true);
       let setId = selectedMessageSetId;
 
       // ถ้าเป็นโหมดแก้ไข อัพเดทชื่อชุดข้อความ
@@ -272,36 +303,23 @@ function SetDefault() {
       }
 
       // บันทึกข้อความทั้งหมดใหม่
-      const payloads = await Promise.all(messageSequence.map(async (item, index) => {
-        let mediaData = null;
-
-        if (item.file) {
-          const base64 = await convertFileToBase64(item.file);
-          if (item.type === 'image') {
-            mediaData = {
-              images1: [{ name: item.file.name, type: item.file.type, size: item.file.size, data: base64 }],
-              videos: [],
-              images2: []
-            };
-          } else if (item.type === 'video') {
-            mediaData = {
-              videos: [{ name: item.file.name, type: item.file.type, size: item.file.size, data: base64 }],
-              images1: [],
-              images2: []
-            };
-          }
-        }
-
-        const content = item.type === 'text' ? item.content : `[${item.type.toUpperCase()}] ${item.content}`;
-
-        return {
+      const payloads = messageSequence.map((item, index) => {
+        const payload = {
           message_set_id: setId,
           page_id: selectedPage,
           message_type: item.type,
-          content,
+          content: item.type === 'text' ? item.content : item.filename || item.content,
           display_order: index,
         };
-      }));
+
+        // ถ้าเป็น media และมี base64 data
+        if (item.type !== 'text' && item.mediaData) {
+          payload.media_data = item.mediaData;
+          payload.filename = item.filename || `${item.type}.${item.type === 'image' ? 'jpg' : 'mp4'}`;
+        }
+
+        return payload;
+      });
 
       await saveMessagesBatch(payloads);
       alert(isEditMode ? "แก้ไขชุดข้อความสำเร็จ!" : "บันทึกข้อความสำเร็จ!");
@@ -313,7 +331,9 @@ function SetDefault() {
         type: msg.message_type || 'text',
         content: msg.content || msg.message,
         order: msg.display_order || index,
-        originalData: msg
+        originalData: msg,
+        mediaUrl: msg.media_url,
+        filename: msg.filename
       }));
 
       setMessageSequence(sequenceData);
@@ -321,6 +341,8 @@ function SetDefault() {
     } catch (error) {
       console.error("เกิดข้อผิดพลาดในการบันทึก:", error);
       alert("เกิดข้อผิดพลาดในการบันทึก: " + error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -351,8 +373,23 @@ function SetDefault() {
     }
   };
 
-  const selectedPageName = pages.find(page => page.id === selectedPage)?.name || "ไม่ได้เลือกเพจ";
+  const getContentDisplay = (item) => {
+    if (item.type === 'text') {
+      return item.content;
+    } else {
+      // สำหรับ media แสดงชื่อไฟล์
+      if (item.filename) {
+        return item.filename;
+      } else if (item.content && item.content.includes('|')) {
+        // ถ้า content มีรูปแบบ "path|filename"
+        return item.content.split('|')[1] || item.content;
+      } else {
+        return item.content;
+      }
+    }
+  };
 
+  const selectedPageName = pages.find(page => page.id === selectedPage)?.name || "ไม่ได้เลือกเพจ";
   return (
     <div className="app-container">
       <aside className="sidebar">

@@ -8,21 +8,30 @@ from app import config
 import uvicorn
 from fastapi.staticfiles import StaticFiles
 import os
+from fastapi.middleware.gzip import GZipMiddleware
 
 # โหลด .env ไฟล์
 load_dotenv()
 
 app = FastAPI()
 
-image_dir = os.getenv("IMAGE_DIR")
-if not image_dir:
-    raise RuntimeError("IMAGE_DIR is not set in .env")
-vid_dir = os.getenv("VID_DIR")
-if not vid_dir:
-    raise RuntimeError("VID_DIR is not set in .env")
+# เพิ่ม GZip middleware สำหรับ compress response
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+# Setup directories
+image_dir = os.getenv("IMAGE_DIR", "./uploads/images")
+vid_dir = os.getenv("VID_DIR", "./uploads/videos")
+upload_dir = os.getenv("UPLOAD_DIR", "./uploads")
+
+# สร้าง directories ถ้ายังไม่มี
+os.makedirs(image_dir, exist_ok=True)
+os.makedirs(vid_dir, exist_ok=True)
+os.makedirs(upload_dir, exist_ok=True)
+
+# Mount static files
 app.mount("/images", StaticFiles(directory=image_dir), name="images")
 app.mount("/videos", StaticFiles(directory=vid_dir), name="videos")
+app.mount("/media", StaticFiles(directory=upload_dir), name="media")
 
 # สร้างตารางในฐานข้อมูล
 Base.metadata.create_all(bind=engine)
@@ -47,6 +56,15 @@ app.include_router(custom_messages.router)
 async def root():
     return {"message": "Facebook Bot API with FastAPI is running."}
 
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "service": "Facebook Bot API",
+        "version": "1.0.0"
+    }
+
 # สำหรับรันแอป
 if __name__ == "__main__":
-    uvicorn.run("backend.app:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.app:app", host="0.0.0.0", port=8000, reload=True)

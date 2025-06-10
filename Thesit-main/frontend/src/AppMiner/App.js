@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import '../CSS/App.css';
 import { fetchPages, connectFacebook, getMessagesBySetId, fetchConversations, getMessageSetsByPage } from "../Features/Tool";
 import { Link } from 'react-router-dom';
@@ -26,39 +26,60 @@ function App() {
   const [showMessageSetSelector, setShowMessageSetSelector] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
+  const [sendingMessages, setSendingMessages] = useState(false);
+  const [sendProgress, setSendProgress] = useState({ current: 0, total: 0 });
+  
+  // Pagination states
+  const [currentPageNum, setCurrentPageNum] = useState(1);
+  const [itemsPerPage] = useState(50);
+  const [totalItems, setTotalItems] = useState(0);
   
   const updateIntervalRef = useRef(null);
   const pollingIntervalRef = useRef(null);
 
-  const checkForNewMessages = async () => {
-    if (!selectedPage) return;
+  // Memoized check for new messages
+ // แก้ไขฟังก์ชัน checkForNewMessages - วิธีแก้แบบง่าย
+const checkForNewMessages = useCallback(async () => {
+  if (!selectedPage || loading) return;
+  
+  try {
+    const response = await fetchConversations(selectedPage, 100, 0, false);
     
-    try {
-      const newConversations = await fetchConversations(selectedPage);
-      
-      const hasChanges = newConversations.some(newConv => {
-        const oldConv = allConversations.find(c => c.conversation_id === newConv.conversation_id);
-        if (!oldConv) return true;
-        return newConv.last_user_message_time !== oldConv.last_user_message_time;
-      });
-      
-      if (hasChanges) {
-        console.log("🔔 พบข้อความใหม่! อัพเดทข้อมูล...");
-        setConversations(newConversations);
-        setAllConversations(newConversations);
-        setLastUpdateTime(new Date());
-        
-        if (Notification.permission === "granted") {
-          new Notification("มีข้อความใหม่!", {
-            body: "มีลูกค้าส่งข้อความใหม่เข้ามา",
-            icon: "/favicon.ico"
-          });
-        }
-      }
-    } catch (err) {
-      console.error("ไม่สามารถตรวจสอบข้อความใหม่ได้:", err);
+    // ตรวจสอบว่า response เป็น array หรือไม่
+    const newConversations = Array.isArray(response) 
+      ? response 
+      : (response?.conversations && Array.isArray(response.conversations) 
+          ? response.conversations 
+          : []);
+
+    // ตรวจสอบว่า allConversations เป็น array และมีข้อมูล
+    if (!Array.isArray(allConversations) || !Array.isArray(newConversations) || newConversations.length === 0) {
+      return;
     }
-  };
+
+    const hasChanges = newConversations.some(newConv => {
+      const oldConv = allConversations.find(c => c.conversation_id === newConv.conversation_id);
+      if (!oldConv) return true;
+      return newConv.last_user_message_time !== oldConv.last_user_message_time;
+    });
+    
+    if (hasChanges) {
+      console.log("🔔 พบข้อความใหม่! อัพเดทข้อมูล...");
+      setConversations(newConversations);
+      setAllConversations(newConversations);
+      setLastUpdateTime(new Date());
+      
+      if (Notification.permission === "granted") {
+        new Notification("มีข้อความใหม่!", {
+          body: "มีลูกค้าส่งข้อความใหม่เข้ามา",
+          icon: "/favicon.ico"
+        });
+      }
+    }
+  } catch (err) {
+    console.error("ไม่สามารถตรวจสอบข้อความใหม่ได้:", err);
+  }
+}, [selectedPage, allConversations, loading]);
 
   useEffect(() => {
     if ("Notification" in window && Notification.permission === "default") {
@@ -69,19 +90,19 @@ function App() {
   useEffect(() => {
     updateIntervalRef.current = setInterval(() => {
       setCurrentTime(new Date());
-    }, 1000); // อัพเดตเวลาในทุกๆ วินาที
+    }, 1000); // อัพเดทเวลาในทุกๆ วินาที
 
     if (selectedPage) {
       pollingIntervalRef.current = setInterval(() => {
         checkForNewMessages();
-      }, 1000); // ตรวจสอบข้อความใหม่ทุกๆ วินาที
+      }, 1000); // เปลี่ยนเป็น 1 วินาที เพื่อลดโหลด
     }
 
     return () => {
       if (updateIntervalRef.current) clearInterval(updateIntervalRef.current);
       if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
     };
-  }, [selectedPage, allConversations]);
+  }, [selectedPage, checkForNewMessages]);
 
   useEffect(() => {
     const savedPage = localStorage.getItem("selectedPage");
@@ -168,32 +189,54 @@ function App() {
     return `${diffYear} ปีที่แล้ว`;
   };
 
-  const loadConversations = async (pageId) => {
-    if (!pageId) return;
+  const loadConversations = async (pageId, limit = itemsPerPage, offset = 0, useCache = true) => {
+  if (!pageId) return;
 
-    setLoading(true);
-    try {
-      console.log(`🚀 เริ่มโหลด conversations สำหรับ pageId: ${pageId}`);
-      const conversations = await fetchConversations(pageId);
-      setConversations(conversations);
-      setAllConversations(conversations);
-      setLastUpdateTime(new Date());
-      console.log(`✅ โหลด conversations สำเร็จ: ${conversations.length} รายการ`);
-    } catch (err) {
-      console.error("❌ เกิดข้อผิดพลาด:", err);
-      if (err.response?.status === 400) {
-        alert("กรุณาเชื่อมต่อ Facebook Page ก่อนใช้งาน");
-      } else {
-        alert(`เกิดข้อผิดพลาด: ${err.message || err}`);
-      }
-    } finally {
-      setLoading(false);
+  setLoading(true);
+  try {
+    console.log(`🚀 เริ่มโหลด conversations สำหรับ pageId: ${pageId}`);
+    const response = await fetchConversations(pageId, limit, offset, useCache);
+    
+    // ตรวจสอบรูปแบบของ response
+    let conversationsData = [];
+    if (Array.isArray(response)) {
+      conversationsData = response;
+    } else if (response && Array.isArray(response.conversations)) {
+      conversationsData = response.conversations;
+    } else {
+      console.error('Unexpected response format:', response);
+      alert('ข้อมูลที่ได้รับไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง');
+      return;
     }
-  };
+    
+    if (offset === 0) {
+      // ถ้าเป็นการโหลดหน้าแรก
+      setConversations(conversationsData);
+      setAllConversations(conversationsData);
+      setTotalItems(response.total || conversationsData.length);
+    } else {
+      // ถ้าเป็นการโหลดหน้าถัดไป ให้ต่อกับข้อมูลเดิม
+      setConversations(prev => [...prev, ...conversationsData]);
+      setAllConversations(prev => [...prev, ...conversationsData]);
+    }
+    
+    setLastUpdateTime(new Date());
+    console.log(`✅ โหลด conversations สำเร็จ: ${conversationsData.length} รายการ`);
+  } catch (err) {
+    console.error("❌ เกิดข้อผิดพลาด:", err);
+    if (err.response?.status === 400) {
+      alert("กรุณาเชื่อมต่อ Facebook Page ก่อนใช้งาน");
+    } else {
+      alert(`เกิดข้อผิดพลาด: ${err.message || err}`);
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     if (selectedPage) {
-      loadConversations(selectedPage);
+      loadConversations(selectedPage, itemsPerPage, 0, true);
       setDisappearTime("");
       setCustomerType("");
       setPlatformType("");
@@ -202,15 +245,16 @@ function App() {
       setEndDate("");
       setFilteredConversations([]);
       setSelectedConversationIds([]);
+      setCurrentPageNum(1);
     }
-  }, [selectedPage]);
+  }, [selectedPage, itemsPerPage]);
 
   const handleloadConversations = () => {
     if (!selectedPage) {
       alert("กรุณาเลือกเพจ");
       return;
     }
-    loadConversations(selectedPage);
+    loadConversations(selectedPage, itemsPerPage, 0, false); // ไม่ใช้ cache
   };
 
   const handlePageChange = (e) => {
@@ -276,6 +320,7 @@ function App() {
     }
 
     setFilteredConversations(filtered);
+    setCurrentPageNum(1); // Reset to first page after filtering
   };
 
   const toggleCheckbox = (conversationId) => {
@@ -307,6 +352,10 @@ function App() {
     }
 
     setShowMessageSetSelector(false);
+    setSendingMessages(true);
+    setSendProgress({ current: 0, total: selectedConversationIds.length * defaultMessages.length });
+
+    let progressCount = 0;
 
     try {
       for (const conversationId of selectedConversationIds) {
@@ -319,15 +368,32 @@ function App() {
         }
 
         for (const messageObj of defaultMessages) {
-          const messageText = messageObj.content || messageObj.message || messageObj;
+          const messageContent = messageObj.content || messageObj.message || messageObj;
+          let requestBody = { 
+            message: messageContent,
+            type: messageObj.message_type || "text"
+          };
+
+          // ถ้าเป็น media และมี media_data
+          if (messageObj.message_type in ['image', 'video'] && messageObj.media_data) {
+            requestBody.media_data = messageObj.media_data;
+            requestBody.filename = messageObj.filename || "media";
+          } else if (messageObj.message_type in ['image', 'video'] && messageObj.media_url) {
+            // ถ้ามี URL ของ media ที่อัพโหลดไว้แล้ว
+            const fullUrl = `${window.location.protocol}//${window.location.hostname}:8000${messageObj.media_url}`;
+            requestBody.message = fullUrl;
+          }
 
           await fetch(`http://localhost:8000/send/${selectedPage}/${psid}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: messageText }),
+            body: JSON.stringify(requestBody),
           });
 
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          progressCount++;
+          setSendProgress({ current: progressCount, total: selectedConversationIds.length * defaultMessages.length });
+
+          await new Promise(resolve => setTimeout(resolve, 500)); // ลด delay เหลือ 500ms
         }
       }
 
@@ -339,6 +405,9 @@ function App() {
     } catch (error) {
       console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
       alert("เกิดข้อผิดพลาดในการส่งข้อความ กรุณาลองใหม่อีกครั้ง");
+    } finally {
+      setSendingMessages(false);
+      setSendProgress({ current: 0, total: 0 });
     }
   };
 
@@ -349,6 +418,17 @@ function App() {
     if (diffMin < 1) return "🟢 อัพเดทล่าสุด";
     if (diffMin < 5) return "🟡 " + diffMin + " นาทีที่แล้ว";
     return "🔴 " + diffMin + " นาทีที่แล้ว";
+  };
+
+  // Pagination calculations
+  const totalPages = Math.ceil(displayData.length / itemsPerPage);
+  const startIndex = (currentPageNum - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentPageData = displayData.slice(startIndex, endIndex);
+
+  const handlePageNumChange = (pageNum) => {
+    setCurrentPageNum(pageNum);
+    window.scrollTo(0, 0);
   };
 
   return (
@@ -483,7 +563,7 @@ function App() {
             )}
             {displayData.length > 0 && (
               <span style={{ marginLeft: "20px", color: "#666" }}>
-                📊 มี: {displayData.length} การสนทนา
+                📊 มี: {displayData.length} การสนทนา (แสดง {currentPageData.length})
               </span>
             )}
           </div>
@@ -500,76 +580,142 @@ function App() {
           <div style={{ textAlign: "center", padding: "40px" }}>
             <p style={{ fontSize: "18px" }}>⏳ กำลังโหลดข้อมูล...</p>
           </div>
-        ) : displayData.length === 0 ? (
+        ) : currentPageData.length === 0 ? (
           <div style={{ textAlign: "center", padding: "40px" }}>
             <p style={{ fontSize: "18px", color: "#666" }}>
               {selectedPage ? "ไม่พบข้อมูลการสนทนา" : "กรุณาเลือกเพจเพื่อแสดงข้อมูล"}
             </p>
           </div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", backgroundColor: "#fff" }}>
-            <thead>
-              <tr>
-                <th className="table">ลำดับ</th>
-                <th className="table">ชื่อผู้ใช้</th>
-                <th className="table">วันที่เข้ามา</th>
-                <th className="table">ระยะเวลาที่หาย</th>
-                <th className="table">Context</th>
-                <th className="table">สินค้าที่สนใจ</th>
-                <th className="table">Platform</th>
-                <th className="table">หมวดหมู่ลูกค้า</th>
-                <th className="table">สถานะการขุด</th>
-                <th className="table">เลือก</th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayData.map((conv, idx) => (
-                <tr key={conv.conversation_id || idx}>
-                  <td style={{ border: "1px solid #ccc", padding: "8px", textAlign: "center" }}>{idx + 1}</td>
-                  <td className="table">{conv.conversation_name || `บทสนทนาที่ ${idx + 1}`}</td>
-                  <td className="table">
-                    {conv.updated_time
-                      ? new Date(conv.updated_time).toLocaleDateString("th-TH", {
-                        year: 'numeric', month: 'short', day: 'numeric'
-                      })
-                      : "-"
-                    }
-                  </td>
-                  <td className="table" style={{
-                    backgroundColor: conv.last_user_message_time && 
-                      new Date(conv.last_user_message_time) > new Date(Date.now() - 60000) 
-                      ? '#e8f5e9' : 'transparent'
-                  }}>
-                    {conv.last_user_message_time
-                      ? timeAgo(conv.last_user_message_time)
-                      : timeAgo(conv.updated_time)
-                    }
-                  </td>
-                  <td className="table">Context</td>
-                  <td className="table">สินค้าที่สนใจ</td>
-                  <td className="table">Platform</td>
-                  <td className="table">หมวดหมู่ลูกค้า</td>
-                  <td className="table">สถานะการขุด</td>
-                  <td className="table">
-                    <input
-                      type="checkbox"
-                      checked={selectedConversationIds.includes(conv.conversation_id)}
-                      onChange={() => toggleCheckbox(conv.conversation_id)}
-                    />
-                  </td>
+          <>
+            <table style={{ width: "100%", borderCollapse: "collapse", backgroundColor: "#fff" }}>
+              <thead>
+                <tr>
+                  <th className="table">ลำดับ</th>
+                  <th className="table">ชื่อผู้ใช้</th>
+                  <th className="table">วันที่เข้ามา</th>
+                  <th className="table">ระยะเวลาที่หาย</th>
+                  <th className="table">Context</th>
+                  <th className="table">สินค้าที่สนใจ</th>
+                  <th className="table">Platform</th>
+                  <th className="table">หมวดหมู่ลูกค้า</th>
+                  <th className="table">สถานะการขุด</th>
+                  <th className="table">เลือก</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {currentPageData.map((conv, idx) => (
+                  <tr key={conv.conversation_id || idx}>
+                    <td style={{ border: "1px solid #ccc", padding: "8px", textAlign: "center" }}>{startIndex + idx + 1}</td>
+                    <td className="table">{conv.conversation_name || `บทสนทนาที่ ${startIndex + idx + 1}`}</td>
+                    <td className="table">
+                      {conv.updated_time
+                        ? new Date(conv.updated_time).toLocaleDateString("th-TH", {
+                          year: 'numeric', month: 'short', day: 'numeric'
+                        })
+                        : "-"
+                      }
+                    </td>
+                    <td className="table" style={{
+                      backgroundColor: conv.last_user_message_time && 
+                        new Date(conv.last_user_message_time) > new Date(Date.now() - 60000) 
+                        ? '#e8f5e9' : 'transparent'
+                    }}>
+                      {conv.last_user_message_time
+                        ? timeAgo(conv.last_user_message_time)
+                        : timeAgo(conv.updated_time)
+                      }
+                    </td>
+                    <td className="table">Context</td>
+                    <td className="table">สินค้าที่สนใจ</td>
+                    <td className="table">Platform</td>
+                    <td className="table">หมวดหมู่ลูกค้า</td>
+                    <td className="table">สถานะการขุด</td>
+                    <td className="table">
+                      <input
+                        type="checkbox"
+                        checked={selectedConversationIds.includes(conv.conversation_id)}
+                        onChange={() => toggleCheckbox(conv.conversation_id)}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div style={{ marginTop: "20px", display: "flex", justifyContent: "center", gap: "5px" }}>
+                <button
+                  onClick={() => handlePageNumChange(currentPageNum - 1)}
+                  disabled={currentPageNum === 1}
+                  style={{
+                    padding: "5px 10px",
+                    border: "1px solid #ddd",
+                    backgroundColor: currentPageNum === 1 ? "#f5f5f5" : "#fff",
+                    cursor: currentPageNum === 1 ? "not-allowed" : "pointer"
+                  }}
+                >
+                  ◀ ก่อนหน้า
+                </button>
+                
+                {[...Array(Math.min(5, totalPages))].map((_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPageNum <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPageNum >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPageNum - 2 + i;
+                  }
+                  
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => handlePageNumChange(pageNum)}
+                      style={{
+                        padding: "5px 10px",
+                        border: "1px solid #ddd",
+                        backgroundColor: currentPageNum === pageNum ? "#007bff" : "#fff",
+                        color: currentPageNum === pageNum ? "#fff" : "#000",
+                        cursor: "pointer"
+                      }}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                
+                <button
+                  onClick={() => handlePageNumChange(currentPageNum + 1)}
+                  disabled={currentPageNum === totalPages}
+                  style={{
+                    padding: "5px 10px",
+                    border: "1px solid #ddd",
+                    backgroundColor: currentPageNum === totalPages ? "#f5f5f5" : "#fff",
+                    cursor: currentPageNum === totalPages ? "not-allowed" : "pointer"
+                  }}
+                >
+                  ถัดไป ▶
+                </button>
+                
+                <span style={{ marginLeft: "20px", alignSelf: "center" }}>
+                  หน้า {currentPageNum} จาก {totalPages}
+                </span>
+              </div>
+            )}
+          </>
         )}
 
         <div style={{ marginTop: "15px", display: "flex", alignItems: "center", gap: "10px" }}>
           <button
             onClick={sendMessageToSelected}
             className={`button-default ${selectedConversationIds.length > 0 ? "button-active" : ""}`}
-            disabled={loading || messageSets.length === 0}
+            disabled={loading || messageSets.length === 0 || sendingMessages}
           >
-            📥 ขุด ({selectedConversationIds.length} รายการ)
+            {sendingMessages ? `⏳ กำลังส่ง... (${sendProgress.current}/${sendProgress.total})` : `📥 ขุด (${selectedConversationIds.length} รายการ)`}
           </button>
           <button onClick={handleloadConversations} className="Re-default" disabled={loading || !selectedPage}>
             {loading ? "⏳ กำลังโหลด..." : "🔄 รีเฟรชข้อมูล"}
@@ -648,7 +794,7 @@ function App() {
                           <span>{msg.content || msg.message}</span>
                         ) : (
                           <span style={{ color: "#666" }}>
-                            [{msg.message_type.toUpperCase()}] {msg.content}
+                            [{msg.message_type.toUpperCase()}] {msg.filename || msg.content}
                           </span>
                         )}
                       </li>
