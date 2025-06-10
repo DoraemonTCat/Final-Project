@@ -8,6 +8,7 @@ from app.database import crud, schemas, database, models
 from app.database.database import get_db
 from app import config  # ✅ ใช้ config แทน app.app
 from pydantic import BaseModel
+from typing import Optional
 
 router = APIRouter()
 
@@ -17,6 +18,10 @@ router = APIRouter()
 # เพิ่มตัวแปรเหล่านี้ใน facebook.py เพื่อให้ตรงกับ paste.txt
 page_tokens = {}  # key = page_id, value = PAGE_ACCESS_TOKEN
 page_names = {}   # key = page_id, value = page_name
+
+class SendMessageRequest(BaseModel):
+    message: str
+    type: Optional[str] = "text"  # "text", "image", or "video"
 
 @router.get("/connect", response_class=HTMLResponse)
 async def connect_facebook_page():
@@ -279,9 +284,6 @@ def extract_psids_with_conversation_id(conversations_data, access_token, page_id
                 "created_time": created_time
             })
     return result
-
-class SendMessageRequest(BaseModel):
-    message: str
 
 @router.post("/send/{page_id}/{psid}")
 async def send_user_message_by_psid(page_id: str, psid: str, req: SendMessageRequest):
