@@ -6,11 +6,23 @@ from app.database import crud, database, models, schemas
 from app.database.database import SessionLocal, engine, Base
 from app import config
 import uvicorn
+from fastapi.staticfiles import StaticFiles
+import os
 
 # โหลด .env ไฟล์
 load_dotenv()
 
 app = FastAPI()
+
+image_dir = os.getenv("IMAGE_DIR")
+if not image_dir:
+    raise RuntimeError("IMAGE_DIR is not set in .env")
+vid_dir = os.getenv("VID_DIR")
+if not vid_dir:
+    raise RuntimeError("VID_DIR is not set in .env")
+
+app.mount("/images", StaticFiles(directory=image_dir), name="images")
+app.mount("/videos", StaticFiles(directory=vid_dir), name="videos")
 
 # สร้างตารางในฐานข้อมูล
 Base.metadata.create_all(bind=engine)
