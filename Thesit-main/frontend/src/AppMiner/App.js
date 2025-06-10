@@ -556,14 +556,10 @@ const checkForNewMessages = useCallback(async () => {
         <div style={{ margin: "10px 0", padding: "10px", backgroundColor: "#f0f8ff", borderRadius: "5px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <strong>📚 ชุดข้อความที่มี: {messageSets.length} ชุด</strong>
-            {selectedMessageSetId && (
-              <span style={{ marginLeft: "20px", color: "#666" }}>
-                ✅ เลือกชุด: {messageSets.find(set => set.id.toString() === selectedMessageSetId)?.set_name || "-"}
-              </span>
-            )}
+            
             {displayData.length > 0 && (
               <span style={{ marginLeft: "20px", color: "#666" }}>
-                📊 มี: {displayData.length} การสนทนา (แสดง {currentPageData.length})
+                📊 มี: {displayData.length} การสนทนา 
               </span>
             )}
           </div>
