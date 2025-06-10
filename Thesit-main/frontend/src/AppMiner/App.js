@@ -1,7 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import '../CSS/App.css';
 import { fetchPages, connectFacebook, getMessagesBySetId, fetchConversations } from "../Features/Tool";
 import { Link } from 'react-router-dom';
+import Popup from "./MinerPopup";
+
 
 function App() {
   const [pages, setPages] = useState([]);
@@ -21,6 +23,73 @@ function App() {
   const [pageId, setPageId] = useState("");
   const [selectedConversationIds, setSelectedConversationIds] = useState([]);
   const [defaultMessages, setDefaultMessages] = useState([]); // 🔥 เพิ่ม state สำหรับเก็บข้อความจาก DB
+  const [isPopupOpen, setIsPopupOpen] = useState(false);
+  const [selectedMessageSetIds, setSelectedMessageSetIds] = useState([]);
+
+  // 🔥 เพิ่ม state สำหรับชุดข้อความ
+  const [messageSets, setMessageSets] = useState([]);
+  const [selectedMessageSetId, setSelectedMessageSetId] = useState("");
+  const [showMessageSetSelector, setShowMessageSetSelector] = useState(false);
+  
+  // 🔥 เพิ่ม state สำหรับ real-time update
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
+  
+  // 🔥 useRef สำหรับ interval
+  const updateIntervalRef = useRef(null);
+  const pollingIntervalRef = useRef(null);
+  const checkForNewMessages = async () => {
+    if (!selectedPage) return;
+    
+    try {
+      const newConversations = await fetchConversations(selectedPage);
+      
+      const hasChanges = newConversations.some(newConv => {
+        const oldConv = allConversations.find(c => c.conversation_id === newConv.conversation_id);
+        if (!oldConv) return true;
+        return newConv.last_user_message_time !== oldConv.last_user_message_time;
+      });
+      
+      if (hasChanges) {
+        console.log("🔔 พบข้อความใหม่! อัพเดทข้อมูล...");
+        setConversations(newConversations);
+        setAllConversations(newConversations);
+        setLastUpdateTime(new Date());
+        
+        if (Notification.permission === "granted") {
+          new Notification("มีข้อความใหม่!", {
+            body: "มีลูกค้าส่งข้อความใหม่เข้ามา",
+            icon: "/favicon.ico"
+          });
+        }
+      }
+    } catch (err) {
+      console.error("ไม่สามารถตรวจสอบข้อความใหม่ได้:", err);
+    }
+  };
+
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  useEffect(() => {
+    updateIntervalRef.current = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);  // อัพเดตเวลาในทุกๆ 1 วินาที
+
+    if (selectedPage) {
+      pollingIntervalRef.current = setInterval(() => {
+        checkForNewMessages();
+      }, 1000); // ตรวจสอบข้อความใหม่ทุกๆ 1 วินาที
+    }
+
+    return () => {
+      if (updateIntervalRef.current) clearInterval(updateIntervalRef.current);
+      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+    };
+  }, [selectedPage, allConversations]);
 
   useEffect(() => {
     const savedPage = localStorage.getItem("selectedPage");
@@ -206,23 +275,43 @@ function App() {
     );
   };
 
-  // 📤 ฟังก์ชันกดปุ่ม "ขุด" - ส่งข้อความทั้งหมดจากฐานข้อมูล
-  const sendMessageToSelected = async () => {
+  const handOpenPopup = () => {
+    setIsPopupOpen(true);
+  };
+
+  const handleClosePopup = () => {
+    setIsPopupOpen(false);
+  };
+
+  const sendMessagesBySelectedSets = async (messageSetIds) => {
+    if (!Array.isArray(messageSetIds)) {
+      console.error("messageSetIds is not an array:", messageSetIds);
+      alert("ชุดข้อความที่เลือกไม่ถูกต้อง กรุณาลองใหม่");
+      return;
+    }
+
     if (selectedConversationIds.length === 0) {
       alert("กรุณาเลือกการสนทนาที่ต้องการส่งข้อความ");
       return;
     }
 
-    // 🔥 ตรวจสอบข้อความจากฐานข้อมูล
-    if (defaultMessages.length === 0) {
-      alert("ไม่มีข้อความที่บันทึกไว้ กรุณาไปตั้งค่าข้อความใน 'ตั้งค่าระบบขุด' ก่อน");
-      return;
-    }
-
     try {
-      // วนลูปส่งข้อความไปยังแต่ละ conversation
+      // ดึงข้อความทั้งหมดในชุดที่เลือก (รวมทุกชุด)
+      let allMessages = [];
+
+      for (const setId of messageSetIds) {
+        const res = await fetch(`http://localhost:8000/custom_messages/${setId}`);
+        if (!res.ok) throw new Error(`Failed to fetch messages for set ${setId}`);
+        const msgs = await res.json();
+        allMessages = allMessages.concat(msgs);
+      }
+
+      // เรียงลำดับข้อความตาม display_order (ถ้าต้องการ)
+      allMessages.sort((a, b) => a.display_order - b.display_order);
+
+      // ส่งข้อความไปยัง conversation ที่เลือก
       for (const conversationId of selectedConversationIds) {
-        // หา PSID จาก conversation_id
+        // หา PSID จาก conversation_id (สมมติคุณมีข้อมูลนี้ใน displayData)
         const selectedConv = displayData.find(conv => conv.conversation_id === conversationId);
         const psid = selectedConv?.raw_psid;
 
@@ -231,32 +320,55 @@ function App() {
           continue;
         }
 
-        // ส่งข้อความทีละข้อความ
-        for (const messageObj of defaultMessages) {
-          const messageText = messageObj.message || messageObj; // รองรับทั้ง object และ string
+        for (const messageObj of allMessages) {
+          // เตรียมข้อความที่จะส่ง (รองรับ text/image/video ตามที่ backend)
+          let messageContent = messageObj.content;
 
+          // ถ้าเป็นรูปหรือวิดีโอ ให้แปลง URL ให้ถูกต้อง
+          if (messageObj.message_type === "image") {
+            // สมมติ url รูปเก็บใน /images/filename
+            messageContent = `http://localhost:8000/images/${messageContent.replace('[IMAGE] ', '')}`;
+          } else if (messageObj.message_type === "video") {
+            messageContent = `http://localhost:8000/videos/${messageContent.replace('[VIDEO] ', '')}`;
+          }
+
+          // ส่ง POST ไป API ของคุณ
           await fetch(`http://localhost:8000/send/${selectedPage}/${psid}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: messageText }),
+            body: JSON.stringify({ 
+              message: messageContent,
+              type: messageObj.message_type,
+             }),
           });
 
-          // หน่วงเวลาเล็กน้อยระหว่างการส่งข้อความแต่ละข้อความ
+          // หน่วงเวลาระหว่างข้อความเพื่อไม่ให้ request ถี่เกินไป
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
 
-      alert(`ส่งข้อความเรียบร้อยแล้ว! ส่งไปยัง ${selectedConversationIds.length} การสนทนา จำนวน ${defaultMessages.length} ข้อความ`);
-
-      // ล้างการเลือก checkbox หลังส่งเสร็จ
-      setSelectedConversationIds([]);
-
+      alert(`ส่งข้อความสำเร็จ ไปยัง ${selectedConversationIds.length} การสนทนา`);
     } catch (error) {
       console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
       alert("เกิดข้อผิดพลาดในการส่งข้อความ กรุณาลองใหม่อีกครั้ง");
     }
   };
 
+  const handleConfirmPopup = (checkedSetIds) => {
+    setSelectedMessageSetIds(checkedSetIds);
+    sendMessagesBySelectedSets(checkedSetIds);
+    setIsPopupOpen(true);
+  };
+  const getUpdateStatus = () => {
+    const diffMs = currentTime - lastUpdateTime;
+    const diffMin = Math.floor(diffMs / 60000);
+    
+    if (diffMin < 1) return "🟢 อัพเดทล่าสุด";
+    if (diffMin < 5) return "🟡 " + diffMin + " นาทีที่แล้ว";
+    return "🔴 " + diffMin + " นาทีที่แล้ว";
+  };
+  
+  
   return (
     <div className="app-container">
       {/* Sidebar */}
@@ -384,12 +496,22 @@ function App() {
         {/* 🔥 แสดงจำนวนข้อความที่จะส่ง */}
         <div style={{ margin: "10px 0", padding: "10px", backgroundColor: "#f0f8ff", borderRadius: "5px" }}>
           <strong>📝 ข้อความที่จะส่ง: {defaultMessages.length} ข้อความ</strong>
+          
           {displayData.length > 0 && (
             <span style={{ marginLeft: "20px", color: "#666" }}>
               📊 มี: {displayData.length} การสนทนา
             </span>
+            
+            
           )}
+          {/* 🔥 แสดงเวลาปัจจุบันและสถานะการอัพเดต */}
+             <span style={{ color: "#888" , float: "right" }}>
+              🕐 {currentTime.toLocaleTimeString('th-TH')}
+            </span>
+            <span  style={{ float: "right" }}>{getUpdateStatus()}</span>
         </div>
+        
+        
 
         {/* Table */}
         {loading ? (
@@ -431,8 +553,11 @@ function App() {
                       : "-"
                     }
                   </td>
-                  <td className="table" >
-                    {/* 🔥 แสดงเวลาจากข้อความล่าสุดของ User */}
+                 <td className="table" style={{
+                    backgroundColor: conv.last_user_message_time && 
+                      new Date(conv.last_user_message_time) > new Date(Date.now() - 60000) 
+                      ? '#e8f5e9' : 'transparent'
+                  }}>
                     {conv.last_user_message_time
                       ? timeAgo(conv.last_user_message_time)
                       : timeAgo(conv.updated_time)
@@ -459,13 +584,25 @@ function App() {
         {/* 🔥 ปุ่มขุดที่ปรับปรุงแล้ว */}
         <div style={{ marginTop: "15px", display: "flex", alignItems: "center", gap: "10px" }}>
           <button
-            onClick={sendMessageToSelected}
+            onClick={handOpenPopup}
             className={`button-default ${selectedConversationIds.length > 0 ? "button-active" : ""}`}
             disabled={loading}
           >
             📥 ขุด ({selectedConversationIds.length} รายการ)
-
           </button>
+
+          {isPopupOpen && (
+            <Popup
+              selectedPage={selectedPage}
+              onClose={handleClosePopup}
+              defaultMessages={defaultMessages}
+              onConfirm={(checkedSetIds) => {
+                setLoading(true);
+                handleConfirmPopup(checkedSetIds);
+              }}
+              count={selectedConversationIds.length}
+            />
+          )}
           <button onClick={handleloadConversations} className="Re-default" disabled={loading || !selectedPage}>
             {loading ? "⏳ กำลังโหลด..." : "🔄 รีเฟรชข้อมูล"}
           </button>
