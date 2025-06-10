@@ -69,12 +69,12 @@ function App() {
   useEffect(() => {
     updateIntervalRef.current = setInterval(() => {
       setCurrentTime(new Date());
-    }, 10000);
+    }, 1000); // อัพเดตเวลาในทุกๆ วินาที
 
     if (selectedPage) {
       pollingIntervalRef.current = setInterval(() => {
         checkForNewMessages();
-      }, 30000);
+      }, 1000); // ตรวจสอบข้อความใหม่ทุกๆ วินาที
     }
 
     return () => {
