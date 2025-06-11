@@ -136,7 +136,7 @@ def create_custom_message(data: MessageCreate, db: Session = Depends(get_db)):
                 data.filename or f"media.{data.message_type}", 
                 data.message_type
             )
-            # เก็บ path ใน content พร้อมกับชื่อไฟล์เดิม
+            # เก็บเฉพาะ path (ไม่ต้องมี prefix)
             content = f"{media_path}|{data.filename or 'untitled'}"
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"ไม่สามารถบันทึก media ได้: {str(e)}")
@@ -221,6 +221,8 @@ def get_custom_messages(message_set_id: int, db: Session = Depends(get_db)):
             msg_dict["filename"] = parts[1] if len(parts) > 1 else "untitled"
             # สร้าง URL สำหรับเข้าถึงไฟล์
             msg_dict["media_url"] = f"/media/{parts[0]}"
+            # เพิ่ม media_data สำหรับส่งไปยัง Facebook
+            msg_dict["media_data"] = parts[0]  # path ของไฟล์
         
         result.append(msg_dict)
     

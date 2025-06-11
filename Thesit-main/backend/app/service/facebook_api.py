@@ -28,6 +28,15 @@ def fb_get(endpoint: str, params: dict = {}, access_token: str = None):
     return response.json()
 
 def send_message(recipient_id: str, message_text: str, access_token: str = None):
+    # ตรวจสอบว่าเป็น URL ของ media หรือไม่
+    if message_text.startswith('http://') and ('/media/' in message_text):
+        # ส่งเป็น media
+        if any(ext in message_text for ext in ['.jpg', '.png', '.gif', '.webp']):
+            return send_media(recipient_id, 'image', message_text, access_token)
+        elif any(ext in message_text for ext in ['.mp4', '.mov', '.avi']):
+            return send_media(recipient_id, 'video', message_text, access_token)
+    
+    # ส่งเป็นข้อความธรรมดา
     payload = {
         "messaging_type": "MESSAGE_TAG",
         "recipient": {"id": recipient_id},

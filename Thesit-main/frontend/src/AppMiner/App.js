@@ -232,7 +232,7 @@ const checkForNewMessages = useCallback(async () => {
   } finally {
     setLoading(false);
   }
-};
+}; // ✅ ปิด function ที่ถูกต้อง
 
   useEffect(() => {
     if (selectedPage) {
@@ -366,22 +366,26 @@ const checkForNewMessages = useCallback(async () => {
           console.error(`ไม่พบ PSID สำหรับ conversation: ${conversationId}`);
           continue;
         }
-
         for (const messageObj of defaultMessages) {
-          const messageContent = messageObj.content || messageObj.message || messageObj;
           let requestBody = { 
-            message: messageContent,
             type: messageObj.message_type || "text"
           };
 
-          // ถ้าเป็น media และมี media_data
-          if (messageObj.message_type in ['image', 'video'] && messageObj.media_data) {
-            requestBody.media_data = messageObj.media_data;
-            requestBody.filename = messageObj.filename || "media";
-          } else if (messageObj.message_type in ['image', 'video'] && messageObj.media_url) {
-            // ถ้ามี URL ของ media ที่อัพโหลดไว้แล้ว
-            const fullUrl = `${window.location.protocol}//${window.location.hostname}:8000${messageObj.media_url}`;
-            requestBody.message = fullUrl;
+          if (messageObj.message_type === 'text') {
+            // ข้อความธรรมดา
+            requestBody.message = messageObj.content || messageObj.message || messageObj;
+          } else if (messageObj.message_type in ['image', 'video']) {
+            // สำหรับ media
+            if (messageObj.media_path) {
+              // ถ้ามี path ของไฟล์ที่บันทึกไว้แล้ว
+              const fullUrl = `http://localhost:8000/media/${messageObj.media_path}`;
+              requestBody.message = fullUrl;
+              requestBody.type = messageObj.message_type;
+            } else {
+              // ถ้าไม่มี path ให้ข้าม
+              console.error('No media path for:', messageObj);
+              continue;
+            }
           }
 
           await fetch(`http://localhost:8000/send/${selectedPage}/${psid}`, {
@@ -390,10 +394,7 @@ const checkForNewMessages = useCallback(async () => {
             body: JSON.stringify(requestBody),
           });
 
-          progressCount++;
-          setSendProgress({ current: progressCount, total: selectedConversationIds.length * defaultMessages.length });
-
-          await new Promise(resolve => setTimeout(resolve, 500)); // ลด delay เหลือ 500ms
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
 

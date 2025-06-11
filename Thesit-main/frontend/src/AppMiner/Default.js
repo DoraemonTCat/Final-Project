@@ -303,23 +303,24 @@ function SetDefault() {
       }
 
       // บันทึกข้อความทั้งหมดใหม่
-      const payloads = messageSequence.map((item, index) => {
-        const payload = {
-          message_set_id: setId,
-          page_id: selectedPage,
-          message_type: item.type,
-          content: item.type === 'text' ? item.content : item.filename || item.content,
-          display_order: index,
-        };
+      // บันทึกข้อความทั้งหมดใหม่
+        const payloads = messageSequence.map((item, index) => {
+          const payload = {
+            message_set_id: setId,
+            page_id: selectedPage,
+            message_type: item.type,
+            content: item.type === 'text' ? item.content : (item.filename || 'untitled'),
+            display_order: index,
+          };
 
-        // ถ้าเป็น media และมี base64 data
-        if (item.type !== 'text' && item.mediaData) {
-          payload.media_data = item.mediaData;
-          payload.filename = item.filename || `${item.type}.${item.type === 'image' ? 'jpg' : 'mp4'}`;
-        }
+          // ถ้าเป็น media และมี base64 data
+          if (item.type !== 'text' && item.mediaData) {
+            payload.media_data = item.mediaData;
+            payload.filename = item.filename || `${item.type}.${item.type === 'image' ? 'jpg' : 'mp4'}`;
+          }
 
-        return payload;
-      });
+          return payload;
+        });
 
       await saveMessagesBatch(payloads);
       alert(isEditMode ? "แก้ไขชุดข้อความสำเร็จ!" : "บันทึกข้อความสำเร็จ!");
@@ -373,23 +374,26 @@ function SetDefault() {
     }
   };
 
-  const getContentDisplay = (item) => {
-    if (item.type === 'text') {
-      return item.content;
+ const getContentDisplay = (item) => {
+  if (item.type === 'text') {
+    return item.content;
+  } else {
+    // สำหรับ media แสดงชื่อไฟล์
+    if (item.filename) {
+      return item.filename;
+    } else if (item.content && item.content.includes('|')) {
+      // ถ้า content มีรูปแบบ "path|filename"
+      const parts = item.content.split('|');
+      return parts[1] || parts[0];
     } else {
-      // สำหรับ media แสดงชื่อไฟล์
-      if (item.filename) {
-        return item.filename;
-      } else if (item.content && item.content.includes('|')) {
-        // ถ้า content มีรูปแบบ "path|filename"
-        return item.content.split('|')[1] || item.content;
-      } else {
-        return item.content;
-      }
+      // ถ้าเป็นชื่อไฟล์ตรงๆ
+      return item.content.replace(/^\[IMAGE\]\s*/, '').replace(/^\[VIDEO\]\s*/, '');
     }
-  };
+  }
+};
 
   const selectedPageName = pages.find(page => page.id === selectedPage)?.name || "ไม่ได้เลือกเพจ";
+
   return (
     <div className="app-container">
       <aside className="sidebar">
@@ -447,7 +451,9 @@ function SetDefault() {
                   type: e.target.value,
                   content: '',
                   file: null,
-                  preview: null
+                  preview: null,
+                  mediaData: null,
+                  filename: null
                 }))}
                 className="input-select"
               >
@@ -469,13 +475,15 @@ function SetDefault() {
               </div>
             ) : (
               <div className="input-form">
-                <label className="input-label">เลือกไฟล์:</label>
+                <label className="input-label">เลือกไฟล์ {currentInput.type === 'image' ? '(JPG, PNG, GIF, WEBP)' : '(MP4, MOV, AVI)'}:</label>
                 <input
                   type="file"
-                  accept={currentInput.type === 'image' ? 'image/*' : 'video/*'}
+                  accept={currentInput.type === 'image' ? 'image/jpeg,image/png,image/gif,image/webp' : 'video/mp4,video/quicktime,video/x-msvideo'}
                   onChange={handleFileUpload}
                   className="input-file"
+                  disabled={uploadingFile}
                 />
+                {uploadingFile && <p style={{ color: '#3498db', fontSize: '14px' }}>กำลังประมวลผลไฟล์...</p>}
                 {currentInput.preview && (
                   <div className="preview-container">
                     {currentInput.type === 'image' ? (
@@ -491,6 +499,9 @@ function SetDefault() {
                         className="preview-video"
                       />
                     )}
+                    <p style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+                      {currentInput.filename} ({(currentInput.file?.size / (1024 * 1024)).toFixed(2)} MB)
+                    </p>
                   </div>
                 )}
               </div>
@@ -498,7 +509,7 @@ function SetDefault() {
 
             <button
               onClick={addToSequence}
-              disabled={!selectedPage}
+              disabled={!selectedPage || uploadingFile}
               className="add-btn"
             >
               ➕ เพิ่มในลำดับ
@@ -511,8 +522,9 @@ function SetDefault() {
               <button
                 onClick={saveMessageSequence}
                 className="save-btn"
+                disabled={loading}
               >
-                💾 {isEditMode ? "บันทึกการแก้ไข" : "บันทึกทั้งหมด"}
+                {loading ? "⏳ กำลังบันทึก..." : (isEditMode ? "💾 บันทึกการแก้ไข" : "💾 บันทึกทั้งหมด")}
               </button>
             </div>
 
@@ -557,7 +569,17 @@ function SetDefault() {
                         {item.originalData && <span className="sequence-saved-label"> (บันทึกแล้ว)</span>}
                       </div>
                       <div className="sequence-text">
-                        {item.content}
+                        {getContentDisplay(item)}
+                        {item.mediaUrl && (
+                          <a 
+                            href={`http://localhost:8000${item.mediaUrl}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            style={{ fontSize: '12px', marginLeft: '10px' }}
+                          >
+                            [ดูไฟล์]
+                          </a>
+                        )}
                       </div>
                     </div>
 
