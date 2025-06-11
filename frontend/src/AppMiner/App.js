@@ -188,7 +188,7 @@ function App() {
     if (selectedPage) {
       pollingIntervalRef.current = setInterval(() => {
         checkForNewMessages();
-      }, 3000);
+      }, 5000);
     }
 
     return () => {
