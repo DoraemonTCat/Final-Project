@@ -69,7 +69,6 @@ export async function saveMessageToDB({ pageId, messageSetId, messageType, conte
 }
 
 // 🔸 ดึง conversations พร้อม pagination และ cache
-// 🔸 ดึง conversations พร้อม pagination และ cache
 export const fetchConversations = async (pageId, limit = 50, offset = 0, useCache = true) => {
   if (!pageId) return [];
 
@@ -86,11 +85,7 @@ export const fetchConversations = async (pageId, limit = 50, offset = 0, useCach
 
   try {
     const res = await axios.get(`http://localhost:8000/conversations-with-last-message/${pageId}`, {
-      params: { 
-        limit, 
-        offset, 
-        use_cache: useCache 
-      }
+      params: { limit, offset, use_cache: useCache }
     });
 
     if (res.data.error) {

@@ -303,24 +303,23 @@ function SetDefault() {
       }
 
       // บันทึกข้อความทั้งหมดใหม่
-      // บันทึกข้อความทั้งหมดใหม่
-        const payloads = messageSequence.map((item, index) => {
-          const payload = {
-            message_set_id: setId,
-            page_id: selectedPage,
-            message_type: item.type,
-            content: item.type === 'text' ? item.content : (item.filename || 'untitled'),
-            display_order: index,
-          };
+      const payloads = messageSequence.map((item, index) => {
+        const payload = {
+          message_set_id: setId,
+          page_id: selectedPage,
+          message_type: item.type,
+          content: item.type === 'text' ? item.content : item.filename || item.content,
+          display_order: index,
+        };
 
-          // ถ้าเป็น media และมี base64 data
-          if (item.type !== 'text' && item.mediaData) {
-            payload.media_data = item.mediaData;
-            payload.filename = item.filename || `${item.type}.${item.type === 'image' ? 'jpg' : 'mp4'}`;
-          }
+        // ถ้าเป็น media และมี base64 data
+        if (item.type !== 'text' && item.mediaData) {
+          payload.media_data = item.mediaData;
+          payload.filename = item.filename || `${item.type}.${item.type === 'image' ? 'jpg' : 'mp4'}`;
+        }
 
-          return payload;
-        });
+        return payload;
+      });
 
       await saveMessagesBatch(payloads);
       alert(isEditMode ? "แก้ไขชุดข้อความสำเร็จ!" : "บันทึกข้อความสำเร็จ!");
@@ -374,38 +373,23 @@ function SetDefault() {
     }
   };
 
- const getContentDisplay = (item) => {
-  if (item.type === 'text') {
-    return item.content;
-  } else {
-    // สำหรับ media แสดงชื่อไฟล์
-    if (item.filename) {
-      return item.filename;
-    } else if (item.content && item.content.includes('|')) {
-      // ถ้า content มีรูปแบบ "path|filename"
-      const parts = item.content.split('|');
-      return parts[1] || parts[0];
-    } else if (item.content) {
-      // ลบ prefix [IMAGE] หรือ [VIDEO] ออกถ้ามี
-      let displayContent = item.content;
-      displayContent = displayContent.replace(/^\[IMAGE\]\s*/, '');
-      displayContent = displayContent.replace(/^\[VIDEO\]\s*/, '');
-      
-      // ถ้าเป็น path ให้แสดงเฉพาะชื่อไฟล์
-      if (displayContent.includes('/')) {
-        const pathParts = displayContent.split('/');
-        return pathParts[pathParts.length - 1];
-      }
-      
-      return displayContent;
+  const getContentDisplay = (item) => {
+    if (item.type === 'text') {
+      return item.content;
     } else {
-      return 'Unknown file';
+      // สำหรับ media แสดงชื่อไฟล์
+      if (item.filename) {
+        return item.filename;
+      } else if (item.content && item.content.includes('|')) {
+        // ถ้า content มีรูปแบบ "path|filename"
+        return item.content.split('|')[1] || item.content;
+      } else {
+        return item.content;
+      }
     }
-  }
-};
+  };
 
   const selectedPageName = pages.find(page => page.id === selectedPage)?.name || "ไม่ได้เลือกเพจ";
-
   return (
     <div className="app-container">
       <aside className="sidebar">
@@ -463,9 +447,7 @@ function SetDefault() {
                   type: e.target.value,
                   content: '',
                   file: null,
-                  preview: null,
-                  mediaData: null,
-                  filename: null
+                  preview: null
                 }))}
                 className="input-select"
               >
@@ -487,15 +469,13 @@ function SetDefault() {
               </div>
             ) : (
               <div className="input-form">
-                <label className="input-label">เลือกไฟล์ {currentInput.type === 'image' ? '(JPG, PNG, GIF, WEBP)' : '(MP4, MOV, AVI)'}:</label>
+                <label className="input-label">เลือกไฟล์:</label>
                 <input
                   type="file"
-                  accept={currentInput.type === 'image' ? 'image/jpeg,image/png,image/gif,image/webp' : 'video/mp4,video/quicktime,video/x-msvideo'}
+                  accept={currentInput.type === 'image' ? 'image/*' : 'video/*'}
                   onChange={handleFileUpload}
                   className="input-file"
-                  disabled={uploadingFile}
                 />
-                {uploadingFile && <p style={{ color: '#3498db', fontSize: '14px' }}>กำลังประมวลผลไฟล์...</p>}
                 {currentInput.preview && (
                   <div className="preview-container">
                     {currentInput.type === 'image' ? (
@@ -511,9 +491,6 @@ function SetDefault() {
                         className="preview-video"
                       />
                     )}
-                    <p style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
-                      {currentInput.filename} ({(currentInput.file?.size / (1024 * 1024)).toFixed(2)} MB)
-                    </p>
                   </div>
                 )}
               </div>
@@ -521,7 +498,7 @@ function SetDefault() {
 
             <button
               onClick={addToSequence}
-              disabled={!selectedPage || uploadingFile}
+              disabled={!selectedPage}
               className="add-btn"
             >
               ➕ เพิ่มในลำดับ
@@ -534,9 +511,8 @@ function SetDefault() {
               <button
                 onClick={saveMessageSequence}
                 className="save-btn"
-                disabled={loading}
               >
-                {loading ? "⏳ กำลังบันทึก..." : (isEditMode ? "💾 บันทึกการแก้ไข" : "💾 บันทึกทั้งหมด")}
+                💾 {isEditMode ? "บันทึกการแก้ไข" : "บันทึกทั้งหมด"}
               </button>
             </div>
 
@@ -581,17 +557,7 @@ function SetDefault() {
                         {item.originalData && <span className="sequence-saved-label"> (บันทึกแล้ว)</span>}
                       </div>
                       <div className="sequence-text">
-                        {getContentDisplay(item)}
-                        {item.mediaUrl && (
-                          <a 
-                            href={`http://localhost:8000${item.mediaUrl}`} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            style={{ fontSize: '12px', marginLeft: '10px' }}
-                          >
-                            [ดูไฟล์]
-                          </a>
-                        )}
+                        {item.content}
                       </div>
                     </div>
 

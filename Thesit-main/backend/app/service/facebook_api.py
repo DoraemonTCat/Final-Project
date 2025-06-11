@@ -28,15 +28,6 @@ def fb_get(endpoint: str, params: dict = {}, access_token: str = None):
     return response.json()
 
 def send_message(recipient_id: str, message_text: str, access_token: str = None):
-    # ตรวจสอบว่าเป็น URL ของ media หรือไม่
-    if message_text.startswith('http://') and ('/media/' in message_text):
-        # ส่งเป็น media
-        if any(ext in message_text for ext in ['.jpg', '.png', '.gif', '.webp']):
-            return send_media(recipient_id, 'image', message_text, access_token)
-        elif any(ext in message_text for ext in ['.mp4', '.mov', '.avi']):
-            return send_media(recipient_id, 'video', message_text, access_token)
-    
-    # ส่งเป็นข้อความธรรมดา
     payload = {
         "messaging_type": "MESSAGE_TAG",
         "recipient": {"id": recipient_id},
@@ -189,34 +180,3 @@ async def batch_fb_requests(requests_data: list, access_token: str):
     async with aiohttp.ClientSession() as session:
         async with session.post(batch_url, data=batch_params) as response:
             return await response.json()
-
-# เพิ่มฟังก์ชันนี้ใน facebook_api.py
-
-def send_local_media_file(recipient_id: str, file_path: str, media_type: str, access_token: str):
-    """ส่งไฟล์ media จาก local path โดยอัพโหลดไปที่ Facebook ก่อน"""
-    try:
-        # อัพโหลดไฟล์และรับ attachment_id
-        attachment_id = upload_media_to_facebook(file_path, media_type, access_token)
-        
-        if attachment_id:
-            # ส่งโดยใช้ attachment_id
-            payload = {
-                "messaging_type": "MESSAGE_TAG", 
-                "recipient": {"id": recipient_id},
-                "message": {
-                    "attachment": {
-                        "type": media_type,
-                        "payload": {
-                            "attachment_id": attachment_id
-                        }
-                    }
-                },
-                "tag": "CONFIRMED_EVENT_UPDATE"
-            }
-            return fb_post("me/messages", payload, access_token)
-        else:
-            return {"error": "Failed to upload media to Facebook"}
-            
-    except Exception as e:
-        print(f"❌ Error in send_local_media_file: {e}")
-        return {"error": str(e)}
