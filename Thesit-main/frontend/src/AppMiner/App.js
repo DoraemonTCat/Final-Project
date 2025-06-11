@@ -95,7 +95,7 @@ const checkForNewMessages = useCallback(async () => {
     if (selectedPage) {
       pollingIntervalRef.current = setInterval(() => {
         checkForNewMessages();
-      }, 1000); // เปลี่ยนเป็น 1 วินาที เพื่อลดโหลด
+      }, 10000); // เปลี่ยนเป็น 1 วินาที เพื่อลดโหลด
     }
 
     return () => {
@@ -790,7 +790,22 @@ const checkForNewMessages = useCallback(async () => {
                           <span>{msg.content || msg.message}</span>
                         ) : (
                           <span style={{ color: "#666" }}>
-                            [{msg.message_type.toUpperCase()}] {msg.filename || msg.content}
+                           {msg.message_type === 'image' && (
+                                <img
+                                    src={`https://sleeping-carroll-verde-characteristics.trycloudflare.com/images/${msg.content.replace('[IMAGE] ', '')}`}
+                                    alt="preview"
+                                    style={{ maxWidth: '100%' }}
+                                />
+                            )}
+                            {msg.message_type === 'video' && (
+                                <video controls style={{ maxWidth: '100%' }}>
+                                    <source
+                                        src={`https://sleeping-carroll-verde-characteristics.trycloudflare.com/videos/${msg.content.replace('[VIDEO] ', '')}`}
+                                        type="video/mp4"
+                                    />
+                                    เบราว์เซอร์ของคุณไม่รองรับวิดีโอ
+                                </video>
+                            )}
                           </span>
                         )}
                       </li>

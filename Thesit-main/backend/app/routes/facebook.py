@@ -14,6 +14,10 @@ import aiohttp
 from collections import defaultdict
 import time
 import json
+import base64
+import os
+import tempfile
+
 
 router = APIRouter()
 
@@ -29,9 +33,8 @@ CACHE_DURATION = 60  # Cache duration in seconds
 
 class SendMessageRequest(BaseModel):
     message: str
-    type: Optional[str] = "text"  # "text", "image", or "video"
-    media_data: Optional[str] = None  # base64 encoded media
-    filename: Optional[str] = None
+    media_type: str = None
+    media_data: str = None
 
 class BatchSendRequest(BaseModel):
     psids: List[str]
@@ -279,11 +282,14 @@ async def get_conversation_messages_async(session, conversation_id, access_token
     }
     return await async_fb_get(session, endpoint, params, access_token)
 
+# แก้ไขฟังก์ชัน send_user_message_by_psid
 @router.post("/send/{page_id}/{psid}")
 async def send_user_message_by_psid(page_id: str, psid: str, req: SendMessageRequest):
-    """ส่งข้อความหรือสื่อไปยังผู้ใช้ผ่าน PSID"""
-    print(f"📤 กำลังส่ง {req.type} ไปยัง PSID: {psid}")
+    """ส่งข้อความไปยังผู้ใช้ผ่าน PSID"""
+    print(f"📤 กำลังส่งข้อความไปยัง PSID: {psid}")
+    print(f"📤 ข้อความ: {req.message}")
     
+    # ใช้ local dictionary
     access_token = page_tokens.get(page_id)
     if not access_token:
         print(f"❌ ไม่พบ access_token สำหรับ page_id: {page_id}")
@@ -295,38 +301,84 @@ async def send_user_message_by_psid(page_id: str, psid: str, req: SendMessageReq
         return {"error": "Invalid PSID"}
     
     try:
-        if req.type == "text":
+        # 🔥 ตรวจสอบว่าเป็นข้อความแบบมีมีเดียหรือไม่
+        if req.media_type and req.media_data:
+            print(f"🖼️ ตรวจพบการส่งมีเดีย type: {req.media_type}")
+            
+            # แปลง base64 กลับเป็นไฟล์
+            media_bytes = base64.b64decode(req.media_data.split(',')[1] if ',' in req.media_data else req.media_data)
+            
+            # สร้างไฟล์ชั่วคราว
+            file_extension = 'jpg' if req.media_type == 'image' else 'mp4'
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_extension}') as tmp_file:
+                tmp_file.write(media_bytes)
+                tmp_file_path = tmp_file.name
+            
+            try:
+                # อัปโหลดไฟล์ไปยัง Facebook
+                upload_url = f"https://graph.facebook.com/v14.0/me/message_attachments"
+                
+                with open(tmp_file_path, 'rb') as f:
+                    files = {'filedata': (f'file.{file_extension}', f, f'{"image/jpeg" if req.media_type == "image" else "video/mp4"}')}
+                    upload_data = {
+                        'message': '{"attachment":{"type":"' + req.media_type + '", "payload":{"is_reusable":true}}}',
+                    }
+                    upload_params = {'access_token': access_token}
+                    
+                    print("📤 กำลังอัปโหลดไฟล์ไปยัง Facebook...")
+                    upload_response = requests.post(upload_url, params=upload_params, data=upload_data, files=files)
+                    upload_result = upload_response.json()
+                    
+                    if 'attachment_id' in upload_result:
+                        print(f"✅ อัปโหลดสำเร็จ attachment_id: {upload_result['attachment_id']}")
+                        
+                        # ส่งข้อความพร้อม attachment
+                        send_payload = {
+                            "messaging_type": "MESSAGE_TAG",
+                            "recipient": {"id": psid},
+                            "message": {
+                                "attachment": {
+                                    "type": req.media_type,
+                                    "payload": {
+                                        "attachment_id": upload_result['attachment_id']
+                                    }
+                                }
+                            },
+                            "tag": "CONFIRMED_EVENT_UPDATE"
+                        }
+                        
+                        # ใช้ fb_post จาก facebook_api.py
+                        from app.service.facebook_api import fb_post
+                        result = fb_post("me/messages", send_payload, access_token)
+                        
+                        if "error" not in result:
+                            print(f"✅ ส่งมีเดียสำเร็จ")
+                            return {"success": True, "result": result}
+                        else:
+                            print(f"❌ เกิดข้อผิดพลาดในการส่งมีเดีย: {result['error']}")
+                            return {"error": result["error"], "details": result}
+                    else:
+                        print(f"❌ อัปโหลดไฟล์ล้มเหลว: {upload_result}")
+                        return {"error": "Failed to upload media", "details": upload_result}
+                        
+            finally:
+                # ลบไฟล์ชั่วคราว
+                if os.path.exists(tmp_file_path):
+                    os.unlink(tmp_file_path)
+                    
+        else:
             # ส่งข้อความธรรมดา
             result = send_message(psid, req.message, access_token)
-        elif req.type in ["image", "video"]:
-            # ส่งรูปภาพหรือวิดีโอ
-            if req.media_data and req.filename:
-                # ส่งจาก base64 data
-                result = send_media_from_base64(
-                    psid, 
-                    req.type, 
-                    req.media_data, 
-                    req.filename, 
-                    access_token
-                )
-            else:
-                # ถ้าเป็น URL
-                result = send_media(psid, req.type, req.message, access_token)
-        else:
-            return {"error": "Invalid message type"}
-        
-        if "error" in result:
-            print(f"❌ เกิดข้อผิดพลาดในการส่ง {req.type}: {result['error']}")
-            return {"error": result["error"], "details": result}
-        else:
-            print(f"✅ ส่ง {req.type} สำเร็จ")
-            # ล้าง cache เมื่อส่งข้อความสำเร็จ
-            if page_id in conversation_cache:
-                del conversation_cache[page_id]
-            return {"success": True, "result": result}
             
+            if "error" in result:
+                print(f"❌ เกิดข้อผิดพลาดในการส่งข้อความ: {result['error']}")
+                return {"error": result["error"], "details": result}
+            else:
+                print(f"✅ ส่งข้อความสำเร็จ")
+                return {"success": True, "result": result}
+                
     except Exception as e:
-        print(f"❌ Exception: {str(e)}")
+        print(f"❌ เกิดข้อผิดพลาด: {str(e)}")
         return {"error": str(e)}
 
 @router.post("/send-batch/{page_id}")
