@@ -405,6 +405,15 @@ function App() {
     }
   };
 
+  const getUpdateStatus = () => {
+    const diffMs = currentTime - lastUpdateTime;
+    const diffMin = Math.floor(diffMs / 60000);
+    
+    if (diffMin < 1) return "🟢 อัพเดทล่าสุด";
+    if (diffMin < 5) return "🟡 " + diffMin + " นาทีที่แล้ว";
+    return "🔴 " + diffMin + " นาทีที่แล้ว";
+  };
+
   const handleConfirmPopup = (checkedSetIds) => {
     setSelectedMessageSetIds(checkedSetIds);
     sendMessagesBySelectedSets(checkedSetIds);
@@ -442,11 +451,7 @@ function App() {
       <main className="main-dashboard">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
           <h2>📋 ตารางการขุด</h2>
-          <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-            {/* 🔥 เพิ่มสถานะ realtime */}
-            <div style={{ fontSize: "12px", color: "#666" }}>
-              🔄 อัปเดตล่าสุด: {lastUpdateTime.toLocaleTimeString('th-TH')}
-            </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>     
             <p>ชื่อ User</p>
           </div>
         </div>
@@ -548,9 +553,9 @@ function App() {
               📊 มี: {displayData.length} การสนทนา
             </span>
           )}
-          {/* 🔥 เพิ่มสถานะ realtime */}
-          <span style={{ marginLeft: "20px", color: "#0066cc", fontSize: "12px" }}>
-            🟢 ระบบตรวจสอบอัตโนมัติ
+          <span style={{ marginLeft: "57%", color: "#0066cc", fontSize: "12px"} }>
+               {/* 🔥 เพิ่มสถานะ realtime */}
+              🔄 อัปเดตล่าสุด: {lastUpdateTime.toLocaleTimeString('th-TH')}
           </span>
         </div>
 
@@ -594,13 +599,16 @@ function App() {
                       : "-"
                     }
                   </td>
-                  <td className="table" >
-                    {/* 🔥 แสดงเวลาจากข้อความล่าสุดของ User */}
-                    {conv.last_user_message_time
-                      ? timeAgo(conv.last_user_message_time)
-                      : timeAgo(conv.updated_time)
-                    }
-                  </td>
+                  <td className="table" style={{
+                      backgroundColor: conv.last_user_message_time && 
+                        new Date(conv.last_user_message_time) > new Date(Date.now() - 60000) 
+                        ? '#e8f5e9' : 'transparent'
+                    }}>
+                      {conv.last_user_message_time
+                        ? timeAgo(conv.last_user_message_time)
+                        : timeAgo(conv.updated_time)
+                      }
+                    </td>
                   <td className="table">Context</td>
                   <td className="table">สินค้าที่สนใจ</td>
                   <td className="table">Platform</td>
