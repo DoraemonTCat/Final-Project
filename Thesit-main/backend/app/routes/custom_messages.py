@@ -63,7 +63,7 @@ def save_media_from_base64(base64_data: str, filename: str, media_type: str) -> 
         with open(file_path, 'wb') as f:
             f.write(file_data)
         
-        # คืน relative path สำหรับเก็บใน DB
+        # คืน relative path สำหรับเก็บใน DB (ไม่มี / นำหน้า)
         return f"{media_type}s/{unique_filename}"
         
     except Exception as e:
@@ -217,12 +217,19 @@ def get_custom_messages(message_set_id: int, db: Session = Depends(get_db)):
         # ถ้าเป็น media ให้แยก path และชื่อไฟล์
         if msg.message_type in ['image', 'video'] and '|' in msg.content:
             parts = msg.content.split('|', 1)
-            msg_dict["media_path"] = parts[0]
-            msg_dict["filename"] = parts[1] if len(parts) > 1 else "untitled"
-            # สร้าง URL สำหรับเข้าถึงไฟล์
-            msg_dict["media_url"] = f"/media/{parts[0]}"
-            # เพิ่ม media_data สำหรับส่งไปยัง Facebook
-            msg_dict["media_data"] = parts[0]  # path ของไฟล์
+            media_path = parts[0]
+            filename = parts[1] if len(parts) > 1 else "untitled"
+            
+            msg_dict["media_path"] = media_path
+            msg_dict["filename"] = filename
+            # สร้าง URL ที่ถูกต้อง (ไม่ซ้ำ /media/)
+            msg_dict["media_url"] = f"/media/{media_path}"
+            # ตรวจสอบว่าไฟล์มีอยู่จริง
+            full_path = os.path.join(UPLOAD_DIR, media_path)
+            msg_dict["file_exists"] = os.path.exists(full_path)
+            
+            if not msg_dict["file_exists"]:
+                print(f"⚠️ ไฟล์ไม่พบ: {full_path}")
         
         result.append(msg_dict)
     

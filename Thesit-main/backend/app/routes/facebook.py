@@ -28,9 +28,9 @@ conversation_cache = {}  # key = page_id, value = {"data": conversations, "times
 CACHE_DURATION = 60  # Cache duration in seconds
 
 class SendMessageRequest(BaseModel):
-    message: str
-    type: Optional[str] = "text"  # "text", "image", or "video"
-    media_data: Optional[str] = None  # base64 encoded media
+    message: Optional[str] = None  # ทำให้เป็น Optional
+    type: Optional[str] = "text"
+    media_data: Optional[str] = None
     filename: Optional[str] = None
 
 class BatchSendRequest(BaseModel):
@@ -283,25 +283,39 @@ async def get_conversation_messages_async(session, conversation_id, access_token
 async def send_user_message_by_psid(page_id: str, psid: str, req: SendMessageRequest):
     """ส่งข้อความหรือสื่อไปยังผู้ใช้ผ่าน PSID"""
     print(f"📤 กำลังส่ง {req.type} ไปยัง PSID: {psid}")
+    print(f"📤 Request data: {req.dict()}")
     
     access_token = page_tokens.get(page_id)
     if not access_token:
         print(f"❌ ไม่พบ access_token สำหรับ page_id: {page_id}")
-        return {"error": "Page token not found. Please connect via /connect first."}
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Page token not found. Please connect via /connect first."}
+        )
 
     # ตรวจสอบ PSID
     if not psid or len(psid) < 10:
         print(f"❌ PSID ไม่ถูกต้อง: {psid}")
-        return {"error": "Invalid PSID"}
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Invalid PSID"}
+        )
     
     try:
         if req.type == "text":
             # ส่งข้อความธรรมดา
+            if not req.message:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "Message content is required for text type"}
+                )
             result = send_message(psid, req.message, access_token)
+            
         elif req.type in ["image", "video"]:
             # ส่งรูปภาพหรือวิดีโอ
             if req.media_data and req.filename:
                 # ส่งจาก base64 data
+                print(f"📤 ส่ง {req.type} จาก base64 data")
                 result = send_media_from_base64(
                     psid, 
                     req.type, 
@@ -309,15 +323,27 @@ async def send_user_message_by_psid(page_id: str, psid: str, req: SendMessageReq
                     req.filename, 
                     access_token
                 )
-            else:
+            elif req.message:
                 # ถ้าเป็น URL
+                print(f"📤 ส่ง {req.type} จาก URL: {req.message}")
                 result = send_media(psid, req.type, req.message, access_token)
+            else:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": f"Either media_data or message (URL) is required for {req.type} type"}
+                )
         else:
-            return {"error": "Invalid message type"}
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"Invalid message type: {req.type}"}
+            )
         
         if "error" in result:
             print(f"❌ เกิดข้อผิดพลาดในการส่ง {req.type}: {result['error']}")
-            return {"error": result["error"], "details": result}
+            return JSONResponse(
+                status_code=500,
+                content={"error": result["error"], "details": result}
+            )
         else:
             print(f"✅ ส่ง {req.type} สำเร็จ")
             # ล้าง cache เมื่อส่งข้อความสำเร็จ
@@ -327,7 +353,12 @@ async def send_user_message_by_psid(page_id: str, psid: str, req: SendMessageReq
             
     except Exception as e:
         print(f"❌ Exception: {str(e)}")
-        return {"error": str(e)}
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
 
 @router.post("/send-batch/{page_id}")
 async def send_batch_messages(page_id: str, req: BatchSendRequest, background_tasks: BackgroundTasks):

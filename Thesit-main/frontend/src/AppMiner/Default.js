@@ -385,9 +385,21 @@ function SetDefault() {
       // ถ้า content มีรูปแบบ "path|filename"
       const parts = item.content.split('|');
       return parts[1] || parts[0];
+    } else if (item.content) {
+      // ลบ prefix [IMAGE] หรือ [VIDEO] ออกถ้ามี
+      let displayContent = item.content;
+      displayContent = displayContent.replace(/^\[IMAGE\]\s*/, '');
+      displayContent = displayContent.replace(/^\[VIDEO\]\s*/, '');
+      
+      // ถ้าเป็น path ให้แสดงเฉพาะชื่อไฟล์
+      if (displayContent.includes('/')) {
+        const pathParts = displayContent.split('/');
+        return pathParts[pathParts.length - 1];
+      }
+      
+      return displayContent;
     } else {
-      // ถ้าเป็นชื่อไฟล์ตรงๆ
-      return item.content.replace(/^\[IMAGE\]\s*/, '').replace(/^\[VIDEO\]\s*/, '');
+      return 'Unknown file';
     }
   }
 };

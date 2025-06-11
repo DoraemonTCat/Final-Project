@@ -356,6 +356,8 @@ const checkForNewMessages = useCallback(async () => {
     setSendProgress({ current: 0, total: selectedConversationIds.length * defaultMessages.length });
 
     let progressCount = 0;
+    let successCount = 0;
+    let failedCount = 0;
 
     try {
       for (const conversationId of selectedConversationIds) {
@@ -364,8 +366,10 @@ const checkForNewMessages = useCallback(async () => {
 
         if (!psid) {
           console.error(`ไม่พบ PSID สำหรับ conversation: ${conversationId}`);
+          failedCount++;
           continue;
         }
+
         for (const messageObj of defaultMessages) {
           let requestBody = { 
             type: messageObj.message_type || "text"
@@ -374,34 +378,126 @@ const checkForNewMessages = useCallback(async () => {
           if (messageObj.message_type === 'text') {
             // ข้อความธรรมดา
             requestBody.message = messageObj.content || messageObj.message || messageObj;
-          } else if (messageObj.message_type in ['image', 'video']) {
-            // สำหรับ media
-            if (messageObj.media_path) {
-              // ถ้ามี path ของไฟล์ที่บันทึกไว้แล้ว
-              const fullUrl = `http://localhost:8000/media/${messageObj.media_path}`;
-              requestBody.message = fullUrl;
-              requestBody.type = messageObj.message_type;
-            } else {
-              // ถ้าไม่มี path ให้ข้าม
-              console.error('No media path for:', messageObj);
-              continue;
+          } // แก้ไขใน confirmSendMessages ส่วนที่จัดการ media
+            else if (messageObj.message_type === 'image' || messageObj.message_type === 'video') {
+              console.log('📎 Processing media message:', messageObj);
+              
+              // สำหรับ media
+              if (messageObj.media_url) {
+                // ใช้ media_url ที่มาจาก backend โดยตรง
+                const fullUrl = `http://localhost:8000${messageObj.media_url}`;
+                requestBody.message = fullUrl;
+                requestBody.type = messageObj.message_type;
+                console.log('📎 Using media_url:', fullUrl);
+              } else if (messageObj.media_path) {
+                // fallback ถ้าไม่มี media_url
+                // ตรวจสอบว่า media_path มี [IMAGE] หรือ [VIDEO] prefix หรือไม่
+                let cleanPath = messageObj.media_path;
+                if (cleanPath.startsWith('[IMAGE] ')) {
+                  cleanPath = cleanPath.replace('[IMAGE] ', '');
+                } else if (cleanPath.startsWith('[VIDEO] ')) {
+                  cleanPath = cleanPath.replace('[VIDEO] ', '');
+                }
+                
+                const fullUrl = `http://localhost:8000/media/${cleanPath}`;
+                requestBody.message = fullUrl;
+                requestBody.type = messageObj.message_type;
+                console.log('📎 Using cleaned media_path:', fullUrl);
+              } else if (messageObj.content && (messageObj.content.includes('|') || messageObj.content.includes('/'))) {
+                // ถ้า content มีรูปแบบ "path|filename" หรือเป็น path
+                let mediaPath = messageObj.content;
+                
+                // ถ้ามี | ให้เอาส่วนแรก
+                if (mediaPath.includes('|')) {
+                  mediaPath = mediaPath.split('|')[0];
+                }
+                
+                // ลบ prefix [IMAGE] หรือ [VIDEO] ถ้ามี
+                if (mediaPath.startsWith('[IMAGE] ')) {
+                  mediaPath = mediaPath.replace('[IMAGE] ', '');
+                } else if (mediaPath.startsWith('[VIDEO] ')) {
+                  mediaPath = mediaPath.replace('[VIDEO] ', '');
+                }
+                
+                const fullUrl = `http://localhost:8000/media/${mediaPath}`;
+                requestBody.message = fullUrl;
+                requestBody.type = messageObj.message_type;
+                console.log('📎 Using content path:', fullUrl);
+              } else if (messageObj.media_data) {
+                // ถ้ามี base64 data ให้ส่งไปด้วย
+                requestBody.media_data = messageObj.media_data;
+                requestBody.filename = messageObj.filename || 'media';
+                requestBody.type = messageObj.message_type;
+                console.log('📎 Using media_data (base64)');
+              } else {
+                console.error('❌ No media data available for:', messageObj);
+                progressCount++;
+                setSendProgress({ current: progressCount, total: selectedConversationIds.length * defaultMessages.length });
+                continue;
+              }
+              
+              console.log('📤 Final requestBody for media:', requestBody);
             }
+
+          try {
+            console.log(`📤 กำลังส่ง ${requestBody.type} ไปยัง PSID: ${psid}`, requestBody);
+            
+            const response = await fetch(`http://localhost:8000/send/${selectedPage}/${psid}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(requestBody),
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              console.error(`❌ ส่งข้อความล้มเหลว: ${response.status}`, errorData);
+              failedCount++;
+            } else {
+              successCount++;
+              console.log(`✅ ส่ง ${requestBody.type} สำเร็จ`);
+            }
+
+            // อัพเดท progress
+            progressCount++;
+            setSendProgress({ current: progressCount, total: selectedConversationIds.length * defaultMessages.length });
+
+            // หน่วงเวลาเพื่อไม่ให้ส่งเร็วเกินไป
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+          } catch (error) {
+            console.error("Error sending message:", error);
+            failedCount++;
+            progressCount++;
+            setSendProgress({ current: progressCount, total: selectedConversationIds.length * defaultMessages.length });
           }
-
-          await fetch(`http://localhost:8000/send/${selectedPage}/${psid}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(requestBody),
-          });
-
-          await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
 
+      // แสดงผลลัพธ์
       const selectedSetName = messageSets.find(set => set.id.toString() === selectedMessageSetId)?.set_name || "ไม่ทราบชื่อ";
-      alert(`ส่งข้อความเรียบร้อยแล้ว!\nชุดข้อความ: ${selectedSetName}\nส่งไปยัง ${selectedConversationIds.length} การสนทนา\nจำนวน ${defaultMessages.length} ข้อความ`);
+      
+      let resultMessage = `ส่งข้อความเสร็จสิ้น!\n`;
+      resultMessage += `ชุดข้อความ: ${selectedSetName}\n`;
+      resultMessage += `ส่งไปยัง ${selectedConversationIds.length} การสนทนา\n`;
+      resultMessage += `จำนวน ${defaultMessages.length} ข้อความต่อคน\n`;
+      resultMessage += `รวมทั้งสิ้น ${selectedConversationIds.length * defaultMessages.length} ข้อความ\n\n`;
+      
+      if (successCount > 0) {
+        resultMessage += `✅ สำเร็จ: ${successCount} ข้อความ\n`;
+      }
+      if (failedCount > 0) {
+        resultMessage += `❌ ล้มเหลว: ${failedCount} ข้อความ`;
+      }
+      
+      alert(resultMessage);
 
+      // รีเซ็ตค่าต่างๆ
       setSelectedConversationIds([]);
+      
+      // รีโหลดข้อมูล conversations
+      if (selectedPage) {
+        loadConversations(selectedPage, itemsPerPage, 0, false);
+      }
 
     } catch (error) {
       console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
