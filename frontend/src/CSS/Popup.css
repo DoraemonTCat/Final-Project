@@ -1,0 +1,72 @@
+.popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+}
+
+.popup-content {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  min-width: 300px;
+  max-width: 500px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+  position: relative;
+}
+
+.popup-close {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+}
+.popup-confirm {
+  background-color: #28a745;        /* สีเขียว */
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  font-size: 1rem;
+  font-weight: bold;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.popup-confirm:hover {
+  background-color: #218838;        /* เขียวเข้มเมื่อ hover */
+  transform: scale(1.05);           /* ขยายเล็กน้อย */
+}
+
+.popup-confirm:active {
+  background-color: #1e7e34;        /* เขียวเข้มอีกเมื่อคลิก */
+  transform: scale(0.98);           /* กดยุบ */
+}
+.message-list {
+  list-style: none;
+  padding-left: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 1em 0;
+}
+
+.message-list li {
+  padding: 0.5em 0;
+  border-bottom: 1px solid #ddd;
+  font-size: 14px;
+}
+.message-preview-list {
+  max-height: 300px; /* กำหนดความสูงตามที่ต้องการ */
+  overflow-y: auto;  /* เปิดให้เลื่อนแนวตั้ง */
+  padding-right: 10px; /* เว้นช่องทาง scrollbar */
+}
