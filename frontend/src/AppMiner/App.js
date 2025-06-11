@@ -16,32 +16,53 @@ function App() {
   const [customerType, setCustomerType] = useState("");
   const [platformType, setPlatformType] = useState("");
   const [miningStatus, setMiningStatus] = useState("");
-  const [allConversations, setAllConversations] = useState([]); // ข้อมูลดิบ
-  const [filteredConversations, setFilteredConversations] = useState([]); // ข้อมูลหลังกรอง
+  const [allConversations, setAllConversations] = useState([]);
+  const [filteredConversations, setFilteredConversations] = useState([]);
   const displayData = filteredConversations.length > 0 ? filteredConversations : conversations;
   const [pageId, setPageId] = useState("");
   const [selectedConversationIds, setSelectedConversationIds] = useState([]);
-  const [defaultMessages, setDefaultMessages] = useState([]); // 🔥 เพิ่ม state สำหรับเก็บข้อความจาก DB
+  const [defaultMessages, setDefaultMessages] = useState([]);
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [selectedMessageSetIds, setSelectedMessageSetIds] = useState([]);
 
-  // 🔥 เพิ่ม state สำหรับ realtime functionality
+  // 🔥 State สำหรับ realtime และ cache
   const [currentTime, setCurrentTime] = useState(new Date());
   const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
   const updateIntervalRef = useRef(null);
   const pollingIntervalRef = useRef(null);
   
+  // 🚀 Cache สำหรับเก็บข้อมูลที่โหลดแล้ว
+  const messageCache = useRef({});
+  const conversationCache = useRef({});
+  const cacheTimeout = 5 * 60 * 1000; // 5 นาที
+
+  // 🚀 ฟังก์ชันตรวจสอบ cache
+  const getCachedData = (key, cache) => {
+    const cached = cache.current[key];
+    if (cached && Date.now() - cached.timestamp < cacheTimeout) {
+      return cached.data;
+    }
+    return null;
+  };
+
+  const setCachedData = (key, data, cache) => {
+    cache.current[key] = {
+      data,
+      timestamp: Date.now()
+    };
+  };
 
   useEffect(() => {
     const savedPage = localStorage.getItem("selectedPage");
     if (savedPage) {
       setSelectedPage(savedPage);
     }
+    
+    // 🚀 โหลด pages แบบ async
     fetchPages()
       .then(setPages)
       .catch(err => console.error("ไม่สามารถโหลดเพจได้:", err));
 
-    // 🔥 ขอสิทธิ์ notification
     if (Notification.permission === "default") {
       Notification.requestPermission();
     }
@@ -55,33 +76,48 @@ function App() {
     }
   }, []);
 
-  // 🔥 โหลดข้อความเมื่อเปลี่ยน selectedPage
+  // 🚀 โหลดข้อมูลแบบ parallel เมื่อเปลี่ยน selectedPage
   useEffect(() => {
-    const loadMessages = async () => {
-      if (selectedPage) {
-        try {
-          console.log(`🔄 กำลังโหลดข้อความสำหรับ page_id: ${selectedPage}`);
-          const data = await getMessagesBySetId(selectedPage);
-          console.log(`✅ โหลดข้อความสำเร็จ:`, data);
-          setDefaultMessages(Array.isArray(data) ? data : []);
-        } catch (err) {
-          console.error("โหลดข้อความล้มเหลว:", err);
-          setDefaultMessages([]);
-        }
-      } else {
-        setDefaultMessages([]);
-      }
-    };
-
-    loadMessages();
+    if (selectedPage) {
+      // โหลดข้อมูลทั้งหมดพร้อมกัน
+      Promise.all([
+        loadMessages(selectedPage),
+        loadConversations(selectedPage)
+      ]).catch(err => console.error("Error loading data:", err));
+    } else {
+      setDefaultMessages([]);
+      setConversations([]);
+    }
   }, [selectedPage]);
 
-  // 🔥 ฟังก์ชันแปลงเวลาห่างที่ปรับปรุงแล้ว
+  // 🚀 ฟังก์ชันโหลดข้อความที่ปรับปรุงแล้ว
+  const loadMessages = async (pageId) => {
+    // ตรวจสอบ cache ก่อน
+    const cached = getCachedData(`messages_${pageId}`, messageCache);
+    if (cached) {
+      setDefaultMessages(cached);
+      return cached;
+    }
+
+    try {
+      const data = await getMessagesBySetId(pageId);
+      const messages = Array.isArray(data) ? data : [];
+      setDefaultMessages(messages);
+      setCachedData(`messages_${pageId}`, messages, messageCache);
+      return messages;
+    } catch (err) {
+      console.error("โหลดข้อความล้มเหลว:", err);
+      setDefaultMessages([]);
+      return [];
+    }
+  };
+
+  // ฟังก์ชันแปลงเวลาห่าง
   const timeAgo = (dateString) => {
     if (!dateString) return "-";
     
     const past = new Date(dateString);
-    const now = currentTime; // ใช้ currentTime แทน new Date()
+    const now = currentTime;
     const diffMs = now.getTime() - past.getTime();
     const diffSec = Math.floor(diffMs / 1000);
     
@@ -101,53 +137,30 @@ function App() {
     return `${diffYear} ปีที่แล้ว`;
   };
 
-  // 🔥 ฟังก์ชันตรวจสอบข้อความใหม่แบบ realtime
+  // 🚀 ฟังก์ชันตรวจสอบข้อความใหม่ที่ปรับปรุงแล้ว
   const checkForNewMessages = useCallback(async () => {
     if (!selectedPage || loading) return;
     
     try {
-      console.log("🔍 กำลังตรวจสอบข้อความใหม่...");
       const newConversations = await fetchConversations(selectedPage);
-      
-      // Debug: แสดงข้อมูลที่ได้
-      console.log("📥 ข้อมูลใหม่:", newConversations.length, "รายการ");
-      console.log("📊 ข้อมูลเดิม:", allConversations.length, "รายการ");
       
       const hasChanges = newConversations.some(newConv => {
         const oldConv = allConversations.find(c => c.conversation_id === newConv.conversation_id);
-        if (!oldConv) {
-          console.log("🆕 พบการสนทนาใหม่:", newConv.conversation_id);
-          return true;
-        }
-        
-        if (newConv.last_user_message_time !== oldConv.last_user_message_time) {
-          console.log("📝 พบข้อความใหม่ใน:", newConv.conversation_id);
-          console.log("⏰ เวลาเก่า:", oldConv.last_user_message_time);
-          console.log("⏰ เวลาใหม่:", newConv.last_user_message_time);
-          return true;
-        }
-        return false;
+        if (!oldConv) return true;
+        return newConv.last_user_message_time !== oldConv.last_user_message_time;
       });
       
       if (hasChanges) {
-        console.log("🔔 มีการเปลี่ยนแปลง! กำลังอัปเดต...");
-        
-        // อัปเดตข้อมูลทั้งหมด
         setConversations(newConversations);
         setAllConversations(newConversations);
         setLastUpdateTime(new Date());
-        
-        // *** บังคับ re-render โดยการอัปเดต state อื่น ***
         setCurrentTime(new Date());
         
-        // ถ้ามี filter ใช้งานอยู่
+        // Clear cache เมื่อมีข้อมูลใหม่
+        conversationCache.current = {};
+        
         if (filteredConversations.length > 0) {
-          console.log("🔄 กำลังอัปเดต filtered conversations...");
-          
-          // ใช้ setTimeout เพื่อให้ state อัปเดตก่อน
-          setTimeout(() => {
-            applyFilters();
-          }, 100);
+          setTimeout(() => applyFilters(), 100);
         }
         
         if (Notification.permission === "granted") {
@@ -156,39 +169,22 @@ function App() {
             icon: "/favicon.ico"
           });
         }
-      } else {
-        console.log("✅ ไม่มีการเปลี่ยนแปลง");
       }
     } catch (err) {
       console.error("❌ เกิดข้อผิดพลาดในการตรวจสอบ:", err);
     }
   }, [selectedPage, allConversations, loading, filteredConversations]);
 
-  // 🔥 useEffect สำหรับ debug state changes
+  // useEffect สำหรับ realtime polling
   useEffect(() => {
-    console.log("🔄 allConversations อัปเดต:", allConversations.length, "รายการ");
-  }, [allConversations]);
-
-  useEffect(() => {
-    console.log("🔄 conversations อัปเดต:", conversations.length, "รายการ");
-  }, [conversations]);
-
-  useEffect(() => {
-    console.log("🔄 filteredConversations อัปเดต:", filteredConversations.length, "รายการ");
-  }, [filteredConversations]);
-
-  // 🔥 useEffect สำหรับ realtime polling
-  useEffect(() => {
-    // อัปเดตเวลาปัจจุบันทุกวินาที
     updateIntervalRef.current = setInterval(() => {
       setCurrentTime(new Date());
-    }, 1000);
+    }, 1000); // อัปเดตเวลาในทุกๆ วินาที
 
-    // ตรวจสอบข้อความใหม่ทุก 3 วินาที
     if (selectedPage) {
       pollingIntervalRef.current = setInterval(() => {
         checkForNewMessages();
-      }, 5000);
+      }, 5000); // เพิ่มเป็น 10 วินาทีเพื่อลดภาระ server
     }
 
     return () => {
@@ -197,18 +193,35 @@ function App() {
     };
   }, [selectedPage, checkForNewMessages]);
 
-  // 🚀 ฟังก์ชันโหลดข้อมูล conversations แบบใหม่ - ใช้ batch API เพื่อความเร็ว
+  // 🚀 ฟังก์ชันโหลด conversations ที่ปรับปรุงแล้ว
   const loadConversations = async (pageId) => {
     if (!pageId) return;
 
+    // ตรวจสอบ cache ก่อน
+    const cached = getCachedData(`conversations_${pageId}`, conversationCache);
+    if (cached && !loading) {
+      setConversations(cached);
+      setAllConversations(cached);
+      return;
+    }
+
     setLoading(true);
     try {
-      console.log(`🚀 เริ่มโหลด conversations สำหรับ pageId: ${pageId}`);
       const conversations = await fetchConversations(pageId);
       setConversations(conversations);
       setAllConversations(conversations);
       setLastUpdateTime(new Date());
-      console.log(`✅ โหลด conversations สำเร็จ: ${conversations.length} รายการ`);
+      setCachedData(`conversations_${pageId}`, conversations, conversationCache);
+      
+      // Clear filters เมื่อโหลดข้อมูลใหม่
+      setDisappearTime("");
+      setCustomerType("");
+      setPlatformType("");
+      setMiningStatus("");
+      setStartDate("");
+      setEndDate("");
+      setFilteredConversations([]);
+      setSelectedConversationIds([]);
     } catch (err) {
       console.error("❌ เกิดข้อผิดพลาด:", err);
       if (err.response?.status === 400) {
@@ -221,28 +234,14 @@ function App() {
     }
   };
 
-  // โหลดข้อมูลทันทีเมื่อเลือกเพจ
-  useEffect(() => {
-    if (selectedPage) {
-      loadConversations(selectedPage);
-      // ล้าง filter ทุกตัวเมื่อเปลี่ยนเพจ
-      setDisappearTime("");
-      setCustomerType("");
-      setPlatformType("");
-      setMiningStatus("");
-      setStartDate("");
-      setEndDate("");
-      setFilteredConversations([]);
-      setSelectedConversationIds([]);
-    }
-  }, [selectedPage]);
-
-  // ปุ่มขุด กดเพื่อโหลดข้อมูลซ้ำ
   const handleloadConversations = () => {
     if (!selectedPage) {
       alert("กรุณาเลือกเพจ");
       return;
     }
+    // Clear cache ก่อน refresh
+    conversationCache.current = {};
+    messageCache.current = {};
     loadConversations(selectedPage);
   };
 
@@ -255,11 +254,9 @@ function App() {
   const applyFilters = () => {
     let filtered = [...allConversations];
 
-    // 🔥 แก้ไข filter: disappearTime ให้ใช้ last_user_message_time แทน updated_time
     if (disappearTime) {
       const now = new Date();
       filtered = filtered.filter(conv => {
-        // ใช้เวลาข้อความล่าสุดของ User หากมี ถ้าไม่มีใช้ updated_time
         const referenceTime = conv.last_user_message_time || conv.updated_time;
         if (!referenceTime) return false;
 
@@ -267,44 +264,31 @@ function App() {
         const diffDays = (now - updated) / (1000 * 60 * 60 * 24);
 
         switch (disappearTime) {
-          case '1d':
-            return diffDays <= 1;
-          case '3d':
-            return diffDays <= 3;
-          case '7d':
-            return diffDays <= 7;
-          case '1m':
-            return diffDays <= 30;
-          case '3m':
-            return diffDays <= 90;
-          case '6m':
-            return diffDays <= 180;
-          case '1y':
-            return diffDays <= 365;
-          case 'over1y':
-            return diffDays > 365;
-          default:
-            return true;
+          case '1d': return diffDays <= 1;
+          case '3d': return diffDays <= 3;
+          case '7d': return diffDays <= 7;
+          case '1m': return diffDays <= 30;
+          case '3m': return diffDays <= 90;
+          case '6m': return diffDays <= 180;
+          case '1y': return diffDays <= 365;
+          case 'over1y': return diffDays > 365;
+          default: return true;
         }
       });
     }
 
-    // ตัวอย่าง filter: customerType (สมมติใน conv มี customerType)
     if (customerType) {
       filtered = filtered.filter(conv => conv.customerType === customerType);
     }
 
-    // ตัวอย่าง filter: platformType
     if (platformType) {
       filtered = filtered.filter(conv => conv.platform === platformType);
     }
 
-    // ตัวอย่าง filter: miningStatus
     if (miningStatus) {
       filtered = filtered.filter(conv => conv.miningStatus === miningStatus);
     }
 
-    // ตัวอย่าง filter: วันที่ (startDate - endDate)
     if (startDate) {
       const start = new Date(startDate);
       filtered = filtered.filter(conv => new Date(conv.created_time) >= start);
@@ -317,7 +301,6 @@ function App() {
     setFilteredConversations(filtered);
   };
 
-  // 📌 Handle เช็ค/ไม่เช็ค
   const toggleCheckbox = (conversationId) => {
     setSelectedConversationIds((prev) =>
       prev.includes(conversationId)
@@ -334,74 +317,81 @@ function App() {
     setIsPopupOpen(false);
   };
 
+  // 🚀 ฟังก์ชันส่งข้อความที่ปรับปรุงแล้ว
   const sendMessagesBySelectedSets = async (messageSetIds) => {
-    if (!Array.isArray(messageSetIds)) {
-      console.error("messageSetIds is not an array:", messageSetIds);
-      alert("ชุดข้อความที่เลือกไม่ถูกต้อง กรุณาลองใหม่");
-      return;
-    }
-
-    if (selectedConversationIds.length === 0) {
-      alert("กรุณาเลือกการสนทนาที่ต้องการส่งข้อความ");
+    if (!Array.isArray(messageSetIds) || selectedConversationIds.length === 0) {
       return;
     }
 
     try {
-      // ดึงข้อความทั้งหมดในชุดที่เลือก (รวมทุกชุด)
-      let allMessages = [];
+      // 🚀 โหลดข้อความทั้งหมดพร้อมกันด้วย Promise.all
+      const messagePromises = messageSetIds.map(setId => 
+        fetch(`http://localhost:8000/custom_messages/${setId}`)
+          .then(res => res.ok ? res.json() : [])
+          .catch(() => [])
+      );
+      
+      const allMessageArrays = await Promise.all(messagePromises);
+      const allMessages = allMessageArrays.flat().sort((a, b) => a.display_order - b.display_order);
 
-      for (const setId of messageSetIds) {
-        const res = await fetch(`http://localhost:8000/custom_messages/${setId}`);
-        if (!res.ok) throw new Error(`Failed to fetch messages for set ${setId}`);
-        const msgs = await res.json();
-        allMessages = allMessages.concat(msgs);
-      }
+      let successCount = 0;
+      let failCount = 0;
 
-      // เรียงลำดับข้อความตาม display_order (ถ้าต้องการ)
-      allMessages.sort((a, b) => a.display_order - b.display_order);
-
-      // ส่งข้อความไปยัง conversation ที่เลือก
-      for (const conversationId of selectedConversationIds) {
-        // หา PSID จาก conversation_id (สมมติคุณมีข้อมูลนี้ใน displayData)
+      // 🚀 เตรียม batch ข้อความสำหรับแต่ละ conversation
+      const sendPromises = selectedConversationIds.map(async (conversationId) => {
         const selectedConv = displayData.find(conv => conv.conversation_id === conversationId);
         const psid = selectedConv?.raw_psid;
 
         if (!psid) {
-          console.error(`ไม่พบ PSID สำหรับ conversation: ${conversationId}`);
-          continue;
+          failCount++;
+          return;
         }
 
-        for (const messageObj of allMessages) {
-          // เตรียมข้อความที่จะส่ง (รองรับ text/image/video ตามที่ backend)
-          let messageContent = messageObj.content;
+        try {
+          // ส่งข้อความทั้งหมดสำหรับ conversation นี้
+          for (const messageObj of allMessages) {
+            let messageContent = messageObj.content;
 
-          // ถ้าเป็นรูปหรือวิดีโอ ให้แปลง URL ให้ถูกต้อง
-          if (messageObj.message_type === "image") {
-            // สมมติ url รูปเก็บใน /images/filename
-            messageContent = `http://localhost:8000/images/${messageContent.replace('[IMAGE] ', '')}`;
-          } else if (messageObj.message_type === "video") {
-            messageContent = `http://localhost:8000/videos/${messageContent.replace('[VIDEO] ', '')}`;
+            if (messageObj.message_type === "image") {
+              messageContent = `http://localhost:8000/images/${messageContent.replace('[IMAGE] ', '')}`;
+            } else if (messageObj.message_type === "video") {
+              messageContent = `http://localhost:8000/videos/${messageContent.replace('[VIDEO] ', '')}`;
+            }
+
+            await fetch(`http://localhost:8000/send/${selectedPage}/${psid}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ 
+                message: messageContent,
+                type: messageObj.message_type,
+              }),
+            });
+
+            // ลด delay เป็น 200ms
+            await new Promise(resolve => setTimeout(resolve, 200));
           }
-
-          // ส่ง POST ไป API ของคุณ
-          await fetch(`http://localhost:8000/send/${selectedPage}/${psid}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-              message: messageContent,
-              type: messageObj.message_type,
-             }),
-          });
-
-          // หน่วงเวลาระหว่างข้อความเพื่อไม่ให้ request ถี่เกินไป
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          successCount++;
+        } catch (err) {
+          console.error(`ส่งข้อความไม่สำเร็จสำหรับ ${conversationId}:`, err);
+          failCount++;
         }
+      });
+
+      // 🚀 ส่งแบบ parallel แต่จำกัดจำนวน concurrent
+      const batchSize = 5;
+      for (let i = 0; i < sendPromises.length; i += batchSize) {
+        await Promise.all(sendPromises.slice(i, i + batchSize));
       }
 
-      alert(`ส่งข้อความสำเร็จ ไปยัง ${selectedConversationIds.length} การสนทนา`);
+      // แสดงผลสรุป
+      if (successCount > 0) {
+        alert(`✅ ส่งข้อความสำเร็จ ${successCount} การสนทนา${failCount > 0 ? `\n⚠️ ส่งไม่สำเร็จ ${failCount} การสนทนา` : ''}`);
+      } else {
+        alert(`❌ ไม่สามารถส่งข้อความได้`);
+      }
+      
     } catch (error) {
       console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
-      alert("เกิดข้อผิดพลาดในการส่งข้อความ กรุณาลองใหม่อีกครั้ง");
     }
   };
 
@@ -416,12 +406,40 @@ function App() {
 
   const handleConfirmPopup = (checkedSetIds) => {
     setSelectedMessageSetIds(checkedSetIds);
+    setIsPopupOpen(false);
+    
+    // แสดงข้อความแจ้งเตือน
+    const notification = document.createElement('div');
+    notification.innerHTML = `<strong>🚀 กำลังส่งข้อความ...</strong><br>ส่งไปยัง ${selectedConversationIds.length} การสนทนา`;
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #4CAF50;
+      color: white;
+      padding: 15px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      z-index: 9999;
+      animation: slideIn 0.3s ease-out;
+    `;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => notification.remove(), 3000);
+    
+    // ส่งข้อความแบบ background
     sendMessagesBySelectedSets(checkedSetIds);
-    setIsPopupOpen(true);
   };
 
   return (
     <div className="app-container">
+      <style>{`
+        @keyframes slideIn {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+      `}</style>
+      
       {/* Sidebar */}
       <aside className="sidebar">
         <h3 className="sidebar-title">ช่องทางเชื่อมต่อ</h3>
@@ -431,10 +449,8 @@ function App() {
           </svg>
         </button>
         <hr />
-        <select
-          value={selectedPage} onChange={handlePageChange} className="select-page"
-        >
-
+        <select value={selectedPage} onChange={handlePageChange} className="select-page">
+          <option value="">-- เลือกเพจ --</option>
           {pages.map((page) => (
             <option key={page.id} value={page.id}>
               {page.name}
@@ -465,7 +481,6 @@ function App() {
 
         {showFilter && (
           <div className="filter-bar">
-            {/* ตัวกรองตามเดิม */}
             <select
               className="filter-select"
               value={disappearTime}
@@ -545,7 +560,6 @@ function App() {
           </div>
         )}
 
-        {/* 🔥 แสดงจำนวนข้อความที่จะส่ง */}
         <div style={{ margin: "10px 0", padding: "10px", backgroundColor: "#f0f8ff", borderRadius: "5px" }}>
           <strong>📝 ข้อความที่จะส่ง: {defaultMessages.length} ข้อความ</strong>
           {displayData.length > 0 && (
@@ -553,8 +567,7 @@ function App() {
               📊 มี: {displayData.length} การสนทนา
             </span>
           )}
-          <span style={{ marginLeft: "57%", color: "#0066cc", fontSize: "12px"} }>
-               {/* 🔥 เพิ่มสถานะ realtime */}
+          <span style={{ marginLeft: "57%", color: "#0066cc", fontSize: "12px" } }>
               🔄 อัปเดตล่าสุด: {lastUpdateTime.toLocaleTimeString('th-TH')}
           </span>
         </div>
@@ -627,12 +640,11 @@ function App() {
           </table>
         )}
 
-        {/* 🔥 ปุ่มขุดที่ปรับปรุงแล้ว */}
         <div style={{ marginTop: "15px", display: "flex", alignItems: "center", gap: "10px" }}>
           <button
             onClick={handOpenPopup}
             className={`button-default ${selectedConversationIds.length > 0 ? "button-active" : ""}`}
-            disabled={loading}
+            disabled={loading || selectedConversationIds.length === 0}
           >
             📥 ขุด ({selectedConversationIds.length} รายการ)
           </button>
@@ -642,10 +654,7 @@ function App() {
               selectedPage={selectedPage}
               onClose={handleClosePopup}
               defaultMessages={defaultMessages}
-              onConfirm={(checkedSetIds) => {
-                setLoading(true);
-                handleConfirmPopup(checkedSetIds);
-              }}
+              onConfirm={handleConfirmPopup}
               count={selectedConversationIds.length}
             />
           )}
