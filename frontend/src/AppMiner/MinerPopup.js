@@ -154,7 +154,7 @@ const Popup = ({ onClose, onConfirm, count, selectedPage }) => {
 
                     {/* คอลัมน์ขวา - ลำดับที่เลือก */}
                     <div style={{ flex: 1 }}>
-                        <h4>ลำดับการส่ง:</h4>
+                        <h4 style={{textAlign:"center"}}>ลำดับการส่ง:</h4>
                         {selectedSets.length === 0 ? (
                             <div className="empty-selection">
                                 ยังไม่ได้เลือกชุดข้อความ

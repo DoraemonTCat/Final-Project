@@ -401,11 +401,9 @@ const sendMessagesBySelectedSets = async (messageSetIds) => {
     notification.remove();
 
     // แสดงผลสรุป
-    if (successCount > 0) {
-      alert(`✅ ส่งข้อความสำเร็จ ${successCount} การสนทนา${failCount > 0 ? `\n⚠️ ส่งไม่สำเร็จ ${failCount} การสนทนา` : ''}`);
-    } else {
+    if (successCount == 0) {
       alert(`❌ ไม่สามารถส่งข้อความได้`);
-    }
+    } 
     
   } catch (error) {
     console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
@@ -661,11 +659,7 @@ const handleConfirmPopup = (checkedSetIds) => {
             {loading ? "⏳ กำลังโหลด..." : "🔄 รีเฟรชข้อมูล"}
           </button>
 
-          {selectedConversationIds.length > 0 && (
-            <span style={{ color: "#666" }}>
-              จะส่งข้อความ {defaultMessages.length} ข้อความ
-            </span>
-          )}
+          
         </div>
       </main>
     </div>
