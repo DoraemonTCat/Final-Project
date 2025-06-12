@@ -317,39 +317,54 @@ function App() {
     setIsPopupOpen(false);
   };
 
-  // 🚀 ฟังก์ชันส่งข้อความที่ปรับปรุงแล้ว
-  const sendMessagesBySelectedSets = async (messageSetIds) => {
-    if (!Array.isArray(messageSetIds) || selectedConversationIds.length === 0) {
-      return;
-    }
+  // 🚀 ฟังก์ชันส่งข้อความที่ปรับปรุงให้ส่งตามลำดับ
+const sendMessagesBySelectedSets = async (messageSetIds) => {
+  if (!Array.isArray(messageSetIds) || selectedConversationIds.length === 0) {
+    return;
+  }
 
-    try {
-      // 🚀 โหลดข้อความทั้งหมดพร้อมกันด้วย Promise.all
-      const messagePromises = messageSetIds.map(setId => 
-        fetch(`http://localhost:8000/custom_messages/${setId}`)
-          .then(res => res.ok ? res.json() : [])
-          .catch(() => [])
-      );
-      
-      const allMessageArrays = await Promise.all(messagePromises);
-      const allMessages = allMessageArrays.flat().sort((a, b) => a.display_order - b.display_order);
+  try {
+    let successCount = 0;
+    let failCount = 0;
 
-      let successCount = 0;
-      let failCount = 0;
+    // แสดงข้อความกำลังส่ง
+    const notification = document.createElement('div');
+    notification.innerHTML = `<strong>🚀 กำลังส่งข้อความ...</strong><br>ส่งไปยัง ${selectedConversationIds.length} การสนทนา`;
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #4CAF50;
+      color: white;
+      padding: 15px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      z-index: 9999;
+    `;
+    document.body.appendChild(notification);
 
-      // 🚀 เตรียม batch ข้อความสำหรับแต่ละ conversation
-      const sendPromises = selectedConversationIds.map(async (conversationId) => {
-        const selectedConv = displayData.find(conv => conv.conversation_id === conversationId);
-        const psid = selectedConv?.raw_psid;
+    // 🚀 วนลูปส่งข้อความสำหรับแต่ละ conversation
+    for (const conversationId of selectedConversationIds) {
+      const selectedConv = displayData.find(conv => conv.conversation_id === conversationId);
+      const psid = selectedConv?.raw_psid;
 
-        if (!psid) {
-          failCount++;
-          return;
-        }
+      if (!psid) {
+        failCount++;
+        continue;
+      }
 
-        try {
-          // ส่งข้อความทั้งหมดสำหรับ conversation นี้
-          for (const messageObj of allMessages) {
+      try {
+        // 🔥 ส่งข้อความทีละชุดตามลำดับ
+        for (const setId of messageSetIds) {
+          // โหลดข้อความในชุดนี้
+          const response = await fetch(`http://localhost:8000/custom_messages/${setId}`);
+          if (!response.ok) continue;
+          
+          const messages = await response.json();
+          const sortedMessages = messages.sort((a, b) => a.display_order - b.display_order);
+
+          // ส่งข้อความในชุดนี้ทีละข้อความ
+          for (const messageObj of sortedMessages) {
             let messageContent = messageObj.content;
 
             if (messageObj.message_type === "image") {
@@ -367,69 +382,53 @@ function App() {
               }),
             });
 
-            // ลด delay เป็น 200ms
-            await new Promise(resolve => setTimeout(resolve, 200));
+            // หน่วงเวลาระหว่างข้อความ
+            await new Promise(resolve => setTimeout(resolve, 500));
           }
-          successCount++;
-        } catch (err) {
-          console.error(`ส่งข้อความไม่สำเร็จสำหรับ ${conversationId}:`, err);
-          failCount++;
+
+          // 🔥 หน่วงเวลาระหว่างชุดข้อความ (1 วินาที)
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
-      });
-
-      // 🚀 ส่งแบบ parallel แต่จำกัดจำนวน concurrent
-      const batchSize = 5;
-      for (let i = 0; i < sendPromises.length; i += batchSize) {
-        await Promise.all(sendPromises.slice(i, i + batchSize));
+        
+        successCount++;
+      } catch (err) {
+        console.error(`ส่งข้อความไม่สำเร็จสำหรับ ${conversationId}:`, err);
+        failCount++;
       }
-
-      // แสดงผลสรุป
-      if (successCount > 0) {
-        alert(`✅ ส่งข้อความสำเร็จ ${successCount} การสนทนา${failCount > 0 ? `\n⚠️ ส่งไม่สำเร็จ ${failCount} การสนทนา` : ''}`);
-      } else {
-        alert(`❌ ไม่สามารถส่งข้อความได้`);
-      }
-      
-    } catch (error) {
-      console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
     }
-  };
 
-  const getUpdateStatus = () => {
-    const diffMs = currentTime - lastUpdateTime;
-    const diffMin = Math.floor(diffMs / 60000);
-    
-    if (diffMin < 1) return "🟢 อัพเดทล่าสุด";
-    if (diffMin < 5) return "🟡 " + diffMin + " นาทีที่แล้ว";
-    return "🔴 " + diffMin + " นาทีที่แล้ว";
-  };
+    // ลบ notification
+    notification.remove();
 
-  const handleConfirmPopup = (checkedSetIds) => {
-    setSelectedMessageSetIds(checkedSetIds);
-    setIsPopupOpen(false);
+    // แสดงผลสรุป
+    if (successCount > 0) {
+      alert(`✅ ส่งข้อความสำเร็จ ${successCount} การสนทนา${failCount > 0 ? `\n⚠️ ส่งไม่สำเร็จ ${failCount} การสนทนา` : ''}`);
+    } else {
+      alert(`❌ ไม่สามารถส่งข้อความได้`);
+    }
     
-    // แสดงข้อความแจ้งเตือน
-    const notification = document.createElement('div');
-    notification.innerHTML = `<strong>🚀 กำลังส่งข้อความ...</strong><br>ส่งไปยัง ${selectedConversationIds.length} การสนทนา`;
-    notification.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: #4CAF50;
-      color: white;
-      padding: 15px 20px;
-      border-radius: 8px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-      z-index: 9999;
-      animation: slideIn 0.3s ease-out;
-    `;
-    document.body.appendChild(notification);
-    
-    setTimeout(() => notification.remove(), 3000);
-    
-    // ส่งข้อความแบบ background
-    sendMessagesBySelectedSets(checkedSetIds);
-  };
+  } catch (error) {
+    console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
+    alert("เกิดข้อผิดพลาดในการส่งข้อความ");
+  }
+};
+
+const getUpdateStatus = () => {
+  const diffMs = currentTime - lastUpdateTime;
+  const diffMin = Math.floor(diffMs / 60000);
+  
+  if (diffMin < 1) return "🟢 อัพเดทล่าสุด";
+  if (diffMin < 5) return "🟡 " + diffMin + " นาทีที่แล้ว";
+  return "🔴 " + diffMin + " นาทีที่แล้ว";
+};
+
+const handleConfirmPopup = (checkedSetIds) => {
+  setSelectedMessageSetIds(checkedSetIds);
+  setIsPopupOpen(false);
+  
+  // ส่งข้อความแบบ background
+  sendMessagesBySelectedSets(checkedSetIds);
+};
 
   return (
     <div className="app-container">
