@@ -554,20 +554,84 @@ const handleConfirmPopup = (checkedSetIds) => {
               ❌ ล้างตัวกรอง
             </button>
             <button className="filter-button" onClick={applyFilters}>🔍 ค้นหา</button>
-          </div>
-        )}
+            </div>
+            )}
 
-        <div style={{ margin: "10px 0", padding: "10px", backgroundColor: "#f0f8ff", borderRadius: "5px" }}>
-          <strong>📝 ข้อความที่จะส่ง: {defaultMessages.length} ข้อความ</strong>
-          {displayData.length > 0 && (
-            <span style={{ marginLeft: "20px", color: "#666" }}>
-              📊 มี: {displayData.length} การสนทนา
-            </span>
+          {/* Enhanced Status Bar */}
+          <div className="status-bar">
+            {/* ข้อมูลการเชื่อมต่อ */}
+            <div className="connection-info">
+              <div className="status-badge">
+                🔗 {selectedPage ? `เชื่อมต่อ: ${pages.find(p => p.id === selectedPage)?.name || 'ไม่ทราบชื่อ'}` : 'ยังไม่ได้เชื่อมต่อเพจ'}
+              </div>
+              
+              {/* สถานะการอัปเดต */}
+              <div className="status-update">
+                {getUpdateStatus()}
+              </div>
+            </div>
+
+            {/* ข้อมูลสถิติ */}
+            <div className="stats-container">
+              <div className="stat-item">
+                <div className="stat-number">
+                  {displayData.length}
+                </div>
+                <div className="stat-label">การสนทนาทั้งหมด</div>
+              </div>
+              
+              <div className="stat-item">
+                <div className="stat-number selected">
+                  {selectedConversationIds.length}
+                </div>
+                <div className="stat-label">เลือกแล้ว</div>
+              </div>
+              
+              <div className="stat-item">
+                <div className="stat-number ready">
+                  {defaultMessages.length}
+                </div>
+                <div className="stat-label">ข้อความพร้อมส่ง</div>
+              </div>
+
+              {/* แสดงข้อความใหม่ */}
+              {displayData.some(conv => 
+                conv.last_user_message_time && 
+                new Date(conv.last_user_message_time) > new Date(Date.now() - 10000) //  5 วินาที
+              ) && (
+                <div className="new-message-alert">
+                  🔴 มีข้อความใหม่!
+                </div>
+              )}
+            </div>
+
+            {/* ข้อมูลเวลา */}
+            <div className="current-time">
+              🕐 {currentTime.toLocaleTimeString('th-TH')}
+            </div>
+          </div>
+
+          {/* Alert Bar สำหรับข้อมูลสำคัญ */}
+          {!selectedPage && (
+            <div className="alert-warning">
+              <span>⚠️</span>
+              <span>กรุณาเลือกเพจ Facebook เพื่อเริ่มใช้งานระบบขุดข้อมูล</span>
+            </div>
           )}
-          <span style={{ marginLeft: "57%", color: "#0066cc", fontSize: "12px" } }>
-              🔄 อัปเดตล่าสุด: {lastUpdateTime.toLocaleTimeString('th-TH')}
-          </span>
-        </div>
+
+          {selectedPage && conversations.length === 0 && !loading && (
+            <div className="alert-info">
+              <span>ℹ️</span>
+              <span>ยังไม่มีข้อมูลการสนทนา กดปุ่ม "🔄 รีเฟรชข้อมูล" เพื่อโหลดข้อมูล</span>
+            </div>
+          )}
+
+          {filteredConversations.length > 0 && (
+            <div className="alert-success">
+              <span>🔍</span>
+              <span>กำลังแสดงผลการกรองข้อมูล: {filteredConversations.length} จาก {allConversations.length} การสนทนา</span>
+            </div>
+          )}
 
         {/* Table */}
         {loading ? (
@@ -637,13 +701,13 @@ const handleConfirmPopup = (checkedSetIds) => {
           </table>
         )}
 
-        <div style={{ marginTop: "15px", display: "flex", alignItems: "center", gap: "10px" }}>
+        <div style={{ marginTop: "15px", display: "flex", alignItems: "center", gap: "15px" }}>
           <button
             onClick={handOpenPopup}
             className={`button-default ${selectedConversationIds.length > 0 ? "button-active" : ""}`}
             disabled={loading || selectedConversationIds.length === 0}
           >
-            📥 ขุด ({selectedConversationIds.length} รายการ)
+            📥 ขุด {/*({selectedConversationIds.length} รายการ)*/}
           </button>
 
           {isPopupOpen && (
