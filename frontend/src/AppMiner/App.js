@@ -403,10 +403,11 @@ const sendMessagesBySelectedSets = async (messageSetIds) => {
 
     // แสดงผลสรุป
     if (successCount > 0) {   
+      console.log("✅ ส่งข้อความสำเร็จ:", successCount);
       // 🔥 เคลียร์ checkbox ที่เลือกไว้หลังส่งสำเร็จ
       setSelectedConversationIds([]);
     } else {
-      alert(`❌ ไม่สามารถส่งข้อความได้`);
+      console.log(" ❌ ส่งข้อความไม่สำเร็จ:", failCount);
       setSelectedConversationIds([]);
     }
     
