@@ -5,7 +5,7 @@ import MessagePopup from './MessagePopup';
 
 // FontAwesome
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faEye, faArrowUp, faArrowDown } from '@fortawesome/free-solid-svg-icons';
+import { faEye, faGripVertical } from '@fortawesome/free-solid-svg-icons';
 
 const Popup = ({ onClose, onConfirm, count, selectedPage }) => {
     const [messageSets, setMessageSets] = useState([]);
@@ -61,25 +61,38 @@ const Popup = ({ onClose, onConfirm, count, selectedPage }) => {
         });
     };
 
-    // ฟังก์ชันเลื่อนลำดับขึ้น
-    const moveUp = (index) => {
-        if (index === 0) return;
-        setSelectedSets(prev => {
-            const newList = [...prev];
-            [newList[index - 1], newList[index]] = [newList[index], newList[index - 1]];
-            // อัพเดท order
-            return newList.map((item, idx) => ({ ...item, order: idx + 1 }));
-        });
+    // 🚀 ฟังก์ชันสำหรับ Drag and Drop
+    const handleDragStart = (e, index) => {
+        e.dataTransfer.setData('text/plain', index.toString());
+        e.currentTarget.classList.add('drag-start');
     };
 
-    // ฟังก์ชันเลื่อนลำดับลง
-    const moveDown = (index) => {
-        if (index === selectedSets.length - 1) return;
+    const handleDragEnd = (e) => {
+        e.currentTarget.classList.remove('drag-start');
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+    };
+
+    const handleDrop = (e, dropIndex) => {
+        e.preventDefault();
+        const dragIndex = parseInt(e.dataTransfer.getData('text/plain'));
+
+        if (dragIndex === dropIndex) return;
+
         setSelectedSets(prev => {
             const newList = [...prev];
-            [newList[index], newList[index + 1]] = [newList[index + 1], newList[index]];
-            // อัพเดท order
-            return newList.map((item, idx) => ({ ...item, order: idx + 1 }));
+            const draggedItem = newList[dragIndex];
+
+            newList.splice(dragIndex, 1);
+            newList.splice(dropIndex, 0, draggedItem);
+
+            // อัพเดท order ใหม่
+            return newList.map((item, index) => ({
+                ...item,
+                order: index + 1
+            }));
         });
     };
 
@@ -97,7 +110,7 @@ const Popup = ({ onClose, onConfirm, count, selectedPage }) => {
 
     return (
         <div className="popup-overlay">
-            <div className="popup-content" style={{ maxWidth: '600px' }}>
+            <div className="popup-content" style={{ maxWidth: '700px', width: '90vw' }}>
                 <button className="popup-close" onClick={onClose}>✖</button>
                 <h2>ยืนยันการขุด</h2>
                 <p>คุณต้องการขุด {count} รายการใช่ไหม?</p>
@@ -143,84 +156,41 @@ const Popup = ({ onClose, onConfirm, count, selectedPage }) => {
                     <div style={{ flex: 1 }}>
                         <h4>ลำดับการส่ง:</h4>
                         {selectedSets.length === 0 ? (
-                            <p style={{ color: '#666', fontStyle: 'italic' }}>
+                            <div className="empty-selection">
                                 ยังไม่ได้เลือกชุดข้อความ
-                            </p>
+                            </div>
                         ) : (
-                            <ul className="ordered-list" style={{ 
-                                listStyle: 'none', 
-                                padding: 0,
-                                maxHeight: '300px',
-                                overflowY: 'auto',
-                                border: '1px solid #ddd',
-                                borderRadius: '4px',
-                                padding: '10px'
-                            }}>
-                                {selectedSets.map((set, index) => (
-                                    <li key={set.id} style={{ 
-                                        display: 'flex', 
-                                        alignItems: 'center', 
-                                        gap: '8px',
-                                        marginBottom: '8px',
-                                        padding: '8px',
-                                        backgroundColor: '#f5f5f5',
-                                        borderRadius: '4px'
-                                    }}>
-                                        <span style={{ 
-                                            fontWeight: 'bold',
-                                            color: '#666',
-                                            minWidth: '24px'
-                                        }}>
-                                            {index + 1}.
-                                        </span>
-                                        <span style={{ flexGrow: 1 }}>
-                                            {set.name}
-                                        </span>
-                                        <div style={{ display: 'flex', gap: '4px' }}>
-                                            <button
-                                                onClick={() => moveUp(index)}
-                                                disabled={index === 0}
-                                                style={{
-                                                    background: 'none',
-                                                    border: '1px solid #ddd',
-                                                    borderRadius: '4px',
-                                                    cursor: index === 0 ? 'not-allowed' : 'pointer',
-                                                    padding: '4px 8px',
-                                                    opacity: index === 0 ? 0.5 : 1
-                                                }}
-                                                title="เลื่อนขึ้น"
-                                            >
-                                                <FontAwesomeIcon icon={faArrowUp} />
-                                            </button>
-                                            <button
-                                                onClick={() => moveDown(index)}
-                                                disabled={index === selectedSets.length - 1}
-                                                style={{
-                                                    background: 'none',
-                                                    border: '1px solid #ddd',
-                                                    borderRadius: '4px',
-                                                    cursor: index === selectedSets.length - 1 ? 'not-allowed' : 'pointer',
-                                                    padding: '4px 8px',
-                                                    opacity: index === selectedSets.length - 1 ? 0.5 : 1
-                                                }}
-                                                title="เลื่อนลง"
-                                            >
-                                                <FontAwesomeIcon icon={faArrowDown} />
-                                            </button>
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                        {selectedSets.length > 0 && (
-                            <p style={{ 
-                                marginTop: '10px', 
-                                fontSize: '12px', 
-                                color: '#666',
-                                fontStyle: 'italic'
-                            }}>
-                                💡 ชุดข้อความจะถูกส่งตามลำดับจากบนลงล่าง
-                            </p>
+                            <div>
+                                <div className="drag-hint">
+                                    💡 ลากและวางเพื่อจัดลำดับใหม่
+                                </div>
+                                <ul className="ordered-list">
+                                    {selectedSets.map((set, index) => (
+                                        <li 
+                                            key={set.id} 
+                                            draggable
+                                            onDragStart={(e) => handleDragStart(e, index)}
+                                            onDragEnd={handleDragEnd}
+                                            onDragOver={handleDragOver}
+                                            onDrop={(e) => handleDrop(e, index)}
+                                            className="draggable-item"
+                                        >
+                                            {/* Drag Handle */}
+                                            <div className="drag-handle">
+                                                <FontAwesomeIcon icon={faGripVertical} />
+                                            </div>
+
+                                            <span className="sequence-order-number">
+                                                {index + 1}.
+                                            </span>
+                                            
+                                            <span className="sequence-name">
+                                                {set.name}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
                         )}
                     </div>
                 </div>
