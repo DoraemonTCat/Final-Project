@@ -318,6 +318,7 @@ function App() {
   };
 
   // 🚀 ฟังก์ชันส่งข้อความที่ปรับปรุงให้ส่งตามลำดับ
+// 🚀 ฟังก์ชันส่งข้อความที่ปรับปรุงให้ส่งตามลำดับ
 const sendMessagesBySelectedSets = async (messageSetIds) => {
   if (!Array.isArray(messageSetIds) || selectedConversationIds.length === 0) {
     return;
@@ -401,9 +402,13 @@ const sendMessagesBySelectedSets = async (messageSetIds) => {
     notification.remove();
 
     // แสดงผลสรุป
-    if (successCount == 0) {
+    if (successCount > 0) {   
+      // 🔥 เคลียร์ checkbox ที่เลือกไว้หลังส่งสำเร็จ
+      setSelectedConversationIds([]);
+    } else {
       alert(`❌ ไม่สามารถส่งข้อความได้`);
-    } 
+      setSelectedConversationIds([]);
+    }
     
   } catch (error) {
     console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
@@ -462,7 +467,7 @@ const handleConfirmPopup = (checkedSetIds) => {
 
       {/* Main Dashboard */}
       <main className="main-dashboard">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px"}}>
           <h2>📋 ตารางการขุด</h2>
           <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>     
             <p>ชื่อ User</p>
