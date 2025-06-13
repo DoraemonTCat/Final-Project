@@ -35,6 +35,13 @@ function App() {
   const messageCache = useRef({});
   const conversationCache = useRef({});
   const cacheTimeout = 5 * 60 * 1000; // 5 นาที
+  // 1. เพิ่ม state สำหรับควบคุม dropdown (เพิ่มในส่วนบนของ component)
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  // เพิ่มฟังก์ชัน toggle
+  const toggleDropdown = () => {
+    setIsDropdownOpen(!isDropdownOpen);
+  };
 
   // 🚀 ฟังก์ชันตรวจสอบ cache
   const getCachedData = (key, cache) => {
@@ -435,45 +442,62 @@ const handleConfirmPopup = (checkedSetIds) => {
 };
 
   return (
+    /* Sidebar */
     <div className="app-container">
-      <style>{`
-        @keyframes slideIn {
-          from { transform: translateX(100%); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-      `}</style>
-      
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <h3 className="sidebar-title">ช่องทางเชื่อมต่อ</h3>
-        <button onClick={connectFacebook} className="BT">
-          <svg width="15" height="20" viewBox="0 0 320 512" fill="#fff" className="fb-icon">
-            <path d="M279.14 288l14.22-92.66h-88.91V127.91c0-25.35 12.42-50.06 52.24-50.06H293V6.26S259.5 0 225.36 0c-73.22 0-121 44.38-121 124.72v70.62H22.89V288h81.47v224h100.2V288z" />
-          </svg>
-        </button>
-        <hr />
-        <select value={selectedPage} onChange={handlePageChange} className="select-page">
-          <option value="">-- เลือกเพจ --</option>
-          {pages.map((page) => (
-            <option key={page.id} value={page.id}>
-              {page.name}
-            </option>
-          ))}
-        </select>
-        <Link to="/App" className="title" style={{ marginLeft: "64px" }}>หน้าแรก</Link><br />
-        <Link to="/Set_Miner" className="title" style={{ marginLeft: "50px" }}>ตั้งค่าระบบขุด</Link><br />
-        <a href="#" className="title" style={{ marginLeft: "53px" }}>Dashboard</a><br />
-        <a href="#" className="title" style={{ marginLeft: "66px" }}>Setting</a><br />
-      </aside>
+                <aside className="sidebar">
+                    <div className="sidebar-header">
+                        <h3 className="sidebar-title">
+  
+                             📋 ตารางการขุด
+                        </h3>
+                    </div>
+                    
+                    <div className="connection-section">
+                        <button onClick={connectFacebook} className="connect-btn facebook-btn">
+                            <svg width="15" height="20" viewBox="0 0 320 512" fill="#fff" className="fb-icon">
+                                <path d="M279.14 288l14.22-92.66h-88.91V127.91c0-25.35 12.42-50.06 52.24-50.06H293V6.26S259.5 0 225.36 0c-73.22 0-121 44.38-121 124.72v70.62H22.89V288h81.47v224h100.2V288z" />
+                            </svg>
+                            <span>เชื่อมต่อ Facebook</span>
+                        </button>
+                    </div>
+    
+                    <div className="page-selector-section">
+                        <label className="select-label">เลือกเพจ</label>
+                        <select value={selectedPage} onChange={handlePageChange} className="select-page">
+                            <option value="">-- เลือกเพจ --</option>
+                            {pages.map((page) => (
+                                <option key={page.id} value={page.id}>
+                                    {page.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+    
+                    <nav className="sidebar-nav">
+                        <Link to="/App" className="nav-link">
+                            <span className="nav-icon">🏠</span>
+                            หน้าแรก
+                        </Link>
+                        <Link to="/Set_Miner" className="nav-link">
+                            <span className="nav-icon">⚙️</span>
+                            ตั้งค่าระบบขุด
+                        </Link>
+                        <a href="#" className="nav-link">
+                            <span className="nav-icon">📊</span>
+                            Dashboard
+                        </a>
+                        <a href="#" className="nav-link">
+                            <span className="nav-icon">🔧</span>
+                            Setting
+                        </a>
+                    </nav>
+                </aside>
 
       {/* Main Dashboard */}
       <main className="main-dashboard">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px"}}>
-          <h2>📋 ตารางการขุด</h2>
-          <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>     
-            <p>ชื่อ User</p>
-          </div>
-        </div>
+       <div className="line-divider">
+          <p style={{ marginLeft: "95%" }}>ชื่อ User</p>
+      </div>
 
         <button
           className="filter-toggle-button"

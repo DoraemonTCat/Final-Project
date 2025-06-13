@@ -8,9 +8,17 @@ function ManageMessageSets() {
     const [selectedPage, setSelectedPage] = useState('');
     const [messageSets, setMessageSets] = useState([]);
     const [loading, setLoading] = useState(false);
-    // เพิ่ม state สำหรับการแก้ไข
     const [editingId, setEditingId] = useState(null);
     const [editingName, setEditingName] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [sortOrder, setSortOrder] = useState('newest');
+    // 1. เพิ่ม state สำหรับควบคุม dropdown (เพิ่มในส่วนบนของ component)
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+    // เพิ่มฟังก์ชัน toggle
+    const toggleDropdown = () => {
+        setIsDropdownOpen(!isDropdownOpen);
+    };
 
     const navigate = useNavigate();
 
@@ -55,19 +63,16 @@ function ManageMessageSets() {
         localStorage.setItem('selectedPage', pageId);
     };
 
-    // ฟังก์ชันเริ่มแก้ไข
     const handleStartEdit = (set) => {
         setEditingId(set.id);
         setEditingName(set.set_name);
     };
 
-    // ฟังก์ชันยกเลิกการแก้ไข
     const handleCancelEdit = () => {
         setEditingId(null);
         setEditingName('');
     };
 
-    // ฟังก์ชันบันทึกการแก้ไข
     const handleSaveEdit = async (setId) => {
         if (!editingName.trim()) {
             alert('กรุณากรอกชื่อชุดข้อความ');
@@ -77,7 +82,6 @@ function ManageMessageSets() {
         try {
             await updateMessageSet(setId, editingName);
             
-            // อัพเดท state
             setMessageSets(prevSets => 
                 prevSets.map(set => 
                     set.id === setId ? { ...set, set_name: editingName } : set
@@ -93,7 +97,6 @@ function ManageMessageSets() {
         }
     };
 
-    // ฟังก์ชันลบชุดข้อความ (แก้ไข syntax)
     const handleDelete = async (setId, setName) => {
         if (!window.confirm(`คุณต้องการลบชุดข้อความ "${setName}" หรือไม่?\nการลบจะไม่สามารถย้อนกลับได้`)) {
             return;
@@ -102,109 +105,208 @@ function ManageMessageSets() {
         try {
             await deleteMessageSet(setId);
             
-            // อัพเดท state
             setMessageSets(prevSets => prevSets.filter(set => set.id !== setId));
             
-            alert('ลบชุดข้อความสำเร็จ');
+            
+            console.log(`ชุดข้อความ ${setName} ถูกลบเรียบร้อยแล้ว`);
         } catch (err) {
             console.error('ไม่สามารถลบชุดข้อความได้:', err);
             alert('เกิดข้อผิดพลาดในการลบชุดข้อความ');
         }
     };
 
+    // ฟิลเตอร์และเรียงลำดับข้อมูล
+    const filteredAndSortedSets = messageSets
+        .filter(set => set.set_name.toLowerCase().includes(searchTerm.toLowerCase()))
+        .sort((a, b) => {
+            if (sortOrder === 'newest') {
+                return b.id - a.id;
+            } else if (sortOrder === 'oldest') {
+                return a.id - b.id;
+            } else if (sortOrder === 'name') {
+                return a.set_name.localeCompare(b.set_name);
+            }
+            return 0;
+        });
+
     return (
         <div className="app-container">
             <aside className="sidebar">
-                <h3 className="sidebar-title">ช่องทางเชื่อมต่อ</h3>
-                <button onClick={connectFacebook} className="BT">
-                    <svg width="15" height="20" viewBox="0 0 320 512" fill="#fff" className="fb-icon">
-                        <path d="M279.14 288l14.22-92.66h-88.91V127.91c0-25.35 12.42-50.06 52.24-50.06H293V6.26S259.5 0 225.36 0c-73.22 0-121 44.38-121 124.72v70.62H22.89V288h81.47v224h100.2V288z" />
-                    </svg>
-                </button>
-                <hr />
-                <select value={selectedPage} onChange={handlePageChange} className="select-page">
-                    <option value="">-- เลือกเพจ --</option>
-                    {pages.map((page) => (
-                        <option key={page.id} value={page.id}>
-                            {page.name}
-                        </option>
-                    ))}
-                </select>
-                <Link to="/App" className="title" style={{ marginLeft: "64px" }}>หน้าแรก</Link><br />
-                <Link to="/Set_Miner" className="title" style={{ marginLeft: "50px" }}>ตั้งค่าระบบขุด</Link><br />
-                <a href="#" className="title" style={{ marginLeft: "53px" }}>Dashboard</a><br />
-                <a href="#" className="title" style={{ marginLeft: "66px" }}>Setting</a><br />
-            </aside>
-            <div className="message-container">
-                <h1 className="header">📂 รายการชุดข้อความที่ตั้งไว้</h1>
-                <p style={{ textAlign: "center" }}><strong>เพจที่เลือก:</strong> {pages.find(p => p.id === selectedPage)?.name || 'ยังไม่ได้เลือกเพจ'}</p>
-
-                <div style={{ textAlign: 'right', marginBottom: '20px' }}>
-                    <button onClick={() => navigate('/default')} className="add-btn">➕ เพิ่มชุดข้อความ</button>
+                <div className="sidebar-header">
+                    <h3 className="sidebar-title">
+                        
+                             📋 ตารางการขุด
+                    </h3>
+                </div>
+                
+                <div className="connection-section">
+                    <button onClick={connectFacebook} className="connect-btn facebook-btn">
+                        <svg width="15" height="20" viewBox="0 0 320 512" fill="#fff" className="fb-icon">
+                            <path d="M279.14 288l14.22-92.66h-88.91V127.91c0-25.35 12.42-50.06 52.24-50.06H293V6.26S259.5 0 225.36 0c-73.22 0-121 44.38-121 124.72v70.62H22.89V288h81.47v224h100.2V288z" />
+                        </svg>
+                        <span>เชื่อมต่อ Facebook</span>
+                    </button>
                 </div>
 
-                {loading ? (
-                    <p>🔄 กำลังโหลด...</p>
-                ) : messageSets.length === 0 ? (
-                    <p>⚠️ ยังไม่มีชุดข้อความสำหรับเพจนี้</p>
-                ) : (
-                    <ul className="sequence-list">
-                        {messageSets.map((set, index) => (
-                            <li key={set.id} className="sequence-item sequence-item-saved">
-                                <div className="sequence-order">{index + 1}</div>
-                                <div className="sequence-content">
-                                    <div className="sequence-type">📌 ชุดข้อความ</div>
-                                    <div className="sequence-text">{set.set_name}</div>
-                                </div>
-                                
-                                {/* ปุ่มควบคุม */}
-                                <div style={{ 
-                                    display: 'flex', 
-                                    gap: '8px',
-                                    marginLeft: 'auto'
-                                }}>
-                                    <button
-                                        onClick={() => navigate(`/default?setId=${set.id}`)}
-                                        style={{
-                                            backgroundColor: '#f39c12',
-                                            color: 'white',
-                                            border: 'none',
-                                            borderRadius: '4px',
-                                            padding: '6px 12px',
-                                            cursor: 'pointer',
-                                            fontSize: '12px'
-                                        }}
-                                        title="แก้ไขชุดข้อความ"
-                                    >
-                                        ✏️ แก้ไขชุด
-                                    </button>
-                                    <button
-                                        onClick={() => handleDelete(set.id, set.set_name)}
-                                        style={{
-                                            backgroundColor: '#e74c3c',
-                                            color: 'white',
-                                            border: 'none',
-                                            borderRadius: '4px',
-                                            padding: '6px 12px',
-                                            cursor: 'pointer',
-                                            fontSize: '12px'
-                                        }}
-                                        title="ลบชุดข้อความ"
-                                    >
-                                        🗑️ ลบ
-                                    </button>
-                                </div>
-                            </li>
+                <div className="page-selector-section">
+                    <label className="select-label">เลือกเพจ</label>
+                    <select value={selectedPage} onChange={handlePageChange} className="select-page">
+                        <option value="">-- เลือกเพจ --</option>
+                        {pages.map((page) => (
+                            <option key={page.id} value={page.id}>
+                                {page.name}
+                            </option>
                         ))}
-                    </ul>
-                )}
+                    </select>
+                </div>
 
-                <div style={{ marginTop: '30px', textAlign: 'center' }}>
+                <nav className="sidebar-nav">
+                    <Link to="/App" className="nav-link">
+                        <span className="nav-icon">🏠</span>
+                        หน้าแรก
+                    </Link>
+                    <Link to="/Set_Miner" className="nav-link">
+                        <span className="nav-icon">⚙️</span>
+                        ตั้งค่าระบบขุด
+                    </Link>
+                    <a href="#" className="nav-link">
+                        <span className="nav-icon">📊</span>
+                        Dashboard
+                    </a>
+                    <a href="#" className="nav-link">
+                        <span className="nav-icon">🔧</span>
+                        Setting
+                    </a>
+                </nav>
+            </aside>
+
+            <main className="main-content">
+                <div className="content-header">
+                    <h1 className="page-title">
+                        <span className="title-icon">📂</span>
+                        รายการชุดข้อความที่ตั้งไว้
+                    </h1>
+                    {selectedPage && (
+                        <div className="selected-page-info">
+                            <span className="info-label">เพจที่เลือก:</span>
+                            <span className="info-value">
+                                {pages.find(p => p.id === selectedPage)?.name || 'ยังไม่ได้เลือกเพจ'}
+                            </span>
+                        </div>
+                    )}
+                </div>
+
+                <div className="content-controls">
+                    <div className="search-section">
+                        <div className="search-box">
+                            <span className="search-icon">🔍</span>
+                            <input
+                                type="text"
+                                placeholder="ค้นหาชุดข้อความ..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="search-input"
+                            />
+                        </div>
+                        <select 
+                            value={sortOrder} 
+                            onChange={(e) => setSortOrder(e.target.value)}
+                            className="sort-select"
+                        >
+                            <option value="newest">ใหม่ล่าสุด</option>
+                            <option value="oldest">เก่าที่สุด</option>
+                            
+                        </select>
+                    </div>
+                    <button onClick={() => navigate('/default')} className="add-btn">
+                        <span className="btn-icon">➕</span>
+                        เพิ่มชุดข้อความ
+                    </button>
+                </div>
+
+                <div className="content-body">
+                    {!selectedPage ? (
+                        <div className="empty-state">
+                            <div className="empty-icon">📋</div>
+                            <h3>กรุณาเลือกเพจ</h3>
+                          
+                        </div>
+                            
+                    ) : loading ? (
+                        <div className="loading-state">
+                            <div className="loading-spinner"></div>
+                            <p>กำลังโหลดข้อมูล...</p>
+                        </div>
+                    ) : filteredAndSortedSets.length === 0 ? (
+                        <div className="empty-state">
+                            <div className="empty-icon">📭</div>
+                            <h3>ไม่พบชุดข้อความ</h3>
+                            <p>{searchTerm ? 'ไม่พบชุดข้อความที่ตรงกับคำค้นหา' : 'ยังไม่มีชุดข้อความสำหรับเพจนี้'}</p>
+                            {!searchTerm && (
+                                <button onClick={() => navigate('/default')} className="empty-add-btn">
+                                    เริ่มสร้างชุดข้อความแรก
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="message-sets-grid">
+                            {filteredAndSortedSets.map((set, index) => (
+                                <div key={set.id} className="message-set-card">
+                                    <div className="card-header">
+                                        <span className="card-number">{index + 1}</span>
+                                        <div className="card-actions">
+                                            <button
+                                                onClick={() => navigate(`/default?setId=${set.id}`)}
+                                                className="action-btn edit-btn"
+                                                title="แก้ไขชุดข้อความ"
+                                            >
+                                                ✏️
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(set.id, set.set_name)}
+                                                className="action-btn delete-btn"
+                                                title="ลบชุดข้อความ"
+                                            >
+                                                🗑️
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="card-body">
+                                        <div className="card-icon">📌</div>
+                                        <h3 className="card-title">{set.set_name}</h3>
+                                        <div className="card-meta">
+                                            <span className="meta-item">
+                                               {/* <span className="meta-icon">📝</span>
+                                                {set.message_count || 0} ข้อความ */}
+                                            </span>
+                                            <span className="meta-item">
+                                               {/* <span className="meta-icon">📅</span>
+                                                {new Date(set.created_at || Date.now()).toLocaleDateString('th-TH')}*/}
+                                               
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="card-footer">
+                                        <button
+                                            onClick={() => navigate(`/default?setId=${set.id}`)}
+                                            className="view-btn"
+                                        >
+                                            ดูรายละเอียด
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <div className="content-footer">
                     <Link to="/Set_Miner" className="back-button">
-                        ← กลับไปหน้าตั้งค่าระบบขุด
+                        <span className="back-icon">←</span>
+                        กลับไปหน้าตั้งค่าระบบขุด
                     </Link>
                 </div>
-            </div>
+            </main>
         </div>
     );
 }
