@@ -16,20 +16,51 @@ function GroupDefault() {
     preview: null
   });
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const navigate = useNavigate();
 
   const toggleDropdown = () => {
     setIsDropdownOpen(!isDropdownOpen);
   };
 
+  // 🔥 ฟังก์ชันดึงกลุ่มลูกค้าตาม page ID
+  const getGroupsForPage = (pageId) => {
+    if (!pageId) return [];
+    const key = `customerGroups_${pageId}`;
+    return JSON.parse(localStorage.getItem(key) || '[]');
+  };
+
+  // 🔥 ฟังก์ชันบันทึกกลุ่มลูกค้าตาม page ID
+  const saveGroupsForPage = (pageId, groups) => {
+    if (!pageId) return;
+    const key = `customerGroups_${pageId}`;
+    localStorage.setItem(key, JSON.stringify(groups));
+  };
+
   useEffect(() => {
+    // 🔥 ตรวจสอบว่าเป็นโหมดแก้ไขหรือไม่
+    const editMode = localStorage.getItem("editingMode");
+    if (editMode === "true") {
+      setIsEditMode(true);
+      localStorage.removeItem("editingMode"); // ลบหลังใช้
+    }
+
+    // 🔥 ตรวจสอบว่า page ID ตรงกันหรือไม่
+    const selectedPageId = localStorage.getItem("selectedCustomerGroupsPageId");
+    const savedPage = localStorage.getItem("selectedPage");
+    
+    if (selectedPageId && selectedPageId !== savedPage) {
+      alert("กลุ่มลูกค้าที่เลือกมาจากเพจอื่น กรุณากลับไปเลือกใหม่");
+      navigate('/MinerGroup');
+      return;
+    }
+
     // โหลดกลุ่มที่เลือกจากหน้าก่อน
     const groups = JSON.parse(localStorage.getItem("selectedCustomerGroups") || '[]');
-    const allGroups = JSON.parse(localStorage.getItem("customerGroups") || '[]');
+    const allGroups = getGroupsForPage(savedPage); // 🔥 ใช้ฟังก์ชันใหม่
     const selectedGroupsData = allGroups.filter(g => groups.includes(g.id));
     setSelectedGroups(selectedGroupsData);
 
-    const savedPage = localStorage.getItem("selectedPage");
     if (savedPage) {
       setSelectedPage(savedPage);
     }
@@ -38,12 +69,18 @@ function GroupDefault() {
       .then(setPages)
       .catch(err => console.error("ไม่สามารถโหลดเพจได้:", err));
 
-    // โหลดข้อความที่บันทึกไว้ (ถ้ามี)
-    const savedMessages = JSON.parse(localStorage.getItem("groupMessages") || '[]');
-    if (savedMessages.length > 0) {
-      setMessageSequence(savedMessages);
+    // 🔥 โหลดข้อความที่บันทึกไว้ของกลุ่มที่เลือก (ถ้ามี)
+    if (selectedGroupsData.length > 0 && selectedGroupsData[0].messages) {
+      setMessageSequence(selectedGroupsData[0].messages);
+    } else {
+      // โหลดข้อความที่บันทึกไว้ (ถ้ามี) - แยกตามเพจด้วย
+      const messageKey = `groupMessages_${savedPage}`;
+      const savedMessages = JSON.parse(localStorage.getItem(messageKey) || '[]');
+      if (savedMessages.length > 0) {
+        setMessageSequence(savedMessages);
+      }
     }
-  }, []);
+  }, [navigate]);
 
   const handlePageChange = (e) => {
     const pageId = e.target.value;
@@ -144,17 +181,19 @@ function GroupDefault() {
     setMessageSequence(newSequence);
   };
 
-  const saveAndProceed = () => {
+  // 🔥 ฟังก์ชันบันทึกเฉพาะข้อความ (ไม่ไปหน้าถัดไป)
+  const saveMessages = () => {
     if (messageSequence.length === 0) {
       alert("กรุณาเพิ่มข้อความอย่างน้อย 1 ข้อความ");
       return;
     }
 
-    // บันทึกข้อความลง localStorage
-    localStorage.setItem("groupMessages", JSON.stringify(messageSequence));
+    // บันทึกข้อความลง localStorage แยกตามเพจ
+    const messageKey = `groupMessages_${selectedPage}`;
+    localStorage.setItem(messageKey, JSON.stringify(messageSequence));
 
-    // อัพเดทข้อความในแต่ละกลุ่ม
-    const allGroups = JSON.parse(localStorage.getItem("customerGroups") || '[]');
+    // อัพเดทข้อความในแต่ละกลุ่ม (แยกตามเพจ)
+    const allGroups = getGroupsForPage(selectedPage);
     const selectedGroupIds = JSON.parse(localStorage.getItem("selectedCustomerGroups") || '[]');
     
     const updatedGroups = allGroups.map(group => {
@@ -164,10 +203,30 @@ function GroupDefault() {
       return group;
     });
 
-    localStorage.setItem("customerGroups", JSON.stringify(updatedGroups));
+    saveGroupsForPage(selectedPage, updatedGroups);
+  
+    console.log("ข้อความถูกบันทึกเรียบร้อยแล้ว:", messageSequence);
+  };
+
+  const saveAndProceed = () => {
+    if (messageSequence.length === 0) {
+      alert("กรุณาเพิ่มข้อความอย่างน้อย 1 ข้อความ");
+      return;
+    }
+
+    // บันทึกข้อมูลก่อน
+    saveMessages();
     
-    // ไปหน้าตั้งเวลา
-    navigate('/GroupSchedule');
+    // 🔥 ถ้าเป็นโหมดแก้ไข ให้กลับไปหน้า MinerGroup
+    if (isEditMode) {
+      // เคลียร์ข้อมูลการเลือก
+      localStorage.removeItem("selectedCustomerGroups");
+      localStorage.removeItem("selectedCustomerGroupsPageId");
+      navigate('/MinerGroup');
+    } else {
+      // ไปหน้าตั้งเวลา
+      navigate('/GroupSchedule');
+    }
   };
 
   const getTypeIcon = (type) => {
@@ -178,6 +237,8 @@ function GroupDefault() {
       default: return '📄';
     }
   };
+
+  const selectedPageInfo = pages.find(p => p.id === selectedPage);
 
   return (
     <div className="app-container">
@@ -240,19 +301,28 @@ function GroupDefault() {
         <div className="group-default-header">
           <h1 className="group-default-title">
             <span className="title-icon">💬</span>
-            ตั้งค่าข้อความสำหรับกลุ่มที่เลือก
+            {isEditMode ? 'แก้ไขข้อความของกลุ่ม' : 'ตั้งค่าข้อความสำหรับกลุ่มที่เลือก'}
+            {selectedPageInfo && (
+              <span style={{ fontSize: '18px', color: '#718096', marginLeft: '10px' }}>
+                - {selectedPageInfo.name}
+              </span>
+            )}
           </h1>
           <div className="breadcrumb">
             <span className="breadcrumb-item">1. เลือกกลุ่ม</span>
             <span className="breadcrumb-separator">›</span>
             <span className="breadcrumb-item active">2. ตั้งค่าข้อความ</span>
-            <span className="breadcrumb-separator">›</span>
-            <span className="breadcrumb-item">3. ตั้งเวลา</span>
+            {!isEditMode && (
+              <>
+                <span className="breadcrumb-separator">›</span>
+                <span className="breadcrumb-item">3. ตั้งเวลา</span>
+              </>
+            )}
           </div>
         </div>
 
         <div className="selected-groups-info">
-          <h3>กลุ่มที่เลือก:</h3>
+          <h3>{isEditMode ? 'กำลังแก้ไขกลุ่ม' : 'กลุ่มที่เลือก'} ({selectedPageInfo?.name}):</h3>
           <div className="selected-groups-list">
             {selectedGroups.map(group => (
               <span key={group.id} className="group-badge">
@@ -335,6 +405,12 @@ function GroupDefault() {
           <div className="config-card">
             <div className="sequence-header-container">
               <h3 className="config-header">📋 ลำดับการส่ง</h3>
+              <button
+                onClick={saveMessages}
+                className="save-messages-btn"
+              >
+                💾 บันทึกข้อความ
+              </button>
             </div>
 
             <div className="sequence-hint">
@@ -401,7 +477,7 @@ function GroupDefault() {
             className="proceed-btn"
             disabled={messageSequence.length === 0}
           >
-            ถัดไป: ตั้งเวลาส่ง
+            {isEditMode ? 'บันทึกและกลับ' : 'ถัดไป: ตั้งเวลาส่ง'}
             <span className="arrow-icon">→</span>
           </button>
         </div>

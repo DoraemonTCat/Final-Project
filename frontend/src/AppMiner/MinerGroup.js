@@ -12,25 +12,52 @@ function SetMiner() {
   const [selectedGroups, setSelectedGroups] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [editingGroupId, setEditingGroupId] = useState(null);
+  const [editingGroupName, setEditingGroupName] = useState("");
   const navigate = useNavigate();
 
   const toggleDropdown = () => {
     setIsDropdownOpen(!isDropdownOpen);
   };
 
+  // 🔥 ฟังก์ชันดึงกลุ่มลูกค้าตาม page ID
+  const getGroupsForPage = (pageId) => {
+    if (!pageId) return [];
+    const key = `customerGroups_${pageId}`;
+    return JSON.parse(localStorage.getItem(key) || '[]');
+  };
+
+  // 🔥 ฟังก์ชันบันทึกกลุ่มลูกค้าตาม page ID
+  const saveGroupsForPage = (pageId, groups) => {
+    if (!pageId) return;
+    const key = `customerGroups_${pageId}`;
+    localStorage.setItem(key, JSON.stringify(groups));
+  };
+
   useEffect(() => {
     const savedPage = localStorage.getItem("selectedPage");
-    const savedGroups = JSON.parse(localStorage.getItem("customerGroups") || '[]');
     
     if (savedPage) {
       setSelectedPage(savedPage);
     }
-    setCustomerGroups(savedGroups);
     
     fetchPages()
       .then(setPages)
       .catch(err => console.error("ไม่สามารถโหลดเพจได้:", err));
   }, []);
+
+  // 🔥 โหลดกลุ่มลูกค้าเมื่อเปลี่ยนเพจ
+  useEffect(() => {
+    if (selectedPage) {
+      const pageGroups = getGroupsForPage(selectedPage);
+      setCustomerGroups(pageGroups);
+      // รีเซ็ตการเลือกเมื่อเปลี่ยนเพจ
+      setSelectedGroups([]);
+    } else {
+      setCustomerGroups([]);
+      setSelectedGroups([]);
+    }
+  }, [selectedPage]);
 
   const handlePageChange = (e) => {
     const pageId = e.target.value;
@@ -39,19 +66,22 @@ function SetMiner() {
   };
 
   const addCustomerGroup = () => {
-    if (newGroupName.trim()) {
+    if (newGroupName.trim() && selectedPage) {
       const newGroup = {
         id: Date.now(),
         name: newGroupName,
+        pageId: selectedPage, // 🔥 เพิ่ม pageId ในกลุ่ม
         customers: [],
         messages: [],
         createdAt: new Date().toISOString()
       };
       const updatedGroups = [...customerGroups, newGroup];
       setCustomerGroups(updatedGroups);
-      localStorage.setItem("customerGroups", JSON.stringify(updatedGroups));
+      saveGroupsForPage(selectedPage, updatedGroups); // 🔥 บันทึกตาม page ID
       setNewGroupName("");
       setShowAddGroupForm(false);
+    } else if (!selectedPage) {
+      alert("กรุณาเลือกเพจก่อนสร้างกลุ่ม");
     }
   };
 
@@ -59,7 +89,7 @@ function SetMiner() {
     if (window.confirm("คุณต้องการลบกลุ่มนี้หรือไม่?")) {
       const updatedGroups = customerGroups.filter(group => group.id !== groupId);
       setCustomerGroups(updatedGroups);
-      localStorage.setItem("customerGroups", JSON.stringify(updatedGroups));
+      saveGroupsForPage(selectedPage, updatedGroups); // 🔥 บันทึกตาม page ID
       setSelectedGroups(selectedGroups.filter(id => id !== groupId));
     }
   };
@@ -74,17 +104,71 @@ function SetMiner() {
   };
 
   const handleProceed = () => {
+    if (!selectedPage) {
+      alert("กรุณาเลือกเพจก่อน");
+      return;
+    }
+    
     if (selectedGroups.length === 0) {
       alert("กรุณาเลือกกลุ่มลูกค้าอย่างน้อย 1 กลุ่ม");
       return;
     }
+    
+    // 🔥 บันทึกข้อมูลการเลือกพร้อมกับ page ID
     localStorage.setItem("selectedCustomerGroups", JSON.stringify(selectedGroups));
+    localStorage.setItem("selectedCustomerGroupsPageId", selectedPage);
+    
+    navigate('/GroupDefault');
+  };
+
+  // 🔥 ฟังก์ชันเริ่มการแก้ไขชื่อกลุ่ม
+  const startEditGroup = (group) => {
+    setEditingGroupId(group.id);
+    setEditingGroupName(group.name);
+  };
+
+  // 🔥 ฟังก์ชันบันทึกการแก้ไขชื่อกลุ่ม
+  const saveEditGroup = () => {
+    if (!editingGroupName.trim()) {
+      alert("กรุณากรอกชื่อกลุ่ม");
+      return;
+    }
+
+    const updatedGroups = customerGroups.map(group => {
+      if (group.id === editingGroupId) {
+        return { ...group, name: editingGroupName };
+      }
+      return group;
+    });
+
+    setCustomerGroups(updatedGroups);
+    saveGroupsForPage(selectedPage, updatedGroups);
+    setEditingGroupId(null);
+    setEditingGroupName("");
+  };
+
+  // 🔥 ฟังก์ชันยกเลิกการแก้ไข
+  const cancelEdit = () => {
+    setEditingGroupId(null);
+    setEditingGroupName("");
+  };
+
+  // 🔥 ฟังก์ชันแก้ไขข้อความในกลุ่ม
+  const editGroupMessages = (groupId) => {
+    // บันทึกข้อมูลกลุ่มที่เลือกเพื่อแก้ไข
+    localStorage.setItem("selectedCustomerGroups", JSON.stringify([groupId]));
+    localStorage.setItem("selectedCustomerGroupsPageId", selectedPage);
+    localStorage.setItem("editingMode", "true");
+    
     navigate('/GroupDefault');
   };
 
   const filteredGroups = customerGroups.filter(group =>
     group.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // 🔥 แสดงชื่อเพจในหัวข้อถ้ามีการเลือกเพจ
+  const selectedPageInfo = selectedPage ? pages.find(p => p.id === selectedPage) : null;
 
   return (
     <div className="app-container">
@@ -148,6 +232,11 @@ function SetMiner() {
           <h1 className="miner-title">
             <span className="title-icon">👥</span>
             ตั้งค่าระบบขุดตามกลุ่มลูกค้า
+            {selectedPageInfo && (
+              <span style={{ fontSize: '18px', color: '#718096', marginLeft: '10px' }}>
+                - {selectedPageInfo.name}
+              </span>
+            )}
           </h1>
           <div className="breadcrumb">
             <span className="breadcrumb-item active">1. เลือกกลุ่ม</span>
@@ -157,6 +246,24 @@ function SetMiner() {
             <span className="breadcrumb-item">3. ตั้งเวลา</span>
           </div>
         </div>
+
+        {/* 🔥 แสดงข้อความแจ้งเตือนถ้ายังไม่ได้เลือกเพจ */}
+        {!selectedPage && (
+          <div style={{
+            backgroundColor: '#fff3cd',
+            border: '1px solid #ffeaa7',
+            color: '#856404',
+            padding: '12px 20px',
+            marginBottom: '20px',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            <span>⚠️</span>
+            <span>กรุณาเลือกเพจก่อนเพื่อดูและจัดการกลุ่มลูกค้าของเพจนั้น</span>
+          </div>
+        )}
 
         <div className="miner-controls">
           <div className="search-section">
@@ -168,12 +275,15 @@ function SetMiner() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="search-input"
+                disabled={!selectedPage}
               />
             </div>
           </div>
           <button 
             onClick={() => setShowAddGroupForm(true)}
             className="add-group-btn"
+            disabled={!selectedPage}
+            style={{ opacity: selectedPage ? 1 : 0.5 }}
           >
             <span className="btn-icon">➕</span>
             เพิ่มกลุ่มใหม่
@@ -184,7 +294,7 @@ function SetMiner() {
         {showAddGroupForm && (
           <div className="add-group-modal">
             <div className="modal-content">
-              <h3>สร้างกลุ่มลูกค้าใหม่</h3>
+              <h3>สร้างกลุ่มลูกค้าใหม่{selectedPageInfo && ` - ${selectedPageInfo.name}`}</h3>
               <input
                 type="text"
                 placeholder="ชื่อกลุ่มลูกค้า"
@@ -216,11 +326,17 @@ function SetMiner() {
         )}
 
         <div className="groups-container">
-          {filteredGroups.length === 0 ? (
+          {!selectedPage ? (
+            <div className="empty-state">
+              <div className="empty-icon">🏢</div>
+              <h3>เลือกเพจเพื่อจัดการกลุ่มลูกค้า</h3>
+              <p>แต่ละเพจจะมีกลุ่มลูกค้าแยกกันอิสระ</p>
+            </div>
+          ) : filteredGroups.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">📁</div>
-              <h3>ยังไม่มีกลุ่มลูกค้า</h3>
-              <p>เริ่มต้นด้วยการสร้างกลุ่มลูกค้าแรกของคุณ</p>
+              <h3>ยังไม่มีกลุ่มลูกค้าสำหรับเพจนี้ +++</h3>
+            
               <button 
                 onClick={() => setShowAddGroupForm(true)}
                 className="empty-add-btn"
@@ -248,7 +364,59 @@ function SetMiner() {
                     
                     <div className="group-content">
                       <div className="group-icon">👥</div>
-                      <h3 className="group-name">{group.name}</h3>
+                      {editingGroupId === group.id ? (
+                        <div style={{ marginBottom: '12px' }}>
+                          <input
+                            type="text"
+                            value={editingGroupName}
+                            onChange={(e) => setEditingGroupName(e.target.value)}
+                            onKeyPress={(e) => e.key === 'Enter' && saveEditGroup()}
+                            style={{
+                              width: '100%',
+                              padding: '8px 12px',
+                              fontSize: '18px',
+                              fontWeight: '600',
+                              textAlign: 'center',
+                              border: '2px solid #667eea',
+                              borderRadius: '6px',
+                              outline: 'none'
+                            }}
+                            autoFocus
+                          />
+                          <div style={{ marginTop: '8px', display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                            <button
+                              onClick={saveEditGroup}
+                              style={{
+                                padding: '6px 12px',
+                                backgroundColor: '#48bb78',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              บันทึก
+                            </button>
+                            <button
+                              onClick={cancelEdit}
+                              style={{
+                                padding: '6px 12px',
+                                backgroundColor: '#e2e8f0',
+                                color: '#4a5568',
+                                border: 'none',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              ยกเลิก
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <h3 className="group-name">{group.name}</h3>
+                      )}
                       <div className="group-stats">
                         <span className="stat-item">
                           <span className="stat-icon">👤</span>
@@ -261,6 +429,56 @@ function SetMiner() {
                       </div>
                       <div className="group-date">
                         สร้างเมื่อ {new Date(group.createdAt).toLocaleDateString('th-TH')}
+                      </div>
+                      
+                      {/* 🔥 ปุ่มแก้ไข */}
+                      <div style={{ marginTop: '12px', display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startEditGroup(group);
+                          }}
+                          style={{
+                            padding: '8px 16px',
+                            backgroundColor: '#f39c12',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            transition: 'all 0.2s ease'
+                          }}
+                          title="แก้ไขชื่อกลุ่ม"
+                        >
+                          ✏️ แก้ไขชื่อ
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            editGroupMessages(group.id);
+                          }}
+                          style={{
+                            padding: '8px 16px',
+                            backgroundColor: '#667eea',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            transition: 'all 0.2s ease'
+                          }}
+                          title="แก้ไขข้อความ"
+                        >
+                          💬 แก้ไขข้อความ
+                        </button>
                       </div>
                     </div>
                     

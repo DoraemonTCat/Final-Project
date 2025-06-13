@@ -404,3 +404,39 @@
     justify-content: center;
   }
 }
+/* เพิ่มใน GroupDefault.css */
+
+/* Save Button Style */
+.save-messages-btn {
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px rgba(52, 152, 219, 0.2);
+}
+
+.save-messages-btn:hover {
+  background: linear-gradient(135deg, #2980b9 0%, #21618c 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 12px rgba(52, 152, 219, 0.3);
+}
+
+.save-messages-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(52, 152, 219, 0.2);
+}
+
+/* Update sequence-header-container for better spacing */
+.sequence-header-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 15px;
+}

@@ -31,14 +31,44 @@ function GroupSchedule() {
     setIsDropdownOpen(!isDropdownOpen);
   };
 
+  // 🔥 ฟังก์ชันดึงกลุ่มลูกค้าตาม page ID
+  const getGroupsForPage = (pageId) => {
+    if (!pageId) return [];
+    const key = `customerGroups_${pageId}`;
+    return JSON.parse(localStorage.getItem(key) || '[]');
+  };
+
+  // 🔥 ฟังก์ชันบันทึกตารางการส่งตาม page ID
+  const saveSchedulesForPage = (pageId, schedules) => {
+    if (!pageId) return;
+    const key = `miningSchedules_${pageId}`;
+    localStorage.setItem(key, JSON.stringify(schedules));
+  };
+
+  // 🔥 ฟังก์ชันดึงตารางการส่งตาม page ID
+  const getSchedulesForPage = (pageId) => {
+    if (!pageId) return [];
+    const key = `miningSchedules_${pageId}`;
+    return JSON.parse(localStorage.getItem(key) || '[]');
+  };
+
   useEffect(() => {
+    // 🔥 ตรวจสอบว่า page ID ตรงกันหรือไม่
+    const selectedPageId = localStorage.getItem("selectedCustomerGroupsPageId");
+    const savedPage = localStorage.getItem("selectedPage");
+    
+    if (selectedPageId && selectedPageId !== savedPage) {
+      alert("กลุ่มลูกค้าที่เลือกมาจากเพจอื่น กรุณากลับไปเลือกใหม่");
+      navigate('/MinerGroup');
+      return;
+    }
+
     // โหลดกลุ่มที่เลือก
     const groups = JSON.parse(localStorage.getItem("selectedCustomerGroups") || '[]');
-    const allGroups = JSON.parse(localStorage.getItem("customerGroups") || '[]');
+    const allGroups = getGroupsForPage(savedPage); // 🔥 ใช้ฟังก์ชันใหม่
     const selectedGroupsData = allGroups.filter(g => groups.includes(g.id));
     setSelectedGroups(selectedGroupsData);
 
-    const savedPage = localStorage.getItem("selectedPage");
     if (savedPage) {
       setSelectedPage(savedPage);
     }
@@ -53,7 +83,7 @@ function GroupSchedule() {
     const timeStr = today.toTimeString().slice(0, 5);
     setScheduleDate(dateStr);
     setScheduleTime(timeStr);
-  }, []);
+  }, [navigate]);
 
   const handlePageChange = (e) => {
     const pageId = e.target.value;
@@ -104,7 +134,13 @@ function GroupSchedule() {
   const saveSchedule = () => {
     if (!validateSchedule()) return;
 
+    // 🔥 ดึงข้อความที่บันทึกไว้แยกตามเพจ
+    const messageKey = `groupMessages_${selectedPage}`;
+    const messages = JSON.parse(localStorage.getItem(messageKey) || '[]');
+
     const scheduleData = {
+      id: Date.now(),
+      pageId: selectedPage, // 🔥 เพิ่ม pageId
       type: scheduleType,
       date: scheduleDate,
       time: scheduleTime,
@@ -115,17 +151,23 @@ function GroupSchedule() {
         endDate: endDate
       },
       groups: selectedGroups.map(g => g.id),
-      messages: JSON.parse(localStorage.getItem("groupMessages") || '[]'),
+      groupNames: selectedGroups.map(g => g.name), // 🔥 เก็บชื่อกลุ่มด้วย
+      messages: messages,
       createdAt: new Date().toISOString()
     };
 
-    // บันทึกตารางการส่ง
-    const schedules = JSON.parse(localStorage.getItem("miningSchedules") || '[]');
+    // 🔥 บันทึกตารางการส่งแยกตามเพจ
+    const schedules = getSchedulesForPage(selectedPage);
     schedules.push(scheduleData);
-    localStorage.setItem("miningSchedules", JSON.stringify(schedules));
+    saveSchedulesForPage(selectedPage, schedules);
+
+    // 🔥 เคลียร์ข้อมูลที่เลือกไว้
+    localStorage.removeItem("selectedCustomerGroups");
+    localStorage.removeItem("selectedCustomerGroupsPageId");
+    localStorage.removeItem(messageKey);
 
     alert("บันทึกการตั้งเวลาสำเร็จ!");
-    navigate('/App');
+    navigate('/MinerGroup'); // กลับไปยังหน้ากลุ่มลูกค้า
   };
 
   const getScheduleSummary = () => {
@@ -154,6 +196,8 @@ function GroupSchedule() {
     
     return summary;
   };
+
+  const selectedPageInfo = pages.find(p => p.id === selectedPage);
 
   return (
     <div className="app-container">
@@ -217,6 +261,11 @@ function GroupSchedule() {
           <h1 className="schedule-title">
             <span className="title-icon">⏰</span>
             ตั้งเวลาและความถี่การส่ง
+            {selectedPageInfo && (
+              <span style={{ fontSize: '18px', color: '#718096', marginLeft: '10px' }}>
+                - {selectedPageInfo.name}
+              </span>
+            )}
           </h1>
           <div className="breadcrumb">
             <span className="breadcrumb-item">1. เลือกกลุ่ม</span>
@@ -231,12 +280,16 @@ function GroupSchedule() {
           <h3>สรุปการตั้งค่า:</h3>
           <div className="summary-grid">
             <div className="summary-item">
+              <span className="summary-label">เพจ:</span>
+              <span className="summary-value">{selectedPageInfo?.name || '-'}</span>
+            </div>
+            <div className="summary-item">
               <span className="summary-label">กลุ่มที่เลือก:</span>
               <span className="summary-value">{selectedGroups.map(g => g.name).join(', ')}</span>
             </div>
             <div className="summary-item">
               <span className="summary-label">จำนวนข้อความ:</span>
-              <span className="summary-value">{JSON.parse(localStorage.getItem("groupMessages") || '[]').length} ข้อความ</span>
+              <span className="summary-value">{JSON.parse(localStorage.getItem(`groupMessages_${selectedPage}`) || '[]').length} ข้อความ</span>
             </div>
           </div>
         </div>
