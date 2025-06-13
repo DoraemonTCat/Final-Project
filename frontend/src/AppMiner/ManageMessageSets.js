@@ -269,9 +269,9 @@ function ManageMessageSets() {
                                             >
                                                 ✏️
                                             </button>
-                                            <button
+                                            <button style={{backgroundColor:"red"}}
                                                 onClick={() => handleDelete(set.id, set.set_name)}
-                                                className="action-btn delete-btn"
+                                                className="action-btn edit-btn"
                                                 title="ลบชุดข้อความ"
                                             >
                                                 🗑️
