@@ -425,6 +425,7 @@ body {
 .stat-number {
   font-size: 18px;
   font-weight: bold;
+  color: aqua;
 }
 
 .stat-number.selected {
@@ -432,12 +433,13 @@ body {
 }
 
 .stat-number.ready {
-  color: #4caf50;
+  color: #21e128;
 }
 
 .stat-label {
-  font-size: 12px;
+  font-size: 13px;
   opacity: 0.9;
+  color: #ffffff;
 }
 
 .new-message-alert {
