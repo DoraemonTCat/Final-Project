@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import '../CSS/MinerGroup.css';
 import { fetchPages, connectFacebook } from "../Features/Tool";
 
@@ -7,27 +7,25 @@ function SetMiner() {
   const [pages, setPages] = useState([]);
   const [selectedPage, setSelectedPage] = useState("");
   const [customerGroups, setCustomerGroups] = useState([]);
-  const [individualCustomers, setIndividualCustomers] = useState([]);
   const [newGroupName, setNewGroupName] = useState("");
   const [showAddGroupForm, setShowAddGroupForm] = useState(false);
-  // 1. เพิ่ม state สำหรับควบคุม dropdown (เพิ่มในส่วนบนของ component)
+  const [selectedGroups, setSelectedGroups] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const navigate = useNavigate();
 
-  // เพิ่มฟังก์ชัน toggle
   const toggleDropdown = () => {
     setIsDropdownOpen(!isDropdownOpen);
   };
 
   useEffect(() => {
-    const savedPage = JSON.parse(localStorage.getItem("selectedPage") || '""');
+    const savedPage = localStorage.getItem("selectedPage");
     const savedGroups = JSON.parse(localStorage.getItem("customerGroups") || '[]');
-    const savedIndividuals = JSON.parse(localStorage.getItem("individualCustomers") || '[]');
     
     if (savedPage) {
       setSelectedPage(savedPage);
     }
     setCustomerGroups(savedGroups);
-    setIndividualCustomers(savedIndividuals);
     
     fetchPages()
       .then(setPages)
@@ -37,7 +35,7 @@ function SetMiner() {
   const handlePageChange = (e) => {
     const pageId = e.target.value;
     setSelectedPage(pageId);
-    localStorage.setItem("selectedPage", JSON.stringify(pageId));
+    localStorage.setItem("selectedPage", pageId);
   };
 
   const addCustomerGroup = () => {
@@ -46,6 +44,7 @@ function SetMiner() {
         id: Date.now(),
         name: newGroupName,
         customers: [],
+        messages: [],
         createdAt: new Date().toISOString()
       };
       const updatedGroups = [...customerGroups, newGroup];
@@ -57,302 +56,244 @@ function SetMiner() {
   };
 
   const removeCustomerGroup = (groupId) => {
-    const updatedGroups = customerGroups.filter(group => group.id !== groupId);
-    setCustomerGroups(updatedGroups);
-    localStorage.setItem("customerGroups", JSON.stringify(updatedGroups));
+    if (window.confirm("คุณต้องการลบกลุ่มนี้หรือไม่?")) {
+      const updatedGroups = customerGroups.filter(group => group.id !== groupId);
+      setCustomerGroups(updatedGroups);
+      localStorage.setItem("customerGroups", JSON.stringify(updatedGroups));
+      setSelectedGroups(selectedGroups.filter(id => id !== groupId));
+    }
   };
 
-  const addIndividualCustomer = () => {
-    const newCustomer = {
-      id: Date.now(),
-      name: "ลูกค้ารายใหม่",
-      psid: "",
-      createdAt: new Date().toISOString()
-    };
-    const updatedCustomers = [...individualCustomers, newCustomer];
-    setIndividualCustomers(updatedCustomers);
-    localStorage.setItem("individualCustomers", JSON.stringify(updatedCustomers));
+  const toggleGroupSelection = (groupId) => {
+    setSelectedGroups(prev => {
+      if (prev.includes(groupId)) {
+        return prev.filter(id => id !== groupId);
+      }
+      return [...prev, groupId];
+    });
   };
 
-  const removeIndividualCustomer = (customerId) => {
-    const updatedCustomers = individualCustomers.filter(customer => customer.id !== customerId);
-    setIndividualCustomers(updatedCustomers);
-    localStorage.setItem("individualCustomers", JSON.stringify(updatedCustomers));
+  const handleProceed = () => {
+    if (selectedGroups.length === 0) {
+      alert("กรุณาเลือกกลุ่มลูกค้าอย่างน้อย 1 กลุ่ม");
+      return;
+    }
+    localStorage.setItem("selectedCustomerGroups", JSON.stringify(selectedGroups));
+    navigate('/GroupDefault');
   };
+
+  const filteredGroups = customerGroups.filter(group =>
+    group.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="app-container">
-                <aside className="sidebar">
-                    <div className="sidebar-header">
-                        <h3 className="sidebar-title">
-                            
-                             📋 ตารางการขุด
-                        </h3>
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <h3 className="sidebar-title">
+            📋 ตารางการขุด
+          </h3>
+        </div>
+        
+        <div className="connection-section">
+          <button onClick={connectFacebook} className="connect-btn facebook-btn">
+            <svg width="15" height="20" viewBox="0 0 320 512" fill="#fff" className="fb-icon">
+              <path d="M279.14 288l14.22-92.66h-88.91V127.91c0-25.35 12.42-50.06 52.24-50.06H293V6.26S259.5 0 225.36 0c-73.22 0-121 44.38-121 124.72v70.62H22.89V288h81.47v224h100.2V288z" />
+            </svg>
+            <span>เชื่อมต่อ Facebook</span>
+          </button>
+        </div>
+
+        <div className="page-selector-section">
+          <label className="select-label">เลือกเพจ</label>
+          <select value={selectedPage} onChange={handlePageChange} className="select-page">
+            <option value="">-- เลือกเพจ --</option>
+            {pages.map((page) => (
+              <option key={page.id} value={page.id}>
+                {page.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <nav className="sidebar-nav">
+          <Link to="/App" className="nav-link">
+            <span className="nav-icon">🏠</span>
+            หน้าแรก
+          </Link>
+          <button className="dropdown-toggle" onClick={toggleDropdown}>
+            <span>
+              <span className="menu-icon">⚙️</span>
+              ตั้งค่าระบบขุด
+            </span>
+            <span className={`dropdown-arrow ${isDropdownOpen ? 'open' : ''}`}></span>
+          </button>
+          <div className={`dropdown-menu ${isDropdownOpen ? 'open' : ''}`}>
+            <Link to="/manage-message-sets" className="dropdown-item">▶ Default</Link>
+            <Link to="/MinerGroup" className="dropdown-item">▶ ตามกลุ่ม/ลูกค้า</Link>
+          </div>
+          <a href="#" className="nav-link">
+            <span className="nav-icon">📊</span>
+            Dashboard
+          </a>
+          <a href="#" className="nav-link">
+            <span className="nav-icon">🔧</span>
+            Setting
+          </a>
+        </nav>
+      </aside>
+
+      <div className="miner-main-content">
+        <div className="miner-header">
+          <h1 className="miner-title">
+            <span className="title-icon">👥</span>
+            ตั้งค่าระบบขุดตามกลุ่มลูกค้า
+          </h1>
+          <div className="breadcrumb">
+            <span className="breadcrumb-item active">1. เลือกกลุ่ม</span>
+            <span className="breadcrumb-separator">›</span>
+            <span className="breadcrumb-item">2. ตั้งค่าข้อความ</span>
+            <span className="breadcrumb-separator">›</span>
+            <span className="breadcrumb-item">3. ตั้งเวลา</span>
+          </div>
+        </div>
+
+        <div className="miner-controls">
+          <div className="search-section">
+            <div className="search-box">
+              <span className="search-icon">🔍</span>
+              <input
+                type="text"
+                placeholder="ค้นหากลุ่มลูกค้า..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="search-input"
+              />
+            </div>
+          </div>
+          <button 
+            onClick={() => setShowAddGroupForm(true)}
+            className="add-group-btn"
+          >
+            <span className="btn-icon">➕</span>
+            เพิ่มกลุ่มใหม่
+          </button>
+        </div>
+
+        {/* Form เพิ่มกลุ่มใหม่ */}
+        {showAddGroupForm && (
+          <div className="add-group-modal">
+            <div className="modal-content">
+              <h3>สร้างกลุ่มลูกค้าใหม่</h3>
+              <input
+                type="text"
+                placeholder="ชื่อกลุ่มลูกค้า"
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                className="group-name-input"
+                autoFocus
+              />
+              <div className="modal-actions">
+                <button
+                  onClick={addCustomerGroup}
+                  className="save-btn"
+                  disabled={!newGroupName.trim()}
+                >
+                  บันทึก
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAddGroupForm(false);
+                    setNewGroupName("");
+                  }}
+                  className="cancel-btn"
+                >
+                  ยกเลิก
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="groups-container">
+          {filteredGroups.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">📁</div>
+              <h3>ยังไม่มีกลุ่มลูกค้า</h3>
+              <p>เริ่มต้นด้วยการสร้างกลุ่มลูกค้าแรกของคุณ</p>
+              <button 
+                onClick={() => setShowAddGroupForm(true)}
+                className="empty-add-btn"
+              >
+                สร้างกลุ่มแรก
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="groups-grid">
+                {filteredGroups.map((group) => (
+                  <div
+                    key={group.id}
+                    className={`group-card ${selectedGroups.includes(group.id) ? 'selected' : ''}`}
+                  >
+                    <div className="group-checkbox">
+                      <input
+                        type="checkbox"
+                        id={`group-${group.id}`}
+                        checked={selectedGroups.includes(group.id)}
+                        onChange={() => toggleGroupSelection(group.id)}
+                      />
+                      <label htmlFor={`group-${group.id}`}></label>
                     </div>
                     
-                    <div className="connection-section">
-                        <button onClick={connectFacebook} className="connect-btn facebook-btn">
-                            <svg width="15" height="20" viewBox="0 0 320 512" fill="#fff" className="fb-icon">
-                                <path d="M279.14 288l14.22-92.66h-88.91V127.91c0-25.35 12.42-50.06 52.24-50.06H293V6.26S259.5 0 225.36 0c-73.22 0-121 44.38-121 124.72v70.62H22.89V288h81.47v224h100.2V288z" />
-                            </svg>
-                            <span>เชื่อมต่อ Facebook</span>
-                        </button>
+                    <div className="group-content">
+                      <div className="group-icon">👥</div>
+                      <h3 className="group-name">{group.name}</h3>
+                      <div className="group-stats">
+                        <span className="stat-item">
+                          <span className="stat-icon">👤</span>
+                          {group.customers.length} สมาชิก
+                        </span>
+                        <span className="stat-item">
+                          <span className="stat-icon">💬</span>
+                          {group.messages?.length || 0} ข้อความ
+                        </span>
+                      </div>
+                      <div className="group-date">
+                        สร้างเมื่อ {new Date(group.createdAt).toLocaleDateString('th-TH')}
+                      </div>
                     </div>
-    
-                    <div className="page-selector-section">
-                        <label className="select-label">เลือกเพจ</label>
-                        <select value={selectedPage} onChange={handlePageChange} className="select-page">
-                            <option value="">-- เลือกเพจ --</option>
-                            {pages.map((page) => (
-                                <option key={page.id} value={page.id}>
-                                    {page.name}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-    
-                    <nav className="sidebar-nav">
-                        <Link to="/App" className="nav-link">
-                            <span className="nav-icon">🏠</span>
-                            หน้าแรก
-                        </Link>
-                        <button className="dropdown-toggle" onClick={toggleDropdown}>
-                          <span>
-                            <span className="menu-icon">⚙️</span>
-                            ตั้งค่าระบบขุด
-                          </span>
-                          <span className={`dropdown-arrow ${isDropdownOpen ? 'open' : ''}`}></span>
-                        </button>
-                        <div className={`dropdown-menu ${isDropdownOpen ? 'open' : ''}`}>
-                          <Link to="/manage-message-sets" className="dropdown-item">▶ Default</Link>
-                          <Link to="/MinerGroup" className="dropdown-item">▶ ตามกลุ่ม/ลูกค้า</Link>
-                        </div>
-                        <a href="#" className="nav-link">
-                            <span className="nav-icon">📊</span>
-                            Dashboard
-                        </a>
-                        <a href="#" className="nav-link">
-                            <span className="nav-icon">🔧</span>
-                            Setting
-                        </a>
-                    </nav>
-                </aside>
-
-      {/* Main Content */}
-      <div className="setminer-root">
-        <div>
-          <div className="text-center py-4 bg-gray-50" style={{marginLeft: "48%"}}>
-            <h2 className="text-xl font-medium text-gray-800">ชื่อ Function ที่ใช้งานอยู่</h2>
-          </div>
-          
-          <div style={{display: "flex", justifyContent: "space-around", marginTop: "20px"}}>
-            {/* กลุ่มลูกค้า */}
-            <div className="setminer-header" style={{marginLeft: "20%", width: "30%"}}>
-              <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px"}}>
-                <p style={{margin: 0, fontSize: "18px", fontWeight: "bold"}}>กลุ่มลูกค้า</p>
-                <button 
-                  onClick={() => setShowAddGroupForm(true)}
-                  style={{
-                    backgroundColor: "#4CAF50",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "5px",
-                    padding: "8px 12px",
-                    cursor: "pointer",
-                    fontSize: "14px"
-                  }}
-                >
-                  + เพิ่มกลุ่ม
-                </button>
-              </div>
-
-              {/* Form เพิ่มกลุ่มใหม่ */}
-              {showAddGroupForm && (
-                <div style={{
-                  backgroundColor: "#f9f9f9",
-                  padding: "15px",
-                  borderRadius: "8px",
-                  marginBottom: "15px",
-                  border: "1px solid #ddd"
-                }}>
-                  <input
-                    type="text"
-                    placeholder="ชื่อกลุ่มลูกค้า"
-                    value={newGroupName}
-                    onChange={(e) => setNewGroupName(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #ccc",
-                      marginBottom: "10px"
-                    }}
-                  />
-                  <div style={{display: "flex", gap: "10px"}}>
+                    
                     <button
-                      onClick={addCustomerGroup}
-                      style={{
-                        backgroundColor: "#4CAF50",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "4px",
-                        padding: "8px 15px",
-                        cursor: "pointer",
-                        fontSize: "12px"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeCustomerGroup(group.id);
                       }}
+                      className="delete-btn"
+                      title="ลบกลุ่ม"
                     >
-                      บันทึก
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowAddGroupForm(false);
-                        setNewGroupName("");
-                      }}
-                      style={{
-                        backgroundColor: "#f44336",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "4px",
-                        padding: "8px 15px",
-                        cursor: "pointer",
-                        fontSize: "12px"
-                      }}
-                    >
-                      ยกเลิก
+                      🗑️
                     </button>
                   </div>
+                ))}
+              </div>
+
+              <div className="action-bar">
+                <div className="selection-info">
+                  <span className="selection-icon">✓</span>
+                  เลือกแล้ว {selectedGroups.length} กลุ่ม
                 </div>
-              )}
-
-              {/* รายการกลุ่มลูกค้า */}
-              <div style={{maxHeight: "400px", overflowY: "auto"}}>
-                {customerGroups.length === 0 ? (
-                  <div style={{
-                    textAlign: "center",
-                    padding: "20px",
-                    color: "#666",
-                    fontStyle: "italic"
-                  }}>
-                    ยังไม่มีกลุ่มลูกค้า
-                  </div>
-                ) : (
-                  customerGroups.map((group) => (
-                    <div
-                      key={group.id}
-                      style={{
-                        backgroundColor: "white",
-                        border: "1px solid #ddd",
-                        borderRadius: "8px",
-                        padding: "15px",
-                        marginBottom: "10px",
-                        boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
-                      }}
-                    >
-                      <div style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
-                        <div>
-                          <h4 style={{margin: "0 0 5px 0", color: "#333"}}>{group.name}</h4>
-                          <p style={{margin: 0, fontSize: "12px", color: "#666"}}>
-                            จำนวนสมาชิก: {group.customers.length} คน
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => removeCustomerGroup(group.id)}
-                          style={{
-                            backgroundColor: "#f44336",
-                            color: "white",
-                            border: "none",
-                            borderRadius: "4px",
-                            padding: "5px 10px",
-                            cursor: "pointer",
-                            fontSize: "12px"
-                          }}
-                        >
-                          ลบ
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* ลูกค้ารายคน */}
-            <div className="setminer-header" style={{marginRight: "5%", width: "30%"}}>
-              <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px"}}>
-                <p style={{margin: 0, fontSize: "18px", fontWeight: "bold"}}>ลูกค้ารายคน</p>
-                <button 
-                  onClick={addIndividualCustomer}
-                  style={{
-                    backgroundColor: "#2196F3",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "5px",
-                    padding: "8px 12px",
-                    cursor: "pointer",
-                    fontSize: "14px"
-                  }}
+               <button
+                  onClick={handleProceed}
+                  className="proceed-btn"
+                  disabled={selectedGroups.length === 0}
                 >
-                  + เพิ่มลูกค้า
+                  ถัดไป: ตั้งค่าข้อความ
+                  <span className="arrow-icon">→</span>
                 </button>
               </div>
-
-              {/* รายการลูกค้ารายคน */}
-              <div style={{maxHeight: "400px", overflowY: "auto"}}>
-                {individualCustomers.length === 0 ? (
-                  <div style={{
-                    textAlign: "center",
-                    padding: "20px",
-                    color: "#666",
-                    fontStyle: "italic"
-                  }}>
-                    ยังไม่มีลูกค้ารายคน
-                  </div>
-                ) : (
-                  individualCustomers.map((customer) => (
-                    <div
-                      key={customer.id}
-                      style={{
-                        backgroundColor: "white",
-                        border: "1px solid #ddd",
-                        borderRadius: "8px",
-                        padding: "15px",
-                        marginBottom: "10px",
-                        boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
-                      }}
-                    >
-                      <div style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
-                        <div>
-                          <h4 style={{margin: "0 0 5px 0", color: "#333"}}>{customer.name}</h4>
-                          <p style={{margin: 0, fontSize: "12px", color: "#666"}}>
-                            PSID: {customer.psid || "ยังไม่ได้กำหนด"}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => removeIndividualCustomer(customer.id)}
-                          style={{
-                            backgroundColor: "#f44336",
-                            color: "white",
-                            border: "none",
-                            borderRadius: "4px",
-                            padding: "5px 10px",
-                            cursor: "pointer",
-                            fontSize: "12px"
-                          }}
-                        >
-                          ลบ
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-
-            
-            
-            
-        
+            </>
+          )}
         </div>
       </div>
     </div>
