@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import '../CSS/Set_Miner.css';
+import '../CSS/MinerGroup.css';
 import { fetchPages, connectFacebook } from "../Features/Tool";
 
 function SetMiner() {
@@ -10,6 +10,13 @@ function SetMiner() {
   const [individualCustomers, setIndividualCustomers] = useState([]);
   const [newGroupName, setNewGroupName] = useState("");
   const [showAddGroupForm, setShowAddGroupForm] = useState(false);
+  // 1. เพิ่ม state สำหรับควบคุม dropdown (เพิ่มในส่วนบนของ component)
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  // เพิ่มฟังก์ชัน toggle
+  const toggleDropdown = () => {
+    setIsDropdownOpen(!isDropdownOpen);
+  };
 
   useEffect(() => {
     const savedPage = JSON.parse(localStorage.getItem("selectedPage") || '""');
@@ -109,10 +116,17 @@ function SetMiner() {
                             <span className="nav-icon">🏠</span>
                             หน้าแรก
                         </Link>
-                        <Link to="/Set_Miner" className="nav-link">
-                            <span className="nav-icon">⚙️</span>
+                        <button className="dropdown-toggle" onClick={toggleDropdown}>
+                          <span>
+                            <span className="menu-icon">⚙️</span>
                             ตั้งค่าระบบขุด
-                        </Link>
+                          </span>
+                          <span className={`dropdown-arrow ${isDropdownOpen ? 'open' : ''}`}></span>
+                        </button>
+                        <div className={`dropdown-menu ${isDropdownOpen ? 'open' : ''}`}>
+                          <Link to="/manage-message-sets" className="dropdown-item">▶ Default</Link>
+                          <Link to="/MinerGroup" className="dropdown-item">▶ ตามกลุ่ม/ลูกค้า</Link>
+                        </div>
                         <a href="#" className="nav-link">
                             <span className="nav-icon">📊</span>
                             Dashboard

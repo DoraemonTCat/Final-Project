@@ -398,10 +398,17 @@ function SetDefault() {
                             <span className="nav-icon">🏠</span>
                             หน้าแรก
                         </Link>
-                        <Link to="/Set_Miner" className="nav-link">
-                            <span className="nav-icon">⚙️</span>
+                        <button className="dropdown-toggle" onClick={toggleDropdown}>
+                          <span>
+                            <span className="menu-icon">⚙️</span>
                             ตั้งค่าระบบขุด
-                        </Link>
+                          </span>
+                          <span className={`dropdown-arrow ${isDropdownOpen ? 'open' : ''}`}></span>
+                        </button>
+                        <div className={`dropdown-menu ${isDropdownOpen ? 'open' : ''}`}>
+                          <Link to="/manage-message-sets" className="dropdown-item">▶ Default</Link>
+                          <Link to="/MinerGroup" className="dropdown-item">▶ ตามกลุ่ม/ลูกค้า</Link>
+                        </div>
                         <a href="#" className="nav-link">
                             <span className="nav-icon">📊</span>
                             Dashboard
