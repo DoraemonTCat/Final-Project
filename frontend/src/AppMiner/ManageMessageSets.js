@@ -171,7 +171,7 @@ function ManageMessageSets() {
                             ตั้งค่าระบบขุด
                           </span>
                           <span className={`dropdown-arrow ${isDropdownOpen ? 'open' : ''}`}></span>
-                        </button>
+                    </button>
                         <div className={`dropdown-menu ${isDropdownOpen ? 'open' : ''}`}>
                           <Link to="/manage-message-sets" className="dropdown-item">▶ Default</Link>
                           <Link to="/MinerGroup" className="dropdown-item">▶ ตามกลุ่ม/ลูกค้า</Link>
@@ -308,9 +308,9 @@ function ManageMessageSets() {
                 </div>
 
                 <div className="content-footer">
-                    <Link to="/Set_Miner" className="back-button">
+                    <Link to="/App" className="back-button">
                         <span className="back-icon">←</span>
-                        กลับไปหน้าตั้งค่าระบบขุด
+                        กลับไปหน้าแรก
                     </Link>
                 </div>
             </main>
