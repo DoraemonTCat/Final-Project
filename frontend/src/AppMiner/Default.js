@@ -413,10 +413,10 @@ function SetDefault() {
                             <span className="nav-icon">📊</span>
                             Dashboard
                         </a>
-                        <a href="#" className="nav-link">
+                         <Link to="/settings" className="nav-link">
                             <span className="nav-icon">🔧</span>
                             Setting
-                        </a>
+                        </Link>
                     </nav>
                 </aside>
 

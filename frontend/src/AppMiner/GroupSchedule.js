@@ -249,10 +249,10 @@ function GroupSchedule() {
             <span className="nav-icon">📊</span>
             Dashboard
           </a>
-          <a href="#" className="nav-link">
-            <span className="nav-icon">🔧</span>
-            Setting
-          </a>
+           <Link to="/settings" className="nav-link">
+              <span className="nav-icon">🔧</span>
+              Setting
+            </Link>
         </nav>
       </aside>
 

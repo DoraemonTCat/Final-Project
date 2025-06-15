@@ -235,6 +235,115 @@ body {
   font-size: 18px;
 }
 
+
+/* =======================
+   SIDEBAR FIXED FONT SIZE
+   ======================= */
+/* ป้องกันไม่ให้ sidebar เปลี่ยนขนาดตัวอักษรตาม root */
+.sidebar,
+.sidebar * {
+  font-size: 14px !important;
+}
+
+/* ขนาดเฉพาะสำหรับแต่ละ element */
+.sidebar .sidebar-title {
+  font-size: 20px !important;
+  font-weight: 600 !important;
+}
+
+.sidebar .nav-link {
+  font-size: 14px !important;
+}
+
+.sidebar .nav-icon,
+.sidebar .menu-icon {
+  font-size: 18px !important;
+}
+
+.sidebar .connect-btn {
+  font-size: 14px !important;
+}
+
+.sidebar .select-label {
+  font-size: 12px !important;
+}
+
+.sidebar .select-page {
+  font-size: 14px !important;
+}
+
+.sidebar .dropdown-toggle {
+  font-size: 14px !important;
+}
+
+.sidebar .dropdown-arrow {
+  font-size: 12px !important;
+}
+
+.sidebar .dropdown-item {
+  font-size: 14px !important;
+}
+
+/* ป้องกันการ inherit font-size จาก html/body */
+.sidebar {
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+}
+
+/* =======================
+   FONT SIZE CLASSES FOR MAIN CONTENT
+   ======================= */
+/* ใช้กับ main content เท่านั้น */
+.main-dashboard,
+.settings-container,
+.message-settings-container,
+.group-default-container,
+.schedule-container,
+.main-content,
+.miner-main-content {
+  font-size: inherit; /* รับค่าจาก root */
+}
+
+/* Font size utility classes */
+body.font-size-small .main-dashboard,
+body.font-size-small .settings-container,
+body.font-size-small .message-settings-container,
+body.font-size-small .group-default-container,
+body.font-size-small .schedule-container,
+body.font-size-small .main-content,
+body.font-size-small .miner-main-content {
+  font-size: 14px;
+}
+
+body.font-size-medium .main-dashboard,
+body.font-size-medium .settings-container,
+body.font-size-medium .message-settings-container,
+body.font-size-medium .group-default-container,
+body.font-size-medium .schedule-container,
+body.font-size-medium .main-content,
+body.font-size-medium .miner-main-content {
+  font-size: 16px;
+}
+
+body.font-size-large .main-dashboard,
+body.font-size-large .settings-container,
+body.font-size-large .message-settings-container,
+body.font-size-large .group-default-container,
+body.font-size-large .schedule-container,
+body.font-size-large .main-content,
+body.font-size-large .miner-main-content {
+  font-size: 18px;
+}
+
+body.font-size-xlarge .main-dashboard,
+body.font-size-xlarge .settings-container,
+body.font-size-xlarge .message-settings-container,
+body.font-size-xlarge .group-default-container,
+body.font-size-xlarge .schedule-container,
+body.font-size-xlarge .main-content,
+body.font-size-xlarge .miner-main-content {
+  font-size: 20px;
+}
 /* =====================================================
    5. MAIN DASHBOARD
    ===================================================== */
