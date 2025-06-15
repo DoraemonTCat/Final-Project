@@ -1,442 +1,521 @@
-/* Container */
+/* =================================================================
+   GroupDefault.css - หน้าตั้งค่าข้อความสำหรับกลุ่มลูกค้า
+   ================================================================= */
+
+/* =======================
+   Layout & Container
+   ======================= */
+
+/* Container หลักของหน้า GroupDefault */
 .group-default-container {
-  flex: 1;
-  margin-left: 250px;
-  padding: 30px;
-  background-color: #f5f7fa;
-  min-height: 100vh;
+  flex: 1;                        /* ใช้พื้นที่ที่เหลือทั้งหมด */
+  margin-left: 250px;             /* เว้นระยะสำหรับ sidebar */
+  padding: 30px;                  /* ระยะห่างภายใน */
+  background-color: #f5f7fa;      /* สีพื้นหลัง */
+  min-height: 100vh;              /* ความสูงขั้นต่ำเต็มหน้าจอ */
 }
 
-/* Header */
+/* =======================
+   Header Section
+   ======================= */
+
+/* ส่วนหัวของหน้า */
 .group-default-header {
-  margin-bottom: 30px;
+  margin-bottom: 30px;            /* ระยะห่างด้านล่าง */
 }
 
+/* หัวข้อหลักของหน้า */
 .group-default-title {
-  font-size: 32px;
-  font-weight: 700;
-  color: #2d3748;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
+  font-size: 32px;                /* ขนาดตัวอักษร */
+  font-weight: 700;               /* ความหนาตัวอักษร */
+  color: #2d3748;                 /* สีตัวอักษร */
+  display: flex;                  /* จัด layout แบบ flex */
+  align-items: center;            /* จัดให้อยู่กึ่งกลางแนวตั้ง */
+  gap: 12px;                      /* ระยะห่างระหว่าง elements */
+  margin-bottom: 20px;            /* ระยะห่างด้านล่าง */
 }
 
-/* Selected Groups Info */
+/* =======================
+   Selected Groups Info
+   ======================= */
+
+/* กล่องแสดงข้อมูลกลุ่มที่เลือก */
 .selected-groups-info {
-  background: white;
-  padding: 20px;
-  border-radius: 12px;
-  margin-bottom: 30px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: white;              /* พื้นหลังสีขาว */
+  padding: 20px;                  /* ระยะห่างภายใน */
+  border-radius: 12px;            /* มุมโค้งมน */
+  margin-bottom: 30px;            /* ระยะห่างด้านล่าง */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);  /* เงา */
 }
 
+/* หัวข้อย่อยในกล่อง */
 .selected-groups-info h3 {
-  font-size: 16px;
-  color: #4a5568;
-  margin-bottom: 12px;
+  font-size: 16px;                /* ขนาดตัวอักษร */
+  color: #4a5568;                 /* สีตัวอักษร */
+  margin-bottom: 12px;            /* ระยะห่างด้านล่าง */
 }
 
+/* รายการกลุ่มที่เลือก */
 .selected-groups-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  display: flex;                  /* จัด layout แบบ flex */
+  flex-wrap: wrap;                /* ขึ้นบรรทัดใหม่เมื่อเต็ม */
+  gap: 10px;                      /* ระยะห่างระหว่าง items */
 }
 
+/* Badge แสดงชื่อแต่ละกลุ่ม */
 .group-badge {
-  display: inline-block;
-  padding: 8px 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 500;
+  display: inline-block;          /* แสดงแบบ inline-block */
+  padding: 8px 16px;              /* ระยะห่างภายใน */
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);  /* gradient สีม่วง */
+  color: white;                   /* สีตัวอักษร */
+  border-radius: 20px;            /* มุมโค้งมน */
+  font-size: 14px;                /* ขนาดตัวอักษร */
+  font-weight: 500;               /* ความหนาตัวอักษร */
 }
 
-/* Message Config Container */
+/* =======================
+   Message Configuration
+   ======================= */
+
+/* Container สำหรับการตั้งค่าข้อความ */
 .message-config-container {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 25px;
-  margin-bottom: 30px;
+  display: grid;                  /* ใช้ CSS Grid */
+  grid-template-columns: 1fr 1fr; /* แบ่งเป็น 2 คอลัมน์เท่ากัน */
+  gap: 25px;                      /* ระยะห่างระหว่างคอลัมน์ */
+  margin-bottom: 30px;            /* ระยะห่างด้านล่าง */
 }
 
-/* Config Card */
+/* การ์ดสำหรับการตั้งค่า */
 .config-card {
-  background: white;
-  padding: 25px;
-  border-radius: 12px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  min-height: 500px;
+  background: white;              /* พื้นหลังสีขาว */
+  padding: 25px;                  /* ระยะห่างภายใน */
+  border-radius: 12px;            /* มุมโค้งมน */
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);  /* เงา */
+  min-height: 500px;              /* ความสูงขั้นต่ำ */
 }
 
+/* หัวข้อในการ์ด */
 .config-header {
-  font-size: 20px;
-  color: #2d3748;
-  margin-bottom: 20px;
-  font-weight: 600;
+  font-size: 20px;                /* ขนาดตัวอักษร */
+  color: #2d3748;                 /* สีตัวอักษร */
+  margin-bottom: 20px;            /* ระยะห่างด้านล่าง */
+  font-weight: 600;               /* ความหนาตัวอักษร */
 }
 
-/* Input Form */
+/* =======================
+   Form Elements
+   ======================= */
+
+/* Container สำหรับ form elements */
 .input-form {
-  margin-bottom: 20px;
+  margin-bottom: 20px;            /* ระยะห่างด้านล่าง */
 }
 
+/* Label ของ input */
 .input-label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: 600;
-  color: #4a5568;
-  font-size: 14px;
+  display: block;                 /* แสดงเป็นบล็อก */
+  margin-bottom: 8px;             /* ระยะห่างด้านล่าง */
+  font-weight: 600;               /* ความหนาตัวอักษร */
+  color: #4a5568;                 /* สีตัวอักษร */
+  font-size: 14px;                /* ขนาดตัวอักษร */
 }
 
+/* Input elements ทั้งหมด */
 .input-select,
 .input-textarea,
 .input-file {
-  width: 100%;
-  padding: 12px;
-  border: 2px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 14px;
-  font-family: inherit;
-  transition: all 0.3s ease;
+  width: 100%;                    /* ความกว้างเต็ม */
+  padding: 12px;                  /* ระยะห่างภายใน */
+  border: 2px solid #e2e8f0;      /* เส้นขอบ */
+  border-radius: 8px;             /* มุมโค้งมน */
+  font-size: 14px;                /* ขนาดตัวอักษร */
+  font-family: inherit;           /* ใช้ font เดียวกับ parent */
+  transition: all 0.3s ease;      /* animation เมื่อมีการเปลี่ยนแปลง */
 }
 
+/* State เมื่อ focus */
 .input-select:focus,
 .input-textarea:focus,
 .input-file:focus {
-  outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  outline: none;                  /* ลบ outline default */
+  border-color: #667eea;          /* เปลี่ยนสีเส้นขอบ */
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);  /* เพิ่มเงารอบๆ */
 }
 
+/* Textarea เฉพาะ */
 .input-textarea {
-  min-height: 120px;
-  resize: vertical;
+  min-height: 120px;              /* ความสูงขั้นต่ำ */
+  resize: vertical;               /* ปรับขนาดได้แค่แนวตั้ง */
 }
 
+/* File input เฉพาะ */
 .input-file {
-  cursor: pointer;
+  cursor: pointer;                /* เปลี่ยน cursor เป็นมือ */
 }
 
-/* Preview Container */
+/* =======================
+   Preview Section
+   ======================= */
+
+/* Container สำหรับ preview รูป/วิดีโอ */
 .preview-container {
-  margin-top: 15px;
-  text-align: center;
-  max-height: 250px;
-  overflow: hidden;
-  border-radius: 8px;
-  border: 2px solid #e2e8f0;
-  padding: 10px;
-  background-color: #f8f9fa;
+  margin-top: 15px;               /* ระยะห่างด้านบน */
+  text-align: center;             /* จัดกึ่งกลาง */
+  max-height: 250px;              /* ความสูงสูงสุด */
+  overflow: hidden;               /* ซ่อนส่วนที่เกิน */
+  border-radius: 8px;             /* มุมโค้งมน */
+  border: 2px solid #e2e8f0;      /* เส้นขอบ */
+  padding: 10px;                  /* ระยะห่างภายใน */
+  background-color: #f8f9fa;      /* สีพื้นหลัง */
 }
 
+/* รูปและวิดีโอใน preview */
 .preview-image,
 .preview-video {
-  max-width: 100%;
-  max-height: 200px;
-  border-radius: 6px;
-  object-fit: contain;
+  max-width: 100%;                /* ความกว้างสูงสุด */
+  max-height: 200px;              /* ความสูงสูงสุด */
+  border-radius: 6px;             /* มุมโค้งมน */
+  object-fit: contain;            /* ปรับขนาดให้พอดี */
 }
 
-/* Add Button */
+/* =======================
+   Buttons
+   ======================= */
+
+/* ปุ่มเพิ่มข้อความ */
 .add-btn {
-  width: 100%;
-  padding: 14px;
-  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 6px rgba(72, 187, 120, 0.2);
+  width: 100%;                    /* ความกว้างเต็ม */
+  padding: 14px;                  /* ระยะห่างภายใน */
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);  /* gradient สีเขียว */
+  color: white;                   /* สีตัวอักษร */
+  border: none;                   /* ไม่มีเส้นขอบ */
+  border-radius: 8px;             /* มุมโค้งมน */
+  font-size: 16px;                /* ขนาดตัวอักษร */
+  font-weight: 600;               /* ความหนาตัวอักษร */
+  cursor: pointer;                /* เปลี่ยน cursor เป็นมือ */
+  transition: all 0.3s ease;      /* animation */
+  box-shadow: 0 4px 6px rgba(72, 187, 120, 0.2);  /* เงา */
 }
 
+/* Hover state ของปุ่มเพิ่ม */
 .add-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 12px rgba(72, 187, 120, 0.3);
+  transform: translateY(-2px);    /* ยกขึ้น 2px */
+  box-shadow: 0 6px 12px rgba(72, 187, 120, 0.3);  /* เงาเข้มขึ้น */
 }
 
-/* Sequence */
+/* ปุ่มบันทึกข้อความ */
+.save-messages-btn {
+  padding: 12px 20px;             /* ระยะห่างภายใน */
+  background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);  /* gradient สีฟ้า */
+  color: white;                   /* สีตัวอักษร */
+  border: none;                   /* ไม่มีเส้นขอบ */
+  border-radius: 8px;             /* มุมโค้งมน */
+  cursor: pointer;                /* เปลี่ยน cursor เป็นมือ */
+  font-size: 14px;                /* ขนาดตัวอักษร */
+  font-weight: 600;               /* ความหนาตัวอักษร */
+  transition: all 0.2s ease;      /* animation */
+  box-shadow: 0 4px 6px rgba(52, 152, 219, 0.2);  /* เงา */
+}
+
+/* Hover state ของปุ่มบันทึก */
+.save-messages-btn:hover {
+  background: linear-gradient(135deg, #2980b9 0%, #21618c 100%);  /* gradient เข้มขึ้น */
+  transform: translateY(-1px);    /* ยกขึ้น 1px */
+  box-shadow: 0 6px 12px rgba(52, 152, 219, 0.3);  /* เงาเข้มขึ้น */
+}
+
+/* Active state ของปุ่มบันทึก */
+.save-messages-btn:active {
+  transform: translateY(0);       /* กลับมาตำแหน่งเดิม */
+  box-shadow: 0 2px 4px rgba(52, 152, 219, 0.2);  /* เงาจางลง */
+}
+
+/* =======================
+   Message Sequence
+   ======================= */
+
+/* Container สำหรับหัวข้อและปุ่ม */
 .sequence-header-container {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
+  display: flex;                  /* จัด layout แบบ flex */
+  justify-content: space-between; /* กระจายระหว่างซ้าย-ขวา */
+  align-items: center;            /* จัดกึ่งกลางแนวตั้ง */
+  margin-bottom: 20px;            /* ระยะห่างด้านล่าง */
+  flex-wrap: wrap;                /* ขึ้นบรรทัดใหม่เมื่อเต็ม */
+  gap: 15px;                      /* ระยะห่างระหว่าง items */
 }
 
+/* คำแนะนำการใช้งาน */
 .sequence-hint {
-  margin: 15px 0;
-  padding: 10px;
-  background-color: #f8f9fa;
-  border-radius: 6px;
-  font-size: 14px;
-  color: #718096;
-  text-align: center;
+  margin: 15px 0;                 /* ระยะห่างบน-ล่าง */
+  padding: 10px;                  /* ระยะห่างภายใน */
+  background-color: #f8f9fa;      /* สีพื้นหลัง */
+  border-radius: 6px;             /* มุมโค้งมน */
+  font-size: 14px;                /* ขนาดตัวอักษร */
+  color: #718096;                 /* สีตัวอักษร */
+  text-align: center;             /* จัดข้อความกึ่งกลาง */
 }
 
+/* รายการข้อความที่เพิ่มแล้ว */
 .sequence-list {
-  max-height: 350px;
-  overflow-y: auto;
-  padding-right: 10px;
+  max-height: 350px;              /* ความสูงสูงสุด */
+  overflow-y: auto;               /* แสดง scrollbar เมื่อเกิน */
+  padding-right: 10px;            /* ระยะห่างด้านขวา */
 }
 
+/* แต่ละรายการในลำดับ */
 .sequence-item {
-  background-color: #f8f9fa;
-  border: 2px solid #e9ecef;
-  border-radius: 10px;
-  padding: 15px;
-  margin-bottom: 12px;
-  cursor: move;
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  transition: all 0.2s ease;
+  background-color: #f8f9fa;      /* สีพื้นหลัง */
+  border: 2px solid #e9ecef;      /* เส้นขอบ */
+  border-radius: 10px;            /* มุมโค้งมน */
+  padding: 15px;                  /* ระยะห่างภายใน */
+  margin-bottom: 12px;            /* ระยะห่างด้านล่าง */
+  cursor: move;                   /* cursor สำหรับลาก */
+  display: flex;                  /* จัด layout แบบ flex */
+  align-items: center;            /* จัดกึ่งกลางแนวตั้ง */
+  gap: 15px;                      /* ระยะห่างระหว่าง elements */
+  transition: all 0.2s ease;      /* animation */
 }
 
+/* Hover state ของรายการ */
 .sequence-item:hover {
-  border-color: #667eea;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-  transform: translateY(-1px);
+  border-color: #667eea;          /* เปลี่ยนสีเส้นขอบ */
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);  /* เพิ่มเงา */
+  transform: translateY(-1px);    /* ยกขึ้น 1px */
 }
 
+/* State เมื่อกำลังลาก */
 .sequence-item.drag-start {
-  opacity: 0.7;
-  transform: scale(0.98) rotate(2deg);
-  z-index: 1000;
-  box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+  opacity: 0.7;                   /* ความโปร่งใส */
+  transform: scale(0.98) rotate(2deg);  /* ย่อและหมุนเล็กน้อย */
+  z-index: 1000;                  /* ให้อยู่ด้านบนสุด */
+  box-shadow: 0 8px 16px rgba(0,0,0,0.2);  /* เงาเข้มขึ้น */
 }
 
+/* ตัวเลขลำดับ */
 .sequence-order {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 50%;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  font-weight: bold;
-  flex-shrink: 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);  /* gradient สีม่วง */
+  color: white;                   /* สีตัวอักษร */
+  border-radius: 50%;             /* ทำให้เป็นวงกลม */
+  width: 32px;                    /* ความกว้าง */
+  height: 32px;                   /* ความสูง */
+  display: flex;                  /* จัด layout แบบ flex */
+  align-items: center;            /* จัดกึ่งกลางแนวตั้ง */
+  justify-content: center;        /* จัดกึ่งกลางแนวนอน */
+  font-size: 14px;                /* ขนาดตัวอักษร */
+  font-weight: bold;              /* ตัวหนา */
+  flex-shrink: 0;                 /* ไม่ให้ย่อขนาด */
 }
 
+/* ไอคอนประเภทข้อความ */
 .sequence-icon {
-  font-size: 24px;
-  flex-shrink: 0;
+  font-size: 24px;                /* ขนาดไอคอน */
+  flex-shrink: 0;                 /* ไม่ให้ย่อขนาด */
 }
 
+/* เนื้อหาข้อความ */
 .sequence-content {
-  flex: 1;
-  min-width: 0;
+  flex: 1;                        /* ใช้พื้นที่ที่เหลือ */
+  min-width: 0;                   /* ป้องกันการล้นออกมา */
 }
 
+/* ประเภทข้อความ */
 .sequence-type {
-  font-weight: 600;
-  font-size: 12px;
-  color: #718096;
-  text-transform: uppercase;
-  margin-bottom: 4px;
+  font-weight: 600;               /* ความหนาตัวอักษร */
+  font-size: 12px;                /* ขนาดตัวอักษร */
+  color: #718096;                 /* สีตัวอักษร */
+  text-transform: uppercase;      /* ตัวพิมพ์ใหญ่ทั้งหมด */
+  margin-bottom: 4px;             /* ระยะห่างด้านล่าง */
 }
 
+/* ข้อความที่แสดง */
 .sequence-text {
-  font-size: 14px;
-  color: #2d3748;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  line-height: 1.4;
+  font-size: 14px;                /* ขนาดตัวอักษร */
+  color: #2d3748;                 /* สีตัวอักษร */
+  word-wrap: break-word;          /* ตัดคำเมื่อยาวเกิน */
+  overflow-wrap: break-word;      /* ตัดคำ (fallback) */
+  line-height: 1.4;               /* ระยะห่างระหว่างบรรทัด */
 }
 
+/* ปุ่มลบ */
 .sequence-delete-btn {
-  background-color: #fee;
-  color: #e53e3e;
-  border: none;
-  border-radius: 6px;
-  padding: 8px 12px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
+  background-color: #fee;         /* สีพื้นหลัง */
+  color: #e53e3e;                 /* สีตัวอักษร */
+  border: none;                   /* ไม่มีเส้นขอบ */
+  border-radius: 6px;             /* มุมโค้งมน */
+  padding: 8px 12px;              /* ระยะห่างภายใน */
+  cursor: pointer;                /* เปลี่ยน cursor เป็นมือ */
+  font-size: 14px;                /* ขนาดตัวอักษร */
+  transition: all 0.2s ease;      /* animation */
+  flex-shrink: 0;                 /* ไม่ให้ย่อขนาด */
 }
 
+/* Hover state ของปุ่มลบ */
 .sequence-delete-btn:hover {
-  background-color: #e53e3e;
-  color: white;
-  transform: scale(1.05);
+  background-color: #e53e3e;      /* เปลี่ยนเป็นสีแดง */
+  color: white;                   /* ตัวอักษรสีขาว */
+  transform: scale(1.05);         /* ขยายเล็กน้อย */
 }
 
-/* Empty & Loading States */
+/* =======================
+   Empty & Loading States
+   ======================= */
+
+/* State เมื่อไม่มีข้อมูลหรือกำลังโหลด */
 .empty-state,
 .loading-state {
-  text-align: center;
-  padding: 50px 20px;
-  color: #718096;
-  border: 2px dashed #cbd5e0;
-  border-radius: 12px;
-  min-height: 150px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
+  text-align: center;             /* จัดข้อความกึ่งกลาง */
+  padding: 50px 20px;             /* ระยะห่างภายใน */
+  color: #718096;                 /* สีตัวอักษร */
+  border: 2px dashed #cbd5e0;     /* เส้นขอบแบบประ */
+  border-radius: 12px;            /* มุมโค้งมน */
+  min-height: 150px;              /* ความสูงขั้นต่ำ */
+  display: flex;                  /* จัด layout แบบ flex */
+  align-items: center;            /* จัดกึ่งกลางแนวตั้ง */
+  justify-content: center;        /* จัดกึ่งกลางแนวนอน */
+  font-size: 16px;                /* ขนาดตัวอักษร */
 }
 
+/* Loading state เฉพาะ */
 .loading-state {
-  border-color: #667eea;
-  color: #667eea;
-  animation: pulse 1.5s infinite;
+  border-color: #667eea;          /* สีเส้นขอบ */
+  color: #667eea;                 /* สีตัวอักษร */
+  animation: pulse 1.5s infinite; /* animation กระพริบ */
 }
 
+/* Animation กระพริบ */
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%, 100% { opacity: 1; }        /* เริ่มและจบที่ความทึบเต็ม */
+  50% { opacity: 0.5; }           /* กลางทางจางลง */
 }
 
-/* Action Buttons */
+/* =======================
+   Action Buttons
+   ======================= */
+
+/* Container สำหรับปุ่ม action */
 .action-buttons {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 40px;
+  display: flex;                  /* จัด layout แบบ flex */
+  justify-content: space-between; /* กระจายซ้าย-ขวา */
+  align-items: center;            /* จัดกึ่งกลางแนวตั้ง */
+  margin-top: 40px;               /* ระยะห่างด้านบน */
 }
 
+/* ปุ่มย้อนกลับ */
 .back-btn {
-  padding: 12px 24px;
-  background-color: #e2e8f0;
-  color: #4a5568;
-  text-decoration: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.3s ease;
+  padding: 12px 24px;             /* ระยะห่างภายใน */
+  background-color: #e2e8f0;      /* สีพื้นหลัง */
+  color: #4a5568;                 /* สีตัวอักษร */
+  text-decoration: none;          /* ไม่มีขีดเส้นใต้ */
+  border-radius: 8px;             /* มุมโค้งมน */
+  font-size: 14px;                /* ขนาดตัวอักษร */
+  font-weight: 500;               /* ความหนาตัวอักษร */
+  transition: all 0.3s ease;      /* animation */
 }
 
+/* Hover state ของปุ่มย้อนกลับ */
 .back-btn:hover {
-  background-color: #cbd5e0;
-  transform: translateX(-4px);
+  background-color: #cbd5e0;      /* เปลี่ยนสีพื้นหลัง */
+  transform: translateX(-4px);    /* เลื่อนไปทางซ้าย 4px */
 }
 
+/* ปุ่มดำเนินการต่อ */
 .proceed-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 28px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 12px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 6px rgba(102, 126, 234, 0.2);
+  display: flex;                  /* จัด layout แบบ flex */
+  align-items: center;            /* จัดกึ่งกลางแนวตั้ง */
+  gap: 8px;                       /* ระยะห่างระหว่าง items */
+  padding: 14px 28px;             /* ระยะห่างภายใน */
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);  /* gradient สีม่วง */
+  color: white;                   /* สีตัวอักษร */
+  border: none;                   /* ไม่มีเส้นขอบ */
+  border-radius: 12px;            /* มุมโค้งมน */
+  font-size: 16px;                /* ขนาดตัวอักษร */
+  font-weight: 600;               /* ความหนาตัวอักษร */
+  cursor: pointer;                /* เปลี่ยน cursor เป็นมือ */
+  transition: all 0.3s ease;      /* animation */
+  box-shadow: 0 4px 6px rgba(102, 126, 234, 0.2);  /* เงา */
 }
 
+/* Hover state ของปุ่มดำเนินการต่อ */
 .proceed-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
+  transform: translateY(-2px);    /* ยกขึ้น 2px */
+  box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);  /* เงาเข้มขึ้น */
 }
 
+/* Disabled state ของปุ่มดำเนินการต่อ */
 .proceed-btn:disabled {
-  background: #cbd5e0;
-  cursor: not-allowed;
-  box-shadow: none;
+  background: #cbd5e0;            /* สีพื้นหลังเทา */
+  cursor: not-allowed;            /* cursor แบบห้ามคลิก */
+  box-shadow: none;               /* ไม่มีเงา */
 }
 
+/* ไอคอนลูกศร */
 .arrow-icon {
-  font-size: 20px;
-  transition: transform 0.3s ease;
+  font-size: 20px;                /* ขนาดไอคอน */
+  transition: transform 0.3s ease;/* animation */
 }
 
+/* Animation ลูกศรเมื่อ hover */
 .proceed-btn:hover:not(:disabled) .arrow-icon {
-  transform: translateX(4px);
+  transform: translateX(4px);     /* เลื่อนไปทางขวา 4px */
 }
 
-/* Scrollbar */
+/* =======================
+   Scrollbar Styling
+   ======================= */
+
+/* Scrollbar สำหรับ WebKit browsers */
 .sequence-list::-webkit-scrollbar {
-  width: 6px;
+  width: 6px;                     /* ความกว้าง scrollbar */
 }
 
 .sequence-list::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
+  background: #f1f1f1;            /* สีพื้นหลัง track */
+  border-radius: 3px;             /* มุมโค้งมน */
 }
 
 .sequence-list::-webkit-scrollbar-thumb {
-  background: #cbd5e0;
-  border-radius: 3px;
+  background: #cbd5e0;            /* สี scrollbar */
+  border-radius: 3px;             /* มุมโค้งมน */
 }
 
 .sequence-list::-webkit-scrollbar-thumb:hover {
-  background: #a0aec0;
+  background: #a0aec0;            /* สีเมื่อ hover */
 }
 
-/* Responsive */
+/* =======================
+   Responsive Design
+   ======================= */
+
+/* Tablet (1024px และต่ำกว่า) */
 @media (max-width: 1024px) {
   .message-config-container {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr;   /* เปลี่ยนเป็นคอลัมน์เดียว */
   }
 }
 
+/* Mobile (768px และต่ำกว่า) */
 @media (max-width: 768px) {
   .group-default-container {
-    margin-left: 0;
-    padding: 20px;
+    margin-left: 0;               /* ไม่ต้องเว้นระยะสำหรับ sidebar */
+    padding: 20px;                /* ลดระยะห่างภายใน */
   }
 
   .group-default-title {
-    font-size: 24px;
+    font-size: 24px;              /* ลดขนาดหัวข้อ */
   }
 
   .config-card {
-    padding: 20px;
+    padding: 20px;                /* ลดระยะห่างภายในการ์ด */
   }
 
   .action-buttons {
-    flex-direction: column;
-    gap: 15px;
+    flex-direction: column;       /* เรียงแนวตั้ง */
+    gap: 15px;                    /* ระยะห่างระหว่างปุ่ม */
   }
 
   .back-btn,
   .proceed-btn {
-    width: 100%;
-    justify-content: center;
+    width: 100%;                  /* ความกว้างเต็ม */
+    justify-content: center;      /* จัดข้อความกึ่งกลาง */
   }
-}
-/* เพิ่มใน GroupDefault.css */
-
-/* Save Button Style */
-.save-messages-btn {
-  padding: 12px 20px;
-  background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 6px rgba(52, 152, 219, 0.2);
-}
-
-.save-messages-btn:hover {
-  background: linear-gradient(135deg, #2980b9 0%, #21618c 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 12px rgba(52, 152, 219, 0.3);
-}
-
-.save-messages-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 4px rgba(52, 152, 219, 0.2);
-}
-
-/* Update sequence-header-container for better spacing */
-.sequence-header-container {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 15px;
 }
