@@ -1,8 +1,137 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import '../CSS/App.css';
 import { fetchPages, connectFacebook, getMessagesBySetId, fetchConversations } from "../Features/Tool";
 import { Link } from 'react-router-dom';
 import Popup from "./MinerPopup";
+
+// 🚀 Component สำหรับแสดงเวลาแบบ optimized
+const TimeAgoCell = React.memo(({ lastMessageTime, updatedTime }) => {
+  const [displayTime, setDisplayTime] = useState('');
+  
+  useEffect(() => {
+    const updateTime = () => {
+      const referenceTime = lastMessageTime || updatedTime;
+      if (!referenceTime) {
+        setDisplayTime('-');
+        return;
+      }
+      
+      const past = new Date(referenceTime);
+      const now = new Date();
+      const diffMs = now.getTime() - past.getTime();
+      const diffSec = Math.floor(diffMs / 1000);
+      
+      if (diffSec < 0) {
+        setDisplayTime('0 วินาทีที่แล้ว');
+      } else if (diffSec < 60) {
+        setDisplayTime(`${diffSec} วินาทีที่แล้ว`);
+      } else {
+        const diffMin = Math.floor(diffSec / 60);
+        if (diffMin < 60) {
+          setDisplayTime(`${diffMin} นาทีที่แล้ว`);
+        } else {
+          const diffHr = Math.floor(diffMin / 60);
+          if (diffHr < 24) {
+            setDisplayTime(`${diffHr} ชั่วโมงที่แล้ว`);
+          } else {
+            const diffDay = Math.floor(diffHr / 24);
+            if (diffDay < 7) {
+              setDisplayTime(`${diffDay} วันที่แล้ว`);
+            } else {
+              const diffWeek = Math.floor(diffDay / 7);
+              if (diffWeek < 4) {
+                setDisplayTime(`${diffWeek} สัปดาห์ที่แล้ว`);
+              } else {
+                const diffMonth = Math.floor(diffDay / 30);
+                if (diffMonth < 12) {
+                  setDisplayTime(`${diffMonth} เดือนที่แล้ว`);
+                } else {
+                  const diffYear = Math.floor(diffDay / 365);
+                  setDisplayTime(`${diffYear} ปีที่แล้ว`);
+                }
+              }
+            }
+          }
+        }
+      }
+    };
+    
+    // อัพเดทครั้งแรกทันที
+    updateTime();
+    
+    // ตั้ง interval ตามความถี่ที่เหมาะสม
+    const referenceTime = lastMessageTime || updatedTime;
+    if (!referenceTime) return;
+    
+    const past = new Date(referenceTime);
+    const now = new Date();
+    const diffMs = now.getTime() - past.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    
+    let intervalMs;
+    if (diffMin < 1) {
+      intervalMs = 1000; // อัพเดททุกวินาทีถ้าน้อยกว่า 1 นาที
+    } else if (diffMin < 60) {
+      intervalMs = 60000; // อัพเดททุกนาทีถ้าน้อยกว่า 1 ชม.
+    } else {
+      intervalMs = 3600000; // อัพเดททุกชั่วโมงถ้ามากกว่า 1 ชม.
+    }
+    
+    const interval = setInterval(updateTime, intervalMs);
+    
+    return () => clearInterval(interval);
+  }, [lastMessageTime, updatedTime]);
+  
+  const isRecent = lastMessageTime && 
+    new Date(lastMessageTime) > new Date(Date.now() - 60000);
+  
+  return (
+    <td className="table" style={{
+      backgroundColor: isRecent ? '#e8f5e9' : 'transparent'
+    }}>
+      {displayTime}
+    </td>
+  );
+});
+
+// 🚀 Component สำหรับแสดงแต่ละแถวในตาราง
+const ConversationRow = React.memo(({ 
+  conv, 
+  idx, 
+  isSelected, 
+  onToggleCheckbox 
+}) => {
+  return (
+    <tr key={conv.conversation_id || idx}>
+      <td style={{ border: "1px solid #ccc", padding: "8px", textAlign: "center" }}>{idx + 1}</td>
+      <td className="table">{conv.conversation_name || `บทสนทนาที่ ${idx + 1}`}</td>
+      <td className="table">
+        {conv.updated_time
+          ? new Date(conv.updated_time).toLocaleDateString("th-TH", {
+            year: 'numeric', month: 'short', day: 'numeric'
+          })
+          : "-"
+        }
+      </td>
+      <TimeAgoCell 
+        lastMessageTime={conv.last_user_message_time}
+        updatedTime={conv.updated_time}
+      />
+      <td className="table">Context</td>
+      <td className="table">สินค้าที่สนใจ</td>
+      <td className="table">Platform</td>
+      <td className="table">หมวดหมู่ลูกค้า</td>
+      <td className="table">สถานะการขุด</td>
+      <td className="table">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggleCheckbox(conv.conversation_id)}
+        />
+      </td>
+    </tr>
+  );
+});
 
 function App() {
   const [pages, setPages] = useState([]);
@@ -18,27 +147,29 @@ function App() {
   const [miningStatus, setMiningStatus] = useState("");
   const [allConversations, setAllConversations] = useState([]);
   const [filteredConversations, setFilteredConversations] = useState([]);
-  const displayData = filteredConversations.length > 0 ? filteredConversations : conversations;
   const [pageId, setPageId] = useState("");
   const [selectedConversationIds, setSelectedConversationIds] = useState([]);
   const [defaultMessages, setDefaultMessages] = useState([]);
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [selectedMessageSetIds, setSelectedMessageSetIds] = useState([]);
-
-  // 🔥 State สำหรับ realtime และ cache
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
-  const updateIntervalRef = useRef(null);
+
+  // 🚀 Refs สำหรับ intervals
+  const clockIntervalRef = useRef(null);
   const pollingIntervalRef = useRef(null);
   
   // 🚀 Cache สำหรับเก็บข้อมูลที่โหลดแล้ว
   const messageCache = useRef({});
   const conversationCache = useRef({});
   const cacheTimeout = 5 * 60 * 1000; // 5 นาที
-  // 1. เพิ่ม state สำหรับควบคุม dropdown (เพิ่มในส่วนบนของ component)
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  // เพิ่มฟังก์ชัน toggle
+  // 🚀 Memoized display data
+  const displayData = useMemo(() => {
+    return filteredConversations.length > 0 ? filteredConversations : conversations;
+  }, [filteredConversations, conversations]);
+
   const toggleDropdown = () => {
     setIsDropdownOpen(!isDropdownOpen);
   };
@@ -65,7 +196,6 @@ function App() {
       setSelectedPage(savedPage);
     }
     
-    // 🚀 โหลด pages แบบ async
     fetchPages()
       .then(setPages)
       .catch(err => console.error("ไม่สามารถโหลดเพจได้:", err));
@@ -86,7 +216,6 @@ function App() {
   // 🚀 โหลดข้อมูลแบบ parallel เมื่อเปลี่ยน selectedPage
   useEffect(() => {
     if (selectedPage) {
-      // โหลดข้อมูลทั้งหมดพร้อมกัน
       Promise.all([
         loadMessages(selectedPage),
         loadConversations(selectedPage)
@@ -99,7 +228,6 @@ function App() {
 
   // 🚀 ฟังก์ชันโหลดข้อความที่ปรับปรุงแล้ว
   const loadMessages = async (pageId) => {
-    // ตรวจสอบ cache ก่อน
     const cached = getCachedData(`messages_${pageId}`, messageCache);
     if (cached) {
       setDefaultMessages(cached);
@@ -119,31 +247,6 @@ function App() {
     }
   };
 
-  // ฟังก์ชันแปลงเวลาห่าง
-  const timeAgo = (dateString) => {
-    if (!dateString) return "-";
-    
-    const past = new Date(dateString);
-    const now = currentTime;
-    const diffMs = now.getTime() - past.getTime();
-    const diffSec = Math.floor(diffMs / 1000);
-    
-    if (diffSec < 0) return "0 วินาทีที่แล้ว";
-    if (diffSec < 60) return `${diffSec} วินาทีที่แล้ว`;
-    const diffMin = Math.floor(diffSec / 60);
-    if (diffMin < 60) return `${diffMin} นาทีที่แล้ว`;
-    const diffHr = Math.floor(diffMin / 60);
-    if (diffHr < 24) return `${diffHr} ชั่วโมงที่แล้ว`;
-    const diffDay = Math.floor(diffHr / 24);
-    if (diffDay < 7) return `${diffDay} วันที่แล้ว`;
-    const diffWeek = Math.floor(diffDay / 7);
-    if (diffWeek < 4) return `${diffWeek} สัปดาห์ที่แล้ว`;
-    const diffMonth = Math.floor(diffDay / 30);
-    if (diffMonth < 12) return `${diffMonth} เดือนที่แล้ว`;
-    const diffYear = Math.floor(diffDay / 365);
-    return `${diffYear} ปีที่แล้ว`;
-  };
-
   // 🚀 ฟังก์ชันตรวจสอบข้อความใหม่ที่ปรับปรุงแล้ว
   const checkForNewMessages = useCallback(async () => {
     if (!selectedPage || loading) return;
@@ -151,6 +254,7 @@ function App() {
     try {
       const newConversations = await fetchConversations(selectedPage);
       
+      // ตรวจสอบว่ามีการเปลี่ยนแปลงหรือไม่
       const hasChanges = newConversations.some(newConv => {
         const oldConv = allConversations.find(c => c.conversation_id === newConv.conversation_id);
         if (!oldConv) return true;
@@ -161,7 +265,6 @@ function App() {
         setConversations(newConversations);
         setAllConversations(newConversations);
         setLastUpdateTime(new Date());
-        setCurrentTime(new Date());
         
         // Clear cache เมื่อมีข้อมูลใหม่
         conversationCache.current = {};
@@ -170,9 +273,17 @@ function App() {
           setTimeout(() => applyFilters(), 100);
         }
         
-        if (Notification.permission === "granted") {
+        // แจ้งเตือนเฉพาะเมื่อมีข้อความใหม่จริงๆ
+        const newMessages = newConversations.filter(newConv => {
+          const oldConv = allConversations.find(c => c.conversation_id === newConv.conversation_id);
+          if (!oldConv) return false;
+          return newConv.last_user_message_time && 
+                 new Date(newConv.last_user_message_time) > new Date(oldConv.last_user_message_time || 0);
+        });
+        
+        if (newMessages.length > 0 && Notification.permission === "granted") {
           new Notification("มีข้อความใหม่!", {
-            body: "มีลูกค้าส่งข้อความใหม่เข้ามา",
+            body: `มีข้อความใหม่จาก ${newMessages.length} การสนทนา`,
             icon: "/favicon.ico"
           });
         }
@@ -182,20 +293,28 @@ function App() {
     }
   }, [selectedPage, allConversations, loading, filteredConversations]);
 
-  // useEffect สำหรับ realtime polling
+  // 🚀 useEffect สำหรับ clock และ polling
   useEffect(() => {
-    updateIntervalRef.current = setInterval(() => {
+    // อัพเดทนาฬิกาทุก 1 วินาที
+    clockIntervalRef.current = setInterval(() => {
       setCurrentTime(new Date());
-    }, 1000); // อัปเดตเวลาในทุกๆ วินาที
+    }, 1000);
 
+    return () => {
+      if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
+    };
+  }, []);
+
+  // 🚀 useEffect สำหรับ polling ข้อมูลใหม่
+  useEffect(() => {
     if (selectedPage) {
+      // เริ่ม polling ทุก 10 วินาที
       pollingIntervalRef.current = setInterval(() => {
         checkForNewMessages();
-      }, 5000); // เพิ่มเป็น 10 วินาทีเพื่อลดภาระ server
+      }, 5000);
     }
 
     return () => {
-      if (updateIntervalRef.current) clearInterval(updateIntervalRef.current);
       if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
     };
   }, [selectedPage, checkForNewMessages]);
@@ -204,7 +323,6 @@ function App() {
   const loadConversations = async (pageId) => {
     if (!pageId) return;
 
-    // ตรวจสอบ cache ก่อน
     const cached = getCachedData(`conversations_${pageId}`, conversationCache);
     if (cached && !loading) {
       setConversations(cached);
@@ -308,13 +426,13 @@ function App() {
     setFilteredConversations(filtered);
   };
 
-  const toggleCheckbox = (conversationId) => {
+  const toggleCheckbox = useCallback((conversationId) => {
     setSelectedConversationIds((prev) =>
       prev.includes(conversationId)
         ? prev.filter((id) => id !== conversationId)
         : [...prev, conversationId]
     );
-  };
+  }, []);
 
   const handOpenPopup = () => {
     setIsPopupOpen(true);
@@ -325,188 +443,184 @@ function App() {
   };
 
   // 🚀 ฟังก์ชันส่งข้อความที่ปรับปรุงให้ส่งตามลำดับ
-// 🚀 ฟังก์ชันส่งข้อความที่ปรับปรุงให้ส่งตามลำดับ
-const sendMessagesBySelectedSets = async (messageSetIds) => {
-  if (!Array.isArray(messageSetIds) || selectedConversationIds.length === 0) {
-    return;
-  }
+  const sendMessagesBySelectedSets = async (messageSetIds) => {
+    if (!Array.isArray(messageSetIds) || selectedConversationIds.length === 0) {
+      return;
+    }
 
-  try {
-    let successCount = 0;
-    let failCount = 0;
+    try {
+      let successCount = 0;
+      let failCount = 0;
 
-    // แสดงข้อความกำลังส่ง
-    const notification = document.createElement('div');
-    notification.innerHTML = `<strong>🚀 กำลังส่งข้อความ...</strong><br>ส่งไปยัง ${selectedConversationIds.length} การสนทนา`;
-    notification.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: #4CAF50;
-      color: white;
-      padding: 15px 20px;
-      border-radius: 8px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-      z-index: 9999;
-    `;
-    document.body.appendChild(notification);
+      // แสดงข้อความกำลังส่ง
+      const notification = document.createElement('div');
+      notification.innerHTML = `<strong>🚀 กำลังส่งข้อความ...</strong><br>ส่งไปยัง ${selectedConversationIds.length} การสนทนา`;
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #4CAF50;
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        z-index: 9999;
+      `;
+      document.body.appendChild(notification);
 
-    // 🚀 วนลูปส่งข้อความสำหรับแต่ละ conversation
-    for (const conversationId of selectedConversationIds) {
-      const selectedConv = displayData.find(conv => conv.conversation_id === conversationId);
-      const psid = selectedConv?.raw_psid;
+      // วนลูปส่งข้อความสำหรับแต่ละ conversation
+      for (const conversationId of selectedConversationIds) {
+        const selectedConv = displayData.find(conv => conv.conversation_id === conversationId);
+        const psid = selectedConv?.raw_psid;
 
-      if (!psid) {
-        failCount++;
-        continue;
-      }
+        if (!psid) {
+          failCount++;
+          continue;
+        }
 
-      try {
-        // 🔥 ส่งข้อความทีละชุดตามลำดับ
-        for (const setId of messageSetIds) {
-          // โหลดข้อความในชุดนี้
-          const response = await fetch(`http://localhost:8000/custom_messages/${setId}`);
-          if (!response.ok) continue;
-          
-          const messages = await response.json();
-          const sortedMessages = messages.sort((a, b) => a.display_order - b.display_order);
+        try {
+          // ส่งข้อความทีละชุดตามลำดับ
+          for (const setId of messageSetIds) {
+            // โหลดข้อความในชุดนี้
+            const response = await fetch(`http://localhost:8000/custom_messages/${setId}`);
+            if (!response.ok) continue;
+            
+            const messages = await response.json();
+            const sortedMessages = messages.sort((a, b) => a.display_order - b.display_order);
 
-          // ส่งข้อความในชุดนี้ทีละข้อความ
-          for (const messageObj of sortedMessages) {
-            let messageContent = messageObj.content;
+            // ส่งข้อความในชุดนี้ทีละข้อความ
+            for (const messageObj of sortedMessages) {
+              let messageContent = messageObj.content;
 
-            if (messageObj.message_type === "image") {
-              messageContent = `http://localhost:8000/images/${messageContent.replace('[IMAGE] ', '')}`;
-            } else if (messageObj.message_type === "video") {
-              messageContent = `http://localhost:8000/videos/${messageContent.replace('[VIDEO] ', '')}`;
+              if (messageObj.message_type === "image") {
+                messageContent = `http://localhost:8000/images/${messageContent.replace('[IMAGE] ', '')}`;
+              } else if (messageObj.message_type === "video") {
+                messageContent = `http://localhost:8000/videos/${messageContent.replace('[VIDEO] ', '')}`;
+              }
+
+              await fetch(`http://localhost:8000/send/${selectedPage}/${psid}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                  message: messageContent,
+                  type: messageObj.message_type,
+                }),
+              });
+
+              // หน่วงเวลาระหว่างข้อความ
+              await new Promise(resolve => setTimeout(resolve, 500));
             }
 
-            await fetch(`http://localhost:8000/send/${selectedPage}/${psid}`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ 
-                message: messageContent,
-                type: messageObj.message_type,
-              }),
-            });
-
-            // หน่วงเวลาระหว่างข้อความ
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // หน่วงเวลาระหว่างชุดข้อความ (1 วินาที)
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
-
-          // 🔥 หน่วงเวลาระหว่างชุดข้อความ (1 วินาที)
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          successCount++;
+        } catch (err) {
+          console.error(`ส่งข้อความไม่สำเร็จสำหรับ ${conversationId}:`, err);
+          failCount++;
         }
-        
-        successCount++;
-      } catch (err) {
-        console.error(`ส่งข้อความไม่สำเร็จสำหรับ ${conversationId}:`, err);
-        failCount++;
       }
-    }
 
-    // ลบ notification
-    notification.remove();
+      // ลบ notification
+      notification.remove();
 
-    // แสดงผลสรุป
-    if (successCount > 0) {   
-      console.log("✅ ส่งข้อความสำเร็จ:", successCount);
-      // 🔥 เคลียร์ checkbox ที่เลือกไว้หลังส่งสำเร็จ
-      setSelectedConversationIds([]);
-    } else {
-      console.log(" ❌ ส่งข้อความไม่สำเร็จ:", failCount);
-      setSelectedConversationIds([]);
+      // แสดงผลสรุป
+      if (successCount > 0) {   
+        console.log("✅ ส่งข้อความสำเร็จ:", successCount);
+        setSelectedConversationIds([]);
+      } else {
+        console.log(" ❌ ส่งข้อความไม่สำเร็จ:", failCount);
+        setSelectedConversationIds([]);
+      }
+      
+    } catch (error) {
+      console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
+      alert("เกิดข้อผิดพลาดในการส่งข้อความ");
     }
+  };
+
+  const getUpdateStatus = () => {
+    const diffMs = currentTime - lastUpdateTime;
+    const diffMin = Math.floor(diffMs / 60000);
     
-  } catch (error) {
-    console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
-    alert("เกิดข้อผิดพลาดในการส่งข้อความ");
-  }
-};
+    if (diffMin < 1) return "🟢 อัพเดทล่าสุด";
+    if (diffMin < 5) return "🟡 " + diffMin + " นาทีที่แล้ว";
+    return "🔴 " + diffMin + " นาทีที่แล้ว";
+  };
 
-const getUpdateStatus = () => {
-  const diffMs = currentTime - lastUpdateTime;
-  const diffMin = Math.floor(diffMs / 60000);
+  const handleConfirmPopup = (checkedSetIds) => {
+    setSelectedMessageSetIds(checkedSetIds);
+    setIsPopupOpen(false);
+    
+    // ส่งข้อความแบบ background
+    sendMessagesBySelectedSets(checkedSetIds);
+  };
+
   
-  if (diffMin < 1) return "🟢 อัพเดทล่าสุด";
-  if (diffMin < 5) return "🟡 " + diffMin + " นาทีที่แล้ว";
-  return "🔴 " + diffMin + " นาทีที่แล้ว";
-};
-
-const handleConfirmPopup = (checkedSetIds) => {
-  setSelectedMessageSetIds(checkedSetIds);
-  setIsPopupOpen(false);
-  
-  // ส่งข้อความแบบ background
-  sendMessagesBySelectedSets(checkedSetIds);
-};
-
   return (
-    /* Sidebar */
     <div className="app-container">
-                <aside className="sidebar">
-                    <div className="sidebar-header">
-                        <h3 className="sidebar-title">
-  
-                             📋 ตารางการขุด
-                        </h3>
-                    </div>
-                    
-                    <div className="connection-section">
-                        <button onClick={connectFacebook} className="connect-btn facebook-btn">
-                            <svg width="15" height="20" viewBox="0 0 320 512" fill="#fff" className="fb-icon">
-                                <path d="M279.14 288l14.22-92.66h-88.91V127.91c0-25.35 12.42-50.06 52.24-50.06H293V6.26S259.5 0 225.36 0c-73.22 0-121 44.38-121 124.72v70.62H22.89V288h81.47v224h100.2V288z" />
-                            </svg>
-                            <span>เชื่อมต่อ Facebook</span>
-                        </button>
-                    </div>
-    
-                    <div className="page-selector-section">
-                        <label className="select-label">เลือกเพจ</label>
-                        <select value={selectedPage} onChange={handlePageChange} className="select-page">
-                            <option value="">-- เลือกเพจ --</option>
-                            {pages.map((page) => (
-                                <option key={page.id} value={page.id}>
-                                    {page.name}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-    
-                    <nav className="sidebar-nav">
-                        <Link to="/App" className="nav-link">
-                            <span className="nav-icon">🏠</span>
-                            หน้าแรก
-                        </Link>
-                        
-                        <button className="dropdown-toggle" onClick={toggleDropdown}>
-                          <span>
-                            <span className="menu-icon">⚙️</span>
-                            ตั้งค่าระบบขุด
-                          </span>
-                          <span className={`dropdown-arrow ${isDropdownOpen ? 'open' : ''}`}></span>
-                        </button>
-                        <div className={`dropdown-menu ${isDropdownOpen ? 'open' : ''}`}>
-                          <Link to="/manage-message-sets" className="dropdown-item">▶ Default</Link>
-                          <Link to="/MinerGroup" className="dropdown-item">▶ ตามกลุ่ม/ลูกค้า</Link>
-                        </div>
-                        
-                        <a href="#" className="nav-link">
-                            <span className="nav-icon">📊</span>
-                            Dashboard
-                        </a>
-                        <Link to="/settings" className="nav-link">
-                            <span className="nav-icon">🔧</span>
-                            Setting
-                        </Link>
-                    </nav>
-                </aside>
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <h3 className="sidebar-title">
+            📋 ตารางการขุด
+          </h3>
+        </div>
+        
+        <div className="connection-section">
+          <button onClick={connectFacebook} className="connect-btn facebook-btn">
+            <svg width="15" height="20" viewBox="0 0 320 512" fill="#fff" className="fb-icon">
+              <path d="M279.14 288l14.22-92.66h-88.91V127.91c0-25.35 12.42-50.06 52.24-50.06H293V6.26S259.5 0 225.36 0c-73.22 0-121 44.38-121 124.72v70.62H22.89V288h81.47v224h100.2V288z" />
+            </svg>
+            <span>เชื่อมต่อ Facebook</span>
+          </button>
+        </div>
 
-      {/* Main Dashboard */}
+        <div className="page-selector-section">
+          <label className="select-label">เลือกเพจ</label>
+          <select value={selectedPage} onChange={handlePageChange} className="select-page">
+            <option value="">-- เลือกเพจ --</option>
+            {pages.map((page) => (
+              <option key={page.id} value={page.id}>
+                {page.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <nav className="sidebar-nav">
+          <Link to="/App" className="nav-link">
+            <span className="nav-icon">🏠</span>
+            หน้าแรก
+          </Link>
+          
+          <button className="dropdown-toggle" onClick={toggleDropdown}>
+            <span>
+              <span className="menu-icon">⚙️</span>
+              ตั้งค่าระบบขุด
+            </span>
+            <span className={`dropdown-arrow ${isDropdownOpen ? 'open' : ''}`}></span>
+          </button>
+          <div className={`dropdown-menu ${isDropdownOpen ? 'open' : ''}`}>
+            <Link to="/manage-message-sets" className="dropdown-item">▶ Default</Link>
+            <Link to="/MinerGroup" className="dropdown-item">▶ ตามกลุ่ม/ลูกค้า</Link>
+          </div>
+          
+          <a href="#" className="nav-link">
+            <span className="nav-icon">📊</span>
+            Dashboard
+          </a>
+          <Link to="/settings" className="nav-link">
+            <span className="nav-icon">🔧</span>
+            Setting
+          </Link>
+        </nav>
+      </aside>
+
       <main className="main-dashboard">
-       <div className="line-divider">
+        <div className="line-divider">
           <p style={{ marginLeft: "95%" }}>ชื่อ User</p>
-      </div>
+        </div>
 
         <button
           className="filter-toggle-button"
@@ -593,84 +707,84 @@ const handleConfirmPopup = (checkedSetIds) => {
               ❌ ล้างตัวกรอง
             </button>
             <button className="filter-button" onClick={applyFilters}>🔍 ค้นหา</button>
+          </div>
+        )}
+
+        {/* Enhanced Status Bar */}
+        <div className="status-bar">
+          {/* ข้อมูลการเชื่อมต่อ */}
+          <div className="connection-info">
+            <div className="status-badge">
+              🔗 {selectedPage ? `เชื่อมต่อ: ${pages.find(p => p.id === selectedPage)?.name || 'ไม่ทราบชื่อ'}` : 'ยังไม่ได้เชื่อมต่อเพจ'}
             </div>
-            )}
-
-          {/* Enhanced Status Bar */}
-          <div className="status-bar">
-            {/* ข้อมูลการเชื่อมต่อ */}
-            <div className="connection-info">
-              <div className="status-badge">
-                🔗 {selectedPage ? `เชื่อมต่อ: ${pages.find(p => p.id === selectedPage)?.name || 'ไม่ทราบชื่อ'}` : 'ยังไม่ได้เชื่อมต่อเพจ'}
-              </div>
-              
-              {/* สถานะการอัปเดต */}
-              <div className="status-update">
-                {getUpdateStatus()}
-              </div>
-            </div>
-
-            {/* ข้อมูลสถิติ */}
-            <div className="stats-container">
-              <div className="stat-item">
-                <div className="stat-number">
-                  {displayData.length}
-                </div>
-                <div className="stat-label">การสนทนาทั้งหมด</div>
-              </div>
-              
-              <div className="stat-item">
-                <div className="stat-number selected">
-                  {selectedConversationIds.length}
-                </div>
-                <div className="stat-label">เลือกแล้ว</div>
-              </div>
-              
-              <div className="stat-item">
-                <div className="stat-number ready">
-                  {defaultMessages.length}
-                </div>
-                <div className="stat-label">ข้อความพร้อมส่ง</div>
-              </div>
-
-              {/* แสดงข้อความใหม่ */}
-              {displayData.some(conv => 
-                conv.last_user_message_time && 
-                new Date(conv.last_user_message_time) > new Date(Date.now() - 10000) //  5 วินาที
-              ) && (
-                <div className="new-message-alert">
-                  🔴 มีข้อความใหม่!
-                </div>
-              )}
-            </div>
-
-            {/* ข้อมูลเวลา */}
-            <div className="current-time">
-              🕐 {currentTime.toLocaleTimeString('th-TH')}
+            
+            {/* สถานะการอัปเดต */}
+            <div className="status-update">
+              {getUpdateStatus()}
             </div>
           </div>
 
-          {/* Alert Bar สำหรับข้อมูลสำคัญ */}
-          {!selectedPage && (
-            <div className="alert-warning">
-              <span>⚠️</span>
-              <span>กรุณาเลือกเพจ Facebook เพื่อเริ่มใช้งานระบบขุดข้อมูล</span>
+          {/* ข้อมูลสถิติ */}
+          <div className="stats-container">
+            <div className="stat-item">
+              <div className="stat-number">
+                {displayData.length}
+              </div>
+              <div className="stat-label">การสนทนาทั้งหมด</div>
             </div>
-          )}
+            
+            <div className="stat-item">
+              <div className="stat-number selected">
+                {selectedConversationIds.length}
+              </div>
+              <div className="stat-label">เลือกแล้ว</div>
+            </div>
+            
+            <div className="stat-item">
+              <div className="stat-number ready">
+                {defaultMessages.length}
+              </div>
+              <div className="stat-label">ข้อความพร้อมส่ง</div>
+            </div>
 
-          {selectedPage && conversations.length === 0 && !loading && (
-            <div className="alert-info">
-              <span>ℹ️</span>
-              <span>ยังไม่มีข้อมูลการสนทนา กดปุ่ม "🔄 รีเฟรชข้อมูล" เพื่อโหลดข้อมูล</span>
-            </div>
-          )}
+            {/* แสดงข้อความใหม่ */}
+            {displayData.some(conv => 
+              conv.last_user_message_time && 
+              new Date(conv.last_user_message_time) > new Date(Date.now() - 10000) // 10 วินาที
+            ) && (
+              <div className="new-message-alert">
+                🔴 มีข้อความใหม่!
+              </div>
+            )}
+          </div>
 
-          {filteredConversations.length > 0 && (
-            <div className="alert-success">
-              <span>🔍</span>
-              <span>กำลังแสดงผลการกรองข้อมูล: {filteredConversations.length} จาก {allConversations.length} การสนทนา</span>
-            </div>
-          )}
+          {/* ข้อมูลเวลา */}
+          <div className="current-time">
+            🕐 {currentTime.toLocaleTimeString('th-TH')}
+          </div>
+        </div>
+
+        {/* Alert Bar สำหรับข้อมูลสำคัญ */}
+        {!selectedPage && (
+          <div className="alert-warning">
+            <span>⚠️</span>
+            <span>กรุณาเลือกเพจ Facebook เพื่อเริ่มใช้งานระบบขุดข้อมูล</span>
+          </div>
+        )}
+
+        {selectedPage && conversations.length === 0 && !loading && (
+          <div className="alert-info">
+            <span>ℹ️</span>
+            <span>ยังไม่มีข้อมูลการสนทนา กดปุ่ม "🔄 รีเฟรชข้อมูล" เพื่อโหลดข้อมูล</span>
+          </div>
+        )}
+
+        {filteredConversations.length > 0 && (
+          <div className="alert-success">
+            <span>🔍</span>
+            <span>กำลังแสดงผลการกรองข้อมูล: {filteredConversations.length} จาก {allConversations.length} การสนทนา</span>
+          </div>
+        )}
 
         {/* Table */}
         {loading ? (
@@ -701,40 +815,13 @@ const handleConfirmPopup = (checkedSetIds) => {
             </thead>
             <tbody>
               {displayData.map((conv, idx) => (
-                <tr key={conv.conversation_id || idx}>
-                  <td style={{ border: "1px solid #ccc", padding: "8px", textAlign: "center" }}>{idx + 1}</td>
-                  <td className="table">{conv.conversation_name || `บทสนทนาที่ ${idx + 1}`}</td>
-                  <td className="table">
-                    {conv.updated_time
-                      ? new Date(conv.updated_time).toLocaleDateString("th-TH", {
-                        year: 'numeric', month: 'short', day: 'numeric'
-                      })
-                      : "-"
-                    }
-                  </td>
-                  <td className="table" style={{
-                      backgroundColor: conv.last_user_message_time && 
-                        new Date(conv.last_user_message_time) > new Date(Date.now() - 60000) 
-                        ? '#e8f5e9' : 'transparent'
-                    }}>
-                      {conv.last_user_message_time
-                        ? timeAgo(conv.last_user_message_time)
-                        : timeAgo(conv.updated_time)
-                      }
-                    </td>
-                  <td className="table">Context</td>
-                  <td className="table">สินค้าที่สนใจ</td>
-                  <td className="table">Platform</td>
-                  <td className="table">หมวดหมู่ลูกค้า</td>
-                  <td className="table">สถานะการขุด</td>
-                  <td className="table">
-                    <input
-                      type="checkbox"
-                      checked={selectedConversationIds.includes(conv.conversation_id)}
-                      onChange={() => toggleCheckbox(conv.conversation_id)}
-                    />
-                  </td>
-                </tr>
+                <ConversationRow
+                  key={conv.conversation_id || idx}
+                  conv={conv}
+                  idx={idx}
+                  isSelected={selectedConversationIds.includes(conv.conversation_id)}
+                  onToggleCheckbox={toggleCheckbox}
+                />
               ))}
             </tbody>
           </table>
@@ -746,7 +833,7 @@ const handleConfirmPopup = (checkedSetIds) => {
             className={`button-default ${selectedConversationIds.length > 0 ? "button-active" : ""}`}
             disabled={loading || selectedConversationIds.length === 0}
           >
-            📥 ขุด {/*({selectedConversationIds.length} รายการ)*/}
+            📥 ขุด
           </button>
 
           {isPopupOpen && (
@@ -761,8 +848,6 @@ const handleConfirmPopup = (checkedSetIds) => {
           <button onClick={handleloadConversations} className="Re-default" disabled={loading || !selectedPage}>
             {loading ? "⏳ กำลังโหลด..." : "🔄 รีเฟรชข้อมูล"}
           </button>
-
-          
         </div>
       </main>
     </div>
