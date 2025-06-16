@@ -2,13 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import '../CSS/Default.css';
 import {
-  fetchPages, connectFacebook, saveMessageToDB, saveMessagesBatch
-  , getMessagesBySetId, deleteMessageFromDB, createMessageSet, getMessageSetsByPage, updateMessageSet
+  saveMessageToDB, saveMessagesBatch, getMessagesBySetId, 
+  deleteMessageFromDB, createMessageSet, getMessageSetsByPage, updateMessageSet
 } from "../Features/Tool";
-
+import Sidebar from './Sidebar';
 
 function SetDefault() {
-  const [pages, setPages] = useState([]);
   const [selectedPage, setSelectedPage] = useState("");
   const [loading, setLoading] = useState(false);
   const [messageSequence, setMessageSequence] = useState([]);
@@ -23,30 +22,23 @@ function SetDefault() {
     preview: null
   });
 
-  // 1. เพิ่ม state สำหรับควบคุม dropdown (เพิ่มในส่วนบนของ component)
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-
-  // เพิ่มฟังก์ชัน toggle
-  const toggleDropdown = () => {
-    setIsDropdownOpen(!isDropdownOpen);
-  };
-
+  // Listen for page changes from Sidebar
   useEffect(() => {
-    const loadPages = async () => {
-      try {
-        const pagesData = await fetchPages();
-        setPages(pagesData);
-
-        const savedPage = localStorage.getItem("selectedPage");
-        if (savedPage && pagesData.some(page => page.id === savedPage)) {
-          setSelectedPage(savedPage);
-        }
-      } catch (err) {
-        console.error("ไม่สามารถโหลดเพจได้:", err);
-      }
+    const handlePageChange = (event) => {
+      const pageId = event.detail.pageId;
+      setSelectedPage(pageId);
     };
 
-    loadPages();
+    window.addEventListener('pageChanged', handlePageChange);
+    
+    const savedPage = localStorage.getItem("selectedPage");
+    if (savedPage) {
+      setSelectedPage(savedPage);
+    }
+
+    return () => {
+      window.removeEventListener('pageChanged', handlePageChange);
+    };
   }, []);
 
   // โหลดข้อมูลถ้ามาจากโหมดแก้ไข
@@ -118,25 +110,6 @@ function SetDefault() {
       loadMessages();
     }
   }, [selectedPage, isEditMode]);
-
-  const handlePageChange = (e) => {
-    const pageId = e.target.value;
-    console.log(`📄 เปลี่ยนเพจเป็น: ${pageId}`);
-    setSelectedPage(pageId);
-
-    if (pageId) {
-      localStorage.setItem("selectedPage", pageId);
-    } else {
-      localStorage.removeItem("selectedPage");
-    }
-
-    setCurrentInput({
-      type: 'text',
-      content: '',
-      file: null,
-      preview: null
-    });
-  };
 
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
@@ -360,65 +333,9 @@ function SetDefault() {
     }
   };
 
-  const selectedPageName = pages.find(page => page.id === selectedPage)?.name || "ไม่ได้เลือกเพจ";
-
   return (
     <div className="app-container">
-                <aside className="sidebar">
-                    <div className="sidebar-header">
-                        <h3 className="sidebar-title">
-                          
-                             📋 ตารางการขุด
-                        </h3>
-                    </div>
-                    
-                    <div className="connection-section">
-                        <button onClick={connectFacebook} className="connect-btn facebook-btn">
-                            <svg width="15" height="20" viewBox="0 0 320 512" fill="#fff" className="fb-icon">
-                                <path d="M279.14 288l14.22-92.66h-88.91V127.91c0-25.35 12.42-50.06 52.24-50.06H293V6.26S259.5 0 225.36 0c-73.22 0-121 44.38-121 124.72v70.62H22.89V288h81.47v224h100.2V288z" />
-                            </svg>
-                            <span>เชื่อมต่อ Facebook</span>
-                        </button>
-                    </div>
-    
-                    <div className="page-selector-section">
-                        <label className="select-label">เลือกเพจ</label>
-                        <select value={selectedPage} onChange={handlePageChange} className="select-page">
-                            <option value="">-- เลือกเพจ --</option>
-                            {pages.map((page) => (
-                                <option key={page.id} value={page.id}>
-                                    {page.name}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-    
-                    <nav className="sidebar-nav">
-                        <Link to="/App" className="nav-link">
-                            <span className="nav-icon">🏠</span>
-                            หน้าแรก
-                        </Link>
-                        <button className="dropdown-toggle" onClick={toggleDropdown}>
-                          <span>
-                            <span className="menu-icon">⚙️</span>
-                            ตั้งค่าระบบขุด
-                          </span>
-                          <span className={`dropdown-arrow ${isDropdownOpen ? 'open' : ''}`}></span>
-                        </button>
-                        <div className={`dropdown-menu ${isDropdownOpen ? 'open' : ''}`}>
-                          <Link to="/manage-message-sets" className="dropdown-item">▶ Default</Link>
-                          <Link to="/MinerGroup" className="dropdown-item">▶ ตามกลุ่ม/ลูกค้า</Link>
-                        </div>
-                        <a href="#" className="nav-link">
-                            <span className="nav-icon">📊</span>
-                            Dashboard
-                        </a>
-                         <Link to="/settings" className="nav-link">
-                            <span className="nav-icon">🔧</span>
-                            Setting
-                        </Link>
-                    </nav>
-                </aside>
+      <Sidebar />
 
       <div className="message-settings-container">
         <h1 className="header">
@@ -426,7 +343,9 @@ function SetDefault() {
         </h1>
 
         <div className="page-info">
-          <p style={{ textAlign: "center" }}><strong>เพจที่เลือก:</strong> {selectedPageName}</p>
+          <p style={{ textAlign: "center" }}>
+            <strong>เพจที่เลือก:</strong> {selectedPage ? "กำลังใช้งานเพจที่เลือก" : "กรุณาเลือกเพจ"}
+          </p>
         </div>
 
         <div className="sequence-container">

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import '../CSS/App.css';
-import { fetchPages, connectFacebook, getMessagesBySetId, fetchConversations } from "../Features/Tool";
-import { Link } from 'react-router-dom';
+import { fetchPages, getMessagesBySetId, fetchConversations } from "../Features/Tool";
+import Sidebar from "./Sidebar"; 
 import Popup from "./MinerPopup";
 
 // 🚀 Component สำหรับแสดงเวลาแบบ optimized
@@ -152,7 +152,6 @@ function App() {
   const [defaultMessages, setDefaultMessages] = useState([]);
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [selectedMessageSetIds, setSelectedMessageSetIds] = useState([]);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
 
@@ -170,10 +169,6 @@ function App() {
     return filteredConversations.length > 0 ? filteredConversations : conversations;
   }, [filteredConversations, conversations]);
 
-  const toggleDropdown = () => {
-    setIsDropdownOpen(!isDropdownOpen);
-  };
-
   // 🚀 ฟังก์ชันตรวจสอบ cache
   const getCachedData = (key, cache) => {
     const cached = cache.current[key];
@@ -190,12 +185,22 @@ function App() {
     };
   };
 
+  // Listen for page changes from Sidebar
   useEffect(() => {
+    const handlePageChange = (event) => {
+      const newPageId = event.detail.pageId;
+      setSelectedPage(newPageId);
+    };
+
+    window.addEventListener('pageChanged', handlePageChange);
+    
+    // Load saved page on mount
     const savedPage = localStorage.getItem("selectedPage");
     if (savedPage) {
       setSelectedPage(savedPage);
     }
-    
+
+    // Load pages for display
     fetchPages()
       .then(setPages)
       .catch(err => console.error("ไม่สามารถโหลดเพจได้:", err));
@@ -203,6 +208,10 @@ function App() {
     if (Notification.permission === "default") {
       Notification.requestPermission();
     }
+
+    return () => {
+      window.removeEventListener('pageChanged', handlePageChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -308,7 +317,7 @@ function App() {
   // 🚀 useEffect สำหรับ polling ข้อมูลใหม่
   useEffect(() => {
     if (selectedPage) {
-      // เริ่ม polling ทุก 10 วินาที
+      // เริ่ม polling ทุก 5 วินาที
       pollingIntervalRef.current = setInterval(() => {
         checkForNewMessages();
       }, 5000);
@@ -368,12 +377,6 @@ function App() {
     conversationCache.current = {};
     messageCache.current = {};
     loadConversations(selectedPage);
-  };
-
-  const handlePageChange = (e) => {
-    const pageId = e.target.value;
-    setSelectedPage(pageId);
-    localStorage.setItem("selectedPage", pageId);
   };
 
   const applyFilters = () => {
@@ -560,62 +563,7 @@ function App() {
   
   return (
     <div className="app-container">
-      <aside className="sidebar">
-        <div className="sidebar-header">
-          <h3 className="sidebar-title">
-            📋 ตารางการขุด
-          </h3>
-        </div>
-        
-        <div className="connection-section">
-          <button onClick={connectFacebook} className="connect-btn facebook-btn">
-            <svg width="15" height="20" viewBox="0 0 320 512" fill="#fff" className="fb-icon">
-              <path d="M279.14 288l14.22-92.66h-88.91V127.91c0-25.35 12.42-50.06 52.24-50.06H293V6.26S259.5 0 225.36 0c-73.22 0-121 44.38-121 124.72v70.62H22.89V288h81.47v224h100.2V288z" />
-            </svg>
-            <span>เชื่อมต่อ Facebook</span>
-          </button>
-        </div>
-
-        <div className="page-selector-section">
-          <label className="select-label">เลือกเพจ</label>
-          <select value={selectedPage} onChange={handlePageChange} className="select-page">
-            <option value="">-- เลือกเพจ --</option>
-            {pages.map((page) => (
-              <option key={page.id} value={page.id}>
-                {page.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <nav className="sidebar-nav">
-          <Link to="/App" className="nav-link">
-            <span className="nav-icon">🏠</span>
-            หน้าแรก
-          </Link>
-          
-          <button className="dropdown-toggle" onClick={toggleDropdown}>
-            <span>
-              <span className="menu-icon">⚙️</span>
-              ตั้งค่าระบบขุด
-            </span>
-            <span className={`dropdown-arrow ${isDropdownOpen ? 'open' : ''}`}></span>
-          </button>
-          <div className={`dropdown-menu ${isDropdownOpen ? 'open' : ''}`}>
-            <Link to="/manage-message-sets" className="dropdown-item">▶ Default</Link>
-            <Link to="/MinerGroup" className="dropdown-item">▶ ตามกลุ่ม/ลูกค้า</Link>
-          </div>
-          
-          <a href="#" className="nav-link">
-            <span className="nav-icon">📊</span>
-            Dashboard
-          </a>
-          <Link to="/settings" className="nav-link">
-            <span className="nav-icon">🔧</span>
-            Setting
-          </Link>
-        </nav>
-      </aside>
+      <Sidebar />
 
       <main className="main-dashboard">
         <div className="line-divider">

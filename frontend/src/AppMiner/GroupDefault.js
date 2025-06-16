@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import '../CSS/GroupDefault.css';
 import { fetchPages, connectFacebook } from "../Features/Tool";
+import Sidebar from "./Sidebar"; 
 
 function GroupDefault() {
   const [pages, setPages] = useState([]);
@@ -22,6 +23,25 @@ function GroupDefault() {
   const toggleDropdown = () => {
     setIsDropdownOpen(!isDropdownOpen);
   };
+
+  // Listen for page changes from Sidebar
+  useEffect(() => {
+    const handlePageChange = (event) => {
+      const pageId = event.detail.pageId;
+      setSelectedPage(pageId);
+    };
+
+    window.addEventListener('pageChanged', handlePageChange);
+    
+    const savedPage = localStorage.getItem("selectedPage");
+    if (savedPage) {
+      setSelectedPage(savedPage);
+    }
+
+    return () => {
+      window.removeEventListener('pageChanged', handlePageChange);
+    };
+  }, []);
 
   // 🔥 ฟังก์ชันดึงกลุ่มลูกค้าตาม page ID
   const getGroupsForPage = (pageId) => {
@@ -242,60 +262,7 @@ function GroupDefault() {
 
   return (
     <div className="app-container">
-      <aside className="sidebar">
-        <div className="sidebar-header">
-          <h3 className="sidebar-title">
-            📋 ตารางการขุด
-          </h3>
-        </div>
-        
-        <div className="connection-section">
-          <button onClick={connectFacebook} className="connect-btn facebook-btn">
-            <svg width="15" height="20" viewBox="0 0 320 512" fill="#fff" className="fb-icon">
-              <path d="M279.14 288l14.22-92.66h-88.91V127.91c0-25.35 12.42-50.06 52.24-50.06H293V6.26S259.5 0 225.36 0c-73.22 0-121 44.38-121 124.72v70.62H22.89V288h81.47v224h100.2V288z" />
-            </svg>
-            <span>เชื่อมต่อ Facebook</span>
-          </button>
-        </div>
-
-        <div className="page-selector-section">
-          <label className="select-label">เลือกเพจ</label>
-          <select value={selectedPage} onChange={handlePageChange} className="select-page">
-            <option value="">-- เลือกเพจ --</option>
-            {pages.map((page) => (
-              <option key={page.id} value={page.id}>
-                {page.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <nav className="sidebar-nav">
-          <Link to="/App" className="nav-link">
-            <span className="nav-icon">🏠</span>
-            หน้าแรก
-          </Link>
-          <button className="dropdown-toggle" onClick={toggleDropdown}>
-            <span>
-              <span className="menu-icon">⚙️</span>
-              ตั้งค่าระบบขุด
-            </span>
-            <span className={`dropdown-arrow ${isDropdownOpen ? 'open' : ''}`}></span>
-          </button>
-          <div className={`dropdown-menu ${isDropdownOpen ? 'open' : ''}`}>
-            <Link to="/manage-message-sets" className="dropdown-item">▶ Default</Link>
-            <Link to="/MinerGroup" className="dropdown-item">▶ ตามกลุ่ม/ลูกค้า</Link>
-          </div>
-          <a href="#" className="nav-link">
-            <span className="nav-icon">📊</span>
-            Dashboard
-          </a>
-           <Link to="/settings" className="nav-link">
-              <span className="nav-icon">🔧</span>
-              Setting
-            </Link>
-        </nav>
-      </aside>
+      <Sidebar />
 
       <div className="group-default-container">
         <div className="group-default-header">
