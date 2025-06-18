@@ -58,7 +58,8 @@ function Sidebar() {
       <div className="connection-section">
         <button onClick={connectFacebook} className="connect-btn facebook-btn">
           <svg width="15" height="20" viewBox="0 0 320 512" fill="#fff" className="fb-icon">
-            <path d="M279.14 288l14.22-92.66h-88.91V127.91c0-25.35 12.42-50.06 52.24-50.06H293V6.26S259.5 0 225.36 0c-73.22 0-121 44.38-121 124.72v70.62H22.89V288h81.47v224h100.2V288z" />
+            <path d="M279.14 288l14.22-92.66h-88.91V127.91c0-25.35 12.42-50.06 52.24-50.06H293V6.26S259.5 
+            0 225.36 0c-73.22 0-121 44.38-121 124.72v70.62H22.89V288h81.47v224h100.2V288z" />
           </svg>
           <span>เชื่อมต่อ Facebook</span>
         </button>
