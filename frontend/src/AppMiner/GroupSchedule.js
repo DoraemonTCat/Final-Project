@@ -8,9 +8,11 @@ function GroupSchedule() {
   const [pages, setPages] = useState([]);
   const [selectedPage, setSelectedPage] = useState("");
   const [selectedGroups, setSelectedGroups] = useState([]);
-  const [scheduleType, setScheduleType] = useState('immediate'); // immediate, scheduled
+  const [scheduleType, setScheduleType] = useState('immediate'); // immediate, scheduled, user-inactive
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
+  const [inactivityPeriod, setInactivityPeriod] = useState('1'); // จำนวนเวลาที่หายไป
+  const [inactivityUnit, setInactivityUnit] = useState('days'); // หน่วยเวลา (hours, days, weeks, months)
   const [repeatType, setRepeatType] = useState('once'); // once, daily, weekly, monthly
   const [repeatCount, setRepeatCount] = useState(1);
   const [repeatDays, setRepeatDays] = useState([]);
@@ -134,6 +136,13 @@ function GroupSchedule() {
       }
     }
 
+    if (scheduleType === 'user-inactive') {
+      if (!inactivityPeriod || inactivityPeriod < 1) {
+        alert("กรุณากำหนดระยะเวลาที่หายไป");
+        return false;
+      }
+    }
+
     if (repeatType === 'weekly' && repeatDays.length === 0) {
       alert("กรุณาเลือกวันที่ต้องการส่งซ้ำ");
       return false;
@@ -164,6 +173,8 @@ function GroupSchedule() {
       type: scheduleType,
       date: scheduleDate,
       time: scheduleTime,
+      inactivityPeriod: scheduleType === 'user-inactive' ? inactivityPeriod : null,
+      inactivityUnit: scheduleType === 'user-inactive' ? inactivityUnit : null,
       repeat: {
         type: repeatType,
         count: repeatCount,
@@ -192,6 +203,35 @@ function GroupSchedule() {
 
   const getScheduleSummary = () => {
     if (scheduleType === 'immediate') return 'ส่งทันที';
+    
+    if (scheduleType === 'user-inactive') {
+      let summary = `ส่งเมื่อ User หายไปเกิน ${inactivityPeriod} ${
+        inactivityUnit === 'hours' ? 'ชั่วโมง' :
+        inactivityUnit === 'days' ? 'วัน' :
+        inactivityUnit === 'weeks' ? 'สัปดาห์' : 'เดือน'
+      }`;
+      
+      if (repeatType !== 'once') {
+        summary += '\n';
+        switch (repeatType) {
+          case 'daily':
+            summary += `ตรวจสอบและส่งซ้ำทุกวัน`;
+            break;
+          case 'weekly':
+            summary += `ตรวจสอบและส่งซ้ำทุกสัปดาห์ วัน${repeatDays.map(d => weekDays.find(w => w.id === d)?.short).join(', ')}`;
+            break;
+          case 'monthly':
+            summary += `ตรวจสอบและส่งซ้ำทุกเดือน`;
+            break;
+        }
+        
+        if (endDate) {
+          summary += ` จนถึง ${new Date(endDate).toLocaleDateString('th-TH')}`;
+        }
+      }
+      
+      return summary;
+    }
     
     let summary = `ส่งวันที่ ${new Date(scheduleDate).toLocaleDateString('th-TH')} เวลา ${scheduleTime} น.`;
     
@@ -293,6 +333,20 @@ function GroupSchedule() {
                   กำหนดเวลา
                 </span>
               </label>
+
+              <label className="radio-option">
+                <input
+                  type="radio"
+                  name="scheduleType"
+                  value="user-inactive"
+                  checked={scheduleType === 'user-inactive'}
+                  onChange={(e) => setScheduleType(e.target.value)}
+                />
+                <span className="radio-label">
+                  <span className="radio-icon">🕰️</span>
+                  ตามระยะเวลาที่หาย
+                </span>
+              </label>
             </div>
 
             {scheduleType === 'scheduled' && (
@@ -317,6 +371,34 @@ function GroupSchedule() {
                     className="form-input"
                   />
                 </div>
+              </div>
+            )}
+
+            {scheduleType === 'user-inactive' && (
+              <div className="inactivity-settings">
+                <label className="form-label">ส่งข้อความเมื่อ User หายไปเกิน:</label>
+                <div className="inactivity-inputs">
+                  <input
+                    type="number"
+                    value={inactivityPeriod}
+                    onChange={(e) => setInactivityPeriod(e.target.value)}
+                    min="1"
+                    className="form-input inactivity-number"
+                  />
+                  <select
+                    value={inactivityUnit}
+                    onChange={(e) => setInactivityUnit(e.target.value)}
+                    className="form-input inactivity-select"
+                  >
+                    <option value="hours">ชั่วโมง</option>
+                    <option value="days">วัน</option>
+                    <option value="weeks">สัปดาห์</option>
+                    <option value="months">เดือน</option>
+                  </select>
+                </div>
+                <p className="inactivity-hint">
+                  💡 ระบบจะตรวจสอบทุกๆ ชั่วโมง และส่งข้อความไปยัง User ที่ไม่มีการตอบกลับตามระยะเวลาที่กำหนด
+                </p>
               </div>
             )}
           </div>

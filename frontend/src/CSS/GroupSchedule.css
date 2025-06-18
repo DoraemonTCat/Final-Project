@@ -395,3 +395,55 @@
     justify-content: center;      /* จัดข้อความกึ่งกลาง */
   }
 }
+/* =======================
+   Date & Time Inputs
+   ======================= */
+
+/* Container สำหรับ input วันที่และเวลา */
+.datetime-inputs {
+  display: grid;                  /* ใช้ CSS Grid */
+  grid-template-columns: 1fr 1fr; /* แบ่งเป็น 2 คอลัมน์เท่ากัน */
+  gap: 20px;                      /* ระยะห่างระหว่างคอลัมน์ */
+  margin-top: 20px;               /* ระยะห่างด้านบน */
+}
+
+/* =======================
+   Inactivity Settings
+   ======================= */
+
+/* Container สำหรับตั้งค่าระยะเวลาที่หาย */
+.inactivity-settings {
+  margin-top: 20px;               /* ระยะห่างด้านบน */
+}
+
+/* Container สำหรับ input ระยะเวลา */
+.inactivity-inputs {
+  display: flex;                  /* จัด layout แบบ flex */
+  gap: 15px;                      /* ระยะห่างระหว่าง input */
+  margin-top: 10px;               /* ระยะห่างด้านบน */
+  align-items: center;            /* จัดกึ่งกลางแนวตั้ง */
+}
+
+/* Input สำหรับจำนวนเวลา */
+.inactivity-number {
+  width: 100px;                   /* ความกว้างคงที่ */
+  text-align: center;             /* จัดตัวเลขกึ่งกลาง */
+}
+
+/* Select สำหรับหน่วยเวลา */
+.inactivity-select {
+  flex: 1;                        /* ใช้พื้นที่ที่เหลือ */
+  max-width: 200px;               /* ความกว้างสูงสุด */
+}
+
+/* Hint text สำหรับอธิบายการทำงาน */
+.inactivity-hint {
+  margin-top: 15px;               /* ระยะห่างด้านบน */
+  padding: 12px 16px;             /* ระยะห่างภายใน */
+  background: linear-gradient(135deg, rgba(66, 153, 225, 0.1), rgba(72, 187, 120, 0.1));  /* gradient อ่อน */
+  border-radius: 8px;             /* มุมโค้งมน */
+  border-left: 4px solid #4299e1; /* เส้นขอบซ้าย */
+  font-size: 14px;                /* ขนาดตัวอักษร */
+  color: #2d3748;                 /* สีตัวอักษร */
+  line-height: 1.5;               /* ระยะห่างระหว่างบรรทัด */
+}
