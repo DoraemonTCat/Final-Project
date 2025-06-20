@@ -18,6 +18,7 @@ function GroupSchedule() {
   const [repeatDays, setRepeatDays] = useState([]);
   const [endDate, setEndDate] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [editingScheduleId, setEditingScheduleId] = useState(null);
   const navigate = useNavigate();
 
   const weekDays = [
@@ -95,17 +96,52 @@ function GroupSchedule() {
       setSelectedPage(savedPage);
     }
 
+    // 🔥 ตรวจสอบว่าเป็นการแก้ไขหรือไม่
+    const editingId = localStorage.getItem("editingScheduleId");
+    if (editingId) {
+      setEditingScheduleId(parseInt(editingId));
+    }
+
     fetchPages()
       .then(setPages)
       .catch(err => console.error("ไม่สามารถโหลดเพจได้:", err));
 
-    // ตั้งค่าวันที่เริ่มต้น
+    // 🔥 โหลดการตั้งค่าที่บันทึกไว้ล่าสุด (ถ้ามี)
+    const savedScheduleKey = `lastScheduleSettings_${savedPage}`;
+    const savedSettings = localStorage.getItem(savedScheduleKey);
+    
+    if (savedSettings) {
+      try {
+        const settings = JSON.parse(savedSettings);
+        // โหลดค่าที่บันทึกไว้
+        setScheduleType(settings.scheduleType || 'immediate');
+        setScheduleDate(settings.scheduleDate || new Date().toISOString().split('T')[0]);
+        setScheduleTime(settings.scheduleTime || new Date().toTimeString().slice(0, 5));
+        setInactivityPeriod(settings.inactivityPeriod || '1');
+        setInactivityUnit(settings.inactivityUnit || 'days');
+        setRepeatType(settings.repeatType || 'once');
+        setRepeatCount(settings.repeatCount || 1);
+        setRepeatDays(settings.repeatDays || []);
+        setEndDate(settings.endDate || '');
+      } catch (error) {
+        console.error('Error loading saved settings:', error);
+        // ถ้าโหลดไม่สำเร็จ ใช้ค่า default
+        setDefaultScheduleValues();
+      }
+    } else {
+      // ถ้าไม่มีการบันทึกไว้ ใช้ค่า default
+      setDefaultScheduleValues();
+    }
+  }, [navigate]);
+
+  // 🔥 ฟังก์ชันตั้งค่า default
+  const setDefaultScheduleValues = () => {
     const today = new Date();
     const dateStr = today.toISOString().split('T')[0];
     const timeStr = today.toTimeString().slice(0, 5);
     setScheduleDate(dateStr);
     setScheduleTime(timeStr);
-  }, [navigate]);
+  };
 
   const handlePageChange = (e) => {
     const pageId = e.target.value;
@@ -163,41 +199,93 @@ function GroupSchedule() {
   const saveSchedule = () => {
     if (!validateSchedule()) return;
 
+    // 🔥 บันทึกการตั้งค่าปัจจุบันสำหรับใช้ครั้งต่อไป
+    const currentSettings = {
+      scheduleType,
+      scheduleDate,
+      scheduleTime,
+      inactivityPeriod,
+      inactivityUnit,
+      repeatType,
+      repeatCount,
+      repeatDays,
+      endDate
+    };
+    
+    const savedScheduleKey = `lastScheduleSettings_${selectedPage}`;
+    localStorage.setItem(savedScheduleKey, JSON.stringify(currentSettings));
+
     // 🔥 ดึงข้อความที่บันทึกไว้แยกตามเพจ
     const messageKey = `groupMessages_${selectedPage}`;
     const messages = JSON.parse(localStorage.getItem(messageKey) || '[]');
 
-    const scheduleData = {
-      id: Date.now(),
-      pageId: selectedPage, // 🔥 เพิ่ม pageId
-      type: scheduleType,
-      date: scheduleDate,
-      time: scheduleTime,
-      inactivityPeriod: scheduleType === 'user-inactive' ? inactivityPeriod : null,
-      inactivityUnit: scheduleType === 'user-inactive' ? inactivityUnit : null,
-      repeat: {
-        type: repeatType,
-        count: repeatCount,
-        days: repeatDays,
-        endDate: endDate
-      },
-      groups: selectedGroups.map(g => g.id),
-      groupNames: selectedGroups.map(g => g.name), // 🔥 เก็บชื่อกลุ่มด้วย
-      messages: messages,
-      createdAt: new Date().toISOString()
-    };
-
-    // 🔥 บันทึกตารางการส่งแยกตามเพจ
+    // 🔥 ตรวจสอบว่าเป็นการแก้ไขหรือการสร้างใหม่
     const schedules = getSchedulesForPage(selectedPage);
-    schedules.push(scheduleData);
-    saveSchedulesForPage(selectedPage, schedules);
+    
+    if (editingScheduleId) {
+      // แก้ไขตารางเวลาที่มีอยู่ - ทับของเดิมเลย
+      const updatedSchedules = schedules.map(schedule => {
+        if (schedule.id === editingScheduleId) {
+          // ทับข้อมูลเดิมทั้งหมด
+          return {
+            id: schedule.id, // คง ID เดิมไว้
+            pageId: selectedPage,
+            type: scheduleType,
+            date: scheduleDate,
+            time: scheduleTime,
+            inactivityPeriod: scheduleType === 'user-inactive' ? inactivityPeriod : null,
+            inactivityUnit: scheduleType === 'user-inactive' ? inactivityUnit : null,
+            repeat: {
+              type: repeatType,
+              count: repeatCount,
+              days: repeatDays,
+              endDate: endDate
+            },
+            groups: selectedGroups.map(g => g.id),
+            groupNames: selectedGroups.map(g => g.name),
+            messages: messages,
+            createdAt: schedule.createdAt, // คงวันที่สร้างเดิม
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return schedule;
+      });
+      
+      saveSchedulesForPage(selectedPage, updatedSchedules);
+      alert("แก้ไขการตั้งเวลาสำเร็จ!");
+    } else {
+      // สร้างตารางเวลาใหม่
+      const scheduleData = {
+        id: Date.now(),
+        pageId: selectedPage,
+        type: scheduleType,
+        date: scheduleDate,
+        time: scheduleTime,
+        inactivityPeriod: scheduleType === 'user-inactive' ? inactivityPeriod : null,
+        inactivityUnit: scheduleType === 'user-inactive' ? inactivityUnit : null,
+        repeat: {
+          type: repeatType,
+          count: repeatCount,
+          days: repeatDays,
+          endDate: endDate
+        },
+        groups: selectedGroups.map(g => g.id),
+        groupNames: selectedGroups.map(g => g.name),
+        messages: messages,
+        createdAt: new Date().toISOString()
+      };
+
+      schedules.push(scheduleData);
+      saveSchedulesForPage(selectedPage, schedules);
+      alert("บันทึกการตั้งเวลาสำเร็จ!");
+    }
 
     // 🔥 เคลียร์ข้อมูลที่เลือกไว้
     localStorage.removeItem("selectedCustomerGroups");
     localStorage.removeItem("selectedCustomerGroupsPageId");
     localStorage.removeItem(messageKey);
+    localStorage.removeItem("editingScheduleId");
 
-    alert("บันทึกการตั้งเวลาสำเร็จ!");
     navigate('/MinerGroup'); // กลับไปยังหน้ากลุ่มลูกค้า
   };
 
@@ -267,7 +355,7 @@ function GroupSchedule() {
         <div className="schedule-header">
           <h1 className="schedule-title">
             <span className="title-icon">⏰</span>
-            ตั้งเวลาและความถี่การส่ง
+            {editingScheduleId ? 'แก้ไขการตั้งเวลา' : 'ตั้งเวลาและความถี่การส่ง'}
             {selectedPageInfo && (
               <span style={{ fontSize: '18px', color: '#718096', marginLeft: '10px' }}>
                 - {selectedPageInfo.name}
@@ -502,7 +590,7 @@ function GroupSchedule() {
               className="save-schedule-btn"
             >
               <span className="btn-icon">💾</span>
-              บันทึกการตั้งค่า
+              {editingScheduleId ? 'บันทึกการแก้ไข' : 'บันทึกการตั้งค่า'}
             </button>
           </div>
         </div>

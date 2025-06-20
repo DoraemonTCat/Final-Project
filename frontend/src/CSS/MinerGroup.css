@@ -27,10 +27,12 @@
   align-items: center;
   gap: 12px;
   margin-bottom: 20px;
+  
 }
 
 .title-icon {
   font-size: 36px;
+  
 }
 
 /* Breadcrumb */
@@ -178,6 +180,7 @@
   font-size: 16px;
   margin-bottom: 20px;
   transition: all 0.3s ease;
+  
 }
 
 .group-name-input:focus {
@@ -306,6 +309,7 @@
   font-size: 48px;
   margin-bottom: 16px;
   text-align: center;
+  padding-right: 22px;
 }
 
 .group-name {
@@ -314,6 +318,7 @@
   color: #2d3748;
   margin-bottom: 12px;
   text-align: center;
+  padding-right: 20px;
 }
 
 .group-stats {
@@ -329,6 +334,9 @@
   gap: 6px;
   color: #718096;
   font-size: 14px;
+  padding-right: 20px;
+  
+  
 }
 
 .stat-icon {

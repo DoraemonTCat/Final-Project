@@ -18,6 +18,7 @@ function GroupDefault() {
   });
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [editingScheduleId, setEditingScheduleId] = useState(null);
   const navigate = useNavigate();
 
   const toggleDropdown = () => {
@@ -60,8 +61,13 @@ function GroupDefault() {
   useEffect(() => {
     // 🔥 ตรวจสอบว่าเป็นโหมดแก้ไขหรือไม่
     const editMode = localStorage.getItem("editingMode");
-    if (editMode === "true") {
+    const scheduleId = localStorage.getItem("editingScheduleId");
+    
+    if (editMode === "true" || scheduleId) {
       setIsEditMode(true);
+      if (scheduleId) {
+        setEditingScheduleId(parseInt(scheduleId));
+      }
       localStorage.removeItem("editingMode"); // ลบหลังใช้
     }
 
@@ -89,16 +95,15 @@ function GroupDefault() {
       .then(setPages)
       .catch(err => console.error("ไม่สามารถโหลดเพจได้:", err));
 
-    // 🔥 โหลดข้อความที่บันทึกไว้ของกลุ่มที่เลือก (ถ้ามี)
-    if (selectedGroupsData.length > 0 && selectedGroupsData[0].messages) {
+    // 🔥 โหลดข้อความที่บันทึกไว้
+    const messageKey = `groupMessages_${savedPage}`;
+    const savedMessages = JSON.parse(localStorage.getItem(messageKey) || '[]');
+    
+    if (savedMessages.length > 0) {
+      setMessageSequence(savedMessages);
+    } else if (selectedGroupsData.length > 0 && selectedGroupsData[0].messages) {
+      // ถ้าไม่มีใน localStorage ให้โหลดจากกลุ่ม
       setMessageSequence(selectedGroupsData[0].messages);
-    } else {
-      // โหลดข้อความที่บันทึกไว้ (ถ้ามี) - แยกตามเพจด้วย
-      const messageKey = `groupMessages_${savedPage}`;
-      const savedMessages = JSON.parse(localStorage.getItem(messageKey) || '[]');
-      if (savedMessages.length > 0) {
-        setMessageSequence(savedMessages);
-      }
     }
   }, [navigate]);
 
@@ -226,6 +231,7 @@ function GroupDefault() {
     saveGroupsForPage(selectedPage, updatedGroups);
   
     console.log("ข้อความถูกบันทึกเรียบร้อยแล้ว:", messageSequence);
+    alert("บันทึกข้อความสำเร็จ!");
   };
 
   const saveAndProceed = () => {
@@ -234,17 +240,35 @@ function GroupDefault() {
       return;
     }
 
-    // บันทึกข้อมูลก่อน
-    saveMessages();
+    // บันทึกข้อความลง localStorage แยกตามเพจ
+    const messageKey = `groupMessages_${selectedPage}`;
+    localStorage.setItem(messageKey, JSON.stringify(messageSequence));
+
+    // อัพเดทข้อความในแต่ละกลุ่ม
+    const allGroups = getGroupsForPage(selectedPage);
+    const selectedGroupIds = JSON.parse(localStorage.getItem("selectedCustomerGroups") || '[]');
     
-    // 🔥 ถ้าเป็นโหมดแก้ไข ให้กลับไปหน้า MinerGroup
-    if (isEditMode) {
-      // เคลียร์ข้อมูลการเลือก
+    const updatedGroups = allGroups.map(group => {
+      if (selectedGroupIds.includes(group.id)) {
+        return { ...group, messages: messageSequence };
+      }
+      return group;
+    });
+
+    saveGroupsForPage(selectedPage, updatedGroups);
+    
+    // 🔥 ถ้าเป็นโหมดแก้ไขและมี scheduleId ให้ไปหน้าตั้งเวลาเพื่อแก้ไขต่อ
+    if (isEditMode && editingScheduleId) {
+      // ส่งต่อ scheduleId ไปหน้าตั้งเวลา
+      localStorage.setItem("editingScheduleId", editingScheduleId.toString());
+      navigate('/GroupSchedule');
+    } else if (isEditMode && !editingScheduleId) {
+      // ถ้าเป็นการแก้ไขข้อความอย่างเดียว (ไม่มี schedule)
       localStorage.removeItem("selectedCustomerGroups");
       localStorage.removeItem("selectedCustomerGroupsPageId");
       navigate('/MinerGroup');
     } else {
-      // ไปหน้าตั้งเวลา
+      // ไปหน้าตั้งเวลาแบบปกติ (สร้างใหม่)
       navigate('/GroupSchedule');
     }
   };
@@ -279,7 +303,7 @@ function GroupDefault() {
             <span className="breadcrumb-item">1. เลือกกลุ่ม</span>
             <span className="breadcrumb-separator">›</span>
             <span className="breadcrumb-item active">2. ตั้งค่าข้อความ</span>
-            {!isEditMode && (
+            {((!isEditMode) || (isEditMode && editingScheduleId)) && (
               <>
                 <span className="breadcrumb-separator">›</span>
                 <span className="breadcrumb-item">3. ตั้งเวลา</span>
@@ -444,7 +468,9 @@ function GroupDefault() {
             className="proceed-btn"
             disabled={messageSequence.length === 0}
           >
-            {isEditMode ? 'บันทึกและกลับ' : 'ถัดไป: ตั้งเวลาส่ง'}
+            {isEditMode ? 
+              (editingScheduleId ? 'ถัดไป: แก้ไขการตั้งเวลา' : 'บันทึกและกลับ') 
+              : 'ถัดไป: ตั้งเวลาส่ง'}
             <span className="arrow-icon">→</span>
           </button>
         </div>

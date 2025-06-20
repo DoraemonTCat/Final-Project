@@ -13,8 +13,13 @@ function SetMiner() {
   const [selectedGroups, setSelectedGroups] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [showScheduleSelectModal, setShowScheduleSelectModal] = useState(false);
+  const [schedulesToSelect, setSchedulesToSelect] = useState([]);
   const [editingGroupId, setEditingGroupId] = useState(null);
   const [editingGroupName, setEditingGroupName] = useState("");
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [viewingGroupSchedules, setViewingGroupSchedules] = useState([]);
+  const [viewingGroupName, setViewingGroupName] = useState('');
   const navigate = useNavigate();
 
   const toggleDropdown = () => {
@@ -33,6 +38,26 @@ function SetMiner() {
     if (!pageId) return;
     const key = `customerGroups_${pageId}`;
     localStorage.setItem(key, JSON.stringify(groups));
+  };
+
+  // 🔥 ฟังก์ชันดึงตารางการส่งตาม page ID
+  const getSchedulesForPage = (pageId) => {
+    if (!pageId) return [];
+    const key = `miningSchedules_${pageId}`;
+    return JSON.parse(localStorage.getItem(key) || '[]');
+  };
+
+  // 🔥 ฟังก์ชันบันทึกตารางการส่งตาม page ID
+  const saveSchedulesForPage = (pageId, schedules) => {
+    if (!pageId) return;
+    const key = `miningSchedules_${pageId}`;
+    localStorage.setItem(key, JSON.stringify(schedules));
+  };
+
+  // 🔥 ฟังก์ชันตรวจสอบว่ากลุ่มมีการตั้งเวลาไว้หรือไม่
+  const getGroupSchedules = (groupId) => {
+    const schedules = getSchedulesForPage(selectedPage);
+    return schedules.filter(schedule => schedule.groups.includes(groupId));
   };
 
   useEffect(() => {
@@ -175,12 +200,111 @@ function SetMiner() {
 
   // 🔥 ฟังก์ชันแก้ไขข้อความในกลุ่ม
   const editGroupMessages = (groupId) => {
+    // ตรวจสอบว่ากลุ่มนี้มีการตั้งเวลาหรือไม่
+    const schedules = getGroupSchedules(groupId);
+    const group = customerGroups.find(g => g.id === groupId);
+    
     // บันทึกข้อมูลกลุ่มที่เลือกเพื่อแก้ไข
     localStorage.setItem("selectedCustomerGroups", JSON.stringify([groupId]));
     localStorage.setItem("selectedCustomerGroupsPageId", selectedPage);
-    localStorage.setItem("editingMode", "true");
     
+    if (schedules.length > 1) {
+      // ถ้ามีหลาย schedule ให้เลือก
+      setSchedulesToSelect(schedules);
+      setEditingGroupId(groupId);
+      setEditingGroupName(group?.name || '');
+      setShowScheduleSelectModal(true);
+    } else if (schedules.length === 1) {
+      // ถ้ามี schedule เดียว ใช้อันนั้นเลย
+      const schedule = schedules[0];
+      localStorage.setItem("editingScheduleId", schedule.id.toString());
+      
+      // บันทึกข้อความของ schedule นี้
+      const messageKey = `groupMessages_${selectedPage}`;
+      localStorage.setItem(messageKey, JSON.stringify(schedule.messages || []));
+      
+      navigate('/GroupDefault');
+    } else {
+      // ถ้าไม่มีการตั้งเวลา
+      localStorage.setItem("editingMode", "true");
+      
+      // โหลดข้อความของกลุ่มนี้ (ถ้ามี)
+      if (group && group.messages) {
+        const messageKey = `groupMessages_${selectedPage}`;
+        localStorage.setItem(messageKey, JSON.stringify(group.messages));
+      }
+      
+      navigate('/GroupDefault');
+    }
+  };
+
+  // 🔥 ฟังก์ชันเลือก schedule ที่จะแก้ไข
+  const selectScheduleToEdit = (schedule) => {
+    localStorage.setItem("editingScheduleId", schedule.id.toString());
+    
+    // บันทึกข้อความของ schedule นี้
+    const messageKey = `groupMessages_${selectedPage}`;
+    localStorage.setItem(messageKey, JSON.stringify(schedule.messages || []));
+    
+    setShowScheduleSelectModal(false);
     navigate('/GroupDefault');
+  };
+
+  // 🔥 ฟังก์ชันแสดงตารางเวลาของกลุ่ม
+  const viewGroupSchedules = (group) => {
+    const schedules = getGroupSchedules(group.id);
+    setViewingGroupSchedules(schedules);
+    setViewingGroupName(group.name);
+    setShowScheduleModal(true);
+  };
+
+  // 🔥 ฟังก์ชันลบตารางเวลา
+  const deleteSchedule = (scheduleId) => {
+    if (window.confirm("คุณต้องการลบตารางเวลานี้หรือไม่?")) {
+      const schedules = getSchedulesForPage(selectedPage);
+      const updatedSchedules = schedules.filter(s => s.id !== scheduleId);
+      saveSchedulesForPage(selectedPage, updatedSchedules);
+      
+      // อัพเดท modal
+      const newViewingSchedules = viewingGroupSchedules.filter(s => s.id !== scheduleId);
+      setViewingGroupSchedules(newViewingSchedules);
+      
+      // ถ้าไม่มีตารางเหลือ ปิด modal
+      if (newViewingSchedules.length === 0) {
+        setShowScheduleModal(false);
+      }
+    }
+  };
+
+  // 🔥 ฟังก์ชันแก้ไขตารางเวลา
+  const editSchedule = (schedule) => {
+    // บันทึกข้อมูลกลุ่มและตารางเวลาที่ต้องการแก้ไข
+    localStorage.setItem("selectedCustomerGroups", JSON.stringify(schedule.groups));
+    localStorage.setItem("selectedCustomerGroupsPageId", selectedPage);
+    localStorage.setItem("editingScheduleId", schedule.id.toString());
+    
+    // บันทึกข้อความของ schedule นี้
+    const messageKey = `groupMessages_${selectedPage}`;
+    localStorage.setItem(messageKey, JSON.stringify(schedule.messages || []));
+    
+    // บันทึกการตั้งค่าเวลาเดิม
+    const scheduleSettings = {
+      scheduleType: schedule.type,
+      scheduleDate: schedule.date,
+      scheduleTime: schedule.time,
+      inactivityPeriod: schedule.inactivityPeriod || '1',
+      inactivityUnit: schedule.inactivityUnit || 'days',
+      repeatType: schedule.repeat.type,
+      repeatCount: schedule.repeat.count || 1,
+      repeatDays: schedule.repeat.days || [],
+      endDate: schedule.repeat.endDate || ''
+    };
+    
+    const savedScheduleKey = `lastScheduleSettings_${selectedPage}`;
+    localStorage.setItem(savedScheduleKey, JSON.stringify(scheduleSettings));
+    
+    // ไปหน้าตั้งเวลาเพื่อแก้ไข
+    navigate('/GroupSchedule');
   };
 
   const filteredGroups = customerGroups.filter(group =>
@@ -384,22 +508,41 @@ function SetMiner() {
                       ) : (
                         <h3 className="group-name">{group.name}</h3>
                       )}
-                      <div className="group-stats">
-                        <span className="stat-item">
-                          <span className="stat-icon">👤</span>
-                          {group.customers.length} สมาชิก
-                        </span>
-                        <span className="stat-item">
-                          <span className="stat-icon">💬</span>
-                          {group.messages?.length || 0} ข้อความ
-                        </span>
-                      </div>
+                     
+                      
+                      {/* 🔥 แสดงการตั้งเวลาที่มีอยู่ */}
+                      {getGroupSchedules(group.id).length > 0 && (
+                        <div style={{
+                          marginTop: '12px',
+                          padding: '8px',
+                          background: 'linear-gradient(135deg, rgba(72, 187, 120, 0.1), rgba(56, 161, 105, 0.1))',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          color: '#38a169',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          viewGroupSchedules(group);
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'linear-gradient(135deg, rgba(72, 187, 120, 0.2), rgba(56, 161, 105, 0.2))';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'linear-gradient(135deg, rgba(72, 187, 120, 0.1), rgba(56, 161, 105, 0.1))';
+                        }}
+                        >
+                          <span style={{ fontWeight: '600' }}>⏰ มีการตั้งเวลา {getGroupSchedules(group.id).length} รายการ (คลิกเพื่อดู)</span>
+                        </div>
+                      )}
+                      
                       <div className="group-date">
                         สร้างเมื่อ {new Date(group.createdAt).toLocaleDateString('th-TH')}
                       </div>
                       
                       {/* 🔥 ปุ่มแก้ไข */}
-                      <div style={{ marginTop: '12px', display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                      <div style={{ marginTop: '12px', display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -459,6 +602,8 @@ function SetMiner() {
                     >
                       🗑️
                     </button>
+                   
+                    
                   </div>
                 ))}
               </div>
@@ -480,6 +625,188 @@ function SetMiner() {
             </>
           )}
         </div>
+
+        {/* 🔥 Modal แสดงตารางเวลา */}
+        {showScheduleModal && (
+          <div className="add-group-modal">
+            <div className="modal-content" style={{ maxWidth: '600px' }}>
+              <h3>⏰ ตารางเวลาของกลุ่ม: {viewingGroupName}</h3>
+              
+              <div style={{ maxHeight: '400px', overflowY: 'auto', marginTop: '20px' }}>
+                {viewingGroupSchedules.map((schedule, index) => (
+                  <div key={schedule.id} style={{
+                    background: '#f8f9fa',
+                    padding: '15px',
+                    borderRadius: '8px',
+                    marginBottom: '15px',
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ margin: '0 0 8px 0', fontWeight: '600', color: '#2d3748' }}>
+                          #{index + 1} - {
+                            schedule.type === 'immediate' ? 'ส่งทันที' :
+                            schedule.type === 'scheduled' ? `ส่งตามเวลา: ${new Date(schedule.date).toLocaleDateString('th-TH')} ${schedule.time} น.` :
+                            `ส่งเมื่อหายไป ${schedule.inactivityPeriod} ${
+                              schedule.inactivityUnit === 'hours' ? 'ชั่วโมง' :
+                              schedule.inactivityUnit === 'days' ? 'วัน' :
+                              schedule.inactivityUnit === 'weeks' ? 'สัปดาห์' : 'เดือน'
+                            }`
+                          }
+                        </p>
+                        
+                        {schedule.repeat.type !== 'once' && (
+                          <p style={{ margin: '0 0 4px 0', fontSize: '13px', color: '#718096' }}>
+                            🔄 ทำซ้ำ: {
+                              schedule.repeat.type === 'daily' ? 'ทุกวัน' :
+                              schedule.repeat.type === 'weekly' ? `ทุกสัปดาห์` :
+                              'ทุกเดือน'
+                            }
+                            {schedule.repeat.endDate && ` จนถึง ${new Date(schedule.repeat.endDate).toLocaleDateString('th-TH')}`}
+                          </p>
+                        )}
+                        
+                        <p style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#a0aec0' }}>
+                          สร้างเมื่อ: {new Date(schedule.createdAt).toLocaleString('th-TH')}
+                        </p>
+                        
+                        {schedule.updatedAt && (
+                          <p style={{ margin: '0', fontSize: '12px', color: '#e53e3e' }}>
+                            แก้ไขล่าสุด: {new Date(schedule.updatedAt).toLocaleString('th-TH')}
+                          </p>
+                        )}
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={() => editSchedule(schedule)}
+                          style={{
+                            background: '#e6f3ff',
+                            color: '#3182ce',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '8px 12px',
+                            fontSize: '13px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = '#3182ce';
+                            e.currentTarget.style.color = 'white';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = '#e6f3ff';
+                            e.currentTarget.style.color = '#3182ce';
+                          }}
+                        >
+                          ✏️ แก้ไข
+                        </button>
+                        
+                        <button
+                          onClick={() => deleteSchedule(schedule.id)}
+                          style={{
+                            background: '#fee',
+                            color: '#e53e3e',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '8px 12px',
+                            fontSize: '13px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = '#e53e3e';
+                            e.currentTarget.style.color = 'white';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = '#fee';
+                            e.currentTarget.style.color = '#e53e3e';
+                          }}
+                        >
+                          🗑️ ลบ
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="modal-actions" style={{ marginTop: '20px' }}>
+                <button
+                  onClick={() => setShowScheduleModal(false)}
+                  className="cancel-btn"
+                  style={{ width: '100%' }}
+                >
+                  ปิด
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🔥 Modal เลือก Schedule ที่จะแก้ไข */}
+        {showScheduleSelectModal && (
+          <div className="add-group-modal">
+            <div className="modal-content" style={{ maxWidth: '600px' }}>
+              <h3>📋 เลือกตารางเวลาที่ต้องการแก้ไขข้อความ</h3>
+              <p style={{ color: '#718096', fontSize: '14px', marginBottom: '20px' }}>
+                กลุ่ม "{editingGroupName}" มีการตั้งเวลาหลายรายการ กรุณาเลือกรายการที่ต้องการแก้ไข
+              </p>
+              
+              <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                {schedulesToSelect.map((schedule, index) => (
+                  <div 
+                    key={schedule.id} 
+                    onClick={() => selectScheduleToEdit(schedule)}
+                    style={{
+                      background: '#f8f9fa',
+                      padding: '15px',
+                      borderRadius: '8px',
+                      marginBottom: '10px',
+                      border: '2px solid transparent',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = '#3182ce';
+                      e.currentTarget.style.background = '#e6f3ff';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'transparent';
+                      e.currentTarget.style.background = '#f8f9fa';
+                    }}
+                  >
+                    <p style={{ margin: '0 0 8px 0', fontWeight: '600', color: '#2d3748' }}>
+                      #{index + 1} - {
+                        schedule.type === 'immediate' ? 'ส่งทันที' :
+                        schedule.type === 'scheduled' ? `ส่งตามเวลา: ${new Date(schedule.date).toLocaleDateString('th-TH')} ${schedule.time} น.` :
+                        `ส่งเมื่อหายไป ${schedule.inactivityPeriod} ${
+                          schedule.inactivityUnit === 'hours' ? 'ชั่วโมง' :
+                          schedule.inactivityUnit === 'days' ? 'วัน' :
+                          schedule.inactivityUnit === 'weeks' ? 'สัปดาห์' : 'เดือน'
+                        }`
+                      }
+                    </p>
+                    
+                    <p style={{ margin: '0', fontSize: '12px', color: '#718096' }}>
+                      จำนวนข้อความ: {schedule.messages?.length || 0} ข้อความ
+                    </p>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="modal-actions" style={{ marginTop: '20px' }}>
+                <button
+                  onClick={() => setShowScheduleSelectModal(false)}
+                  className="cancel-btn"
+                  style={{ width: '100%' }}
+                >
+                  ยกเลิก
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
