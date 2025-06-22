@@ -10,6 +10,8 @@ import reportWebVitals from './reportWebVitals';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import GroupSchedule from './AppMiner/GroupSchedule';
 import Settings from './AppMiner/Settings';
+import ScheduleDashboard from './AppMiner/ScheduleDashboard';
+
 
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
@@ -25,6 +27,9 @@ root.render(
         <Route path="/manage-message-sets" element={<ManageMessageSets />} />
         <Route path="/GroupSchedule" element={<GroupSchedule />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/schedule-dashboard" element={<ScheduleDashboard />} />
+        
+        
         {/* Add more routes as needed */}
 
       </Routes>

@@ -10,6 +10,7 @@ from app import config  # ✅ ใช้ config แทน app.app
 from pydantic import BaseModel
 from typing import Optional
 from app.config import image_dir,vid_dir
+from app.service.message_scheduler import message_scheduler
 
 router = APIRouter()
 
@@ -489,3 +490,58 @@ async def get_conversations_with_last_message(page_id: str):
             status_code=500, 
             content={"error": f"เกิดข้อผิดพลาดในการดึงข้อมูล: {str(e)}"}
         )
+
+@router.post("/schedule/activate")
+async def activate_schedule(request: Request):
+    """เปิดใช้งาน schedule"""
+    data = await request.json()
+    page_id = data.get('page_id')
+    schedule = data.get('schedule')
+    
+    # เพิ่ม schedule เข้าระบบ
+    message_scheduler.add_schedule(page_id, schedule)
+    
+    # ถ้าเป็นแบบส่งทันที
+    if schedule.get('type') == 'immediate':
+        await message_scheduler.process_schedule(page_id, schedule)
+    
+    return {"status": "success", "message": "Schedule activated"}
+
+@router.post("/schedule/deactivate")
+async def deactivate_schedule(request: Request):
+    """ปิดใช้งาน schedule"""
+    data = await request.json()
+    page_id = data.get('page_id')
+    schedule_id = data.get('schedule_id')
+    
+    message_scheduler.remove_schedule(page_id, schedule_id)
+    
+    return {"status": "success", "message": "Schedule deactivated"}
+
+@router.get("/schedule/test-inactivity/{page_id}")
+async def test_user_inactivity(page_id: str):
+    """ทดสอบระบบตรวจสอบ user ที่หายไป"""
+    # Mock schedule for testing
+    test_schedule = {
+        "id": 999,
+        "type": "user-inactive",
+        "inactivityPeriod": "1",
+        "inactivityUnit": "hours",
+        "groups": [1],
+        "messages": [
+            {
+                "type": "text",
+                "content": "สวัสดีค่ะ คุณหายไปนานเลยนะคะ 😊",
+                "order": 0
+            },
+            {
+                "type": "text", 
+                "content": "มีโปรโมชั่นพิเศษสำหรับคุณ!",
+                "order": 1
+            }
+        ]
+    }
+    
+    await message_scheduler.check_user_inactivity(page_id, test_schedule)
+    
+    return {"status": "success", "message": "Inactivity check completed"}

@@ -138,3 +138,39 @@ export async function deleteMessageSet(setId) {
   if (!res.ok) throw new Error("ไม่สามารถลบชุดข้อความได้");
   return res.json();
 }
+// เพิ่มฟังก์ชันสำหรับ activate/deactivate schedule
+export const activateSchedule = async (pageId, schedule) => {
+  try {
+    const response = await axios.post('http://localhost:8000/schedule/activate', {
+      page_id: pageId,
+      schedule: schedule
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error activating schedule:', error);
+    throw error;
+  }
+};
+
+export const deactivateSchedule = async (pageId, scheduleId) => {
+  try {
+    const response = await axios.post('http://localhost:8000/schedule/deactivate', {
+      page_id: pageId,
+      schedule_id: scheduleId
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error deactivating schedule:', error);
+    throw error;
+  }
+};
+
+export const testInactivityCheck = async (pageId) => {
+  try {
+    const response = await axios.get(`http://localhost:8000/schedule/test-inactivity/${pageId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error testing inactivity:', error);
+    throw error;
+  }
+};

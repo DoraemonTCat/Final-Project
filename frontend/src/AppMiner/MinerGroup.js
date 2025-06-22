@@ -314,6 +314,28 @@ function SetMiner() {
   // 🔥 แสดงชื่อเพจในหัวข้อถ้ามีการเลือกเพจ
   const selectedPageInfo = selectedPage ? pages.find(p => p.id === selectedPage) : null;
 
+  const testInactivityCheck = async (groupId) => {
+    if (!selectedPage) {
+      alert("กรุณาเลือกเพจก่อน");
+      return;
+    }
+    
+    try {
+      const response = await fetch(`http://localhost:8000/schedule/test-inactivity/${selectedPage}?group_id=${groupId}`);
+      
+      if (!response.ok) {
+        throw new Error('Test failed');
+      }
+      
+      const result = await response.json();
+      alert("ทดสอบการตรวจสอบ User ที่หายไปสำเร็จ!");
+      
+    } catch (error) {
+      console.error('Error testing inactivity:', error);
+      alert("เกิดข้อผิดพลาดในการทดสอบ");
+    }
+  };
+
   return (
     <div className="app-container">
        <Sidebar />
@@ -589,6 +611,7 @@ function SetMiner() {
                         >
                           💬 แก้ไขข้อความ
                         </button>
+                        
                       </div>
                     </div>
                     
