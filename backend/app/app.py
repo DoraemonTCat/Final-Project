@@ -9,7 +9,6 @@ import uvicorn
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import os
-from app.service.message_scheduler import message_scheduler
 import asyncio
 import threading
 

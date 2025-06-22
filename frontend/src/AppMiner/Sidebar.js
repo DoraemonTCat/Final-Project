@@ -106,10 +106,10 @@ function Sidebar() {
           </Link>
         </div>
         
-        <a href="#" className="nav-link">
-          <span className="nav-icon">📊</span>
+        <Link to="/schedule-dashboard" className={`nav-link ${isActive('/App') || isActive('/') ? 'active' : ''}`}>
+           <span className="nav-icon">📊</span>
           Dashboard
-        </a>
+        </Link>
         
         <Link to="/settings" className={`nav-link ${isActive('/settings') ? 'active' : ''}`}>
           <span className="nav-icon">🔧</span>
