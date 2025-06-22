@@ -10,6 +10,7 @@ from app import config  # ✅ ใช้ config แทน app.app
 from pydantic import BaseModel
 from typing import Optional
 from app.config import image_dir,vid_dir
+from app.service.message_scheduler import message_scheduler
 
 router = APIRouter()
 

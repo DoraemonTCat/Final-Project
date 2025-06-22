@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import '../CSS/ScheduleDashboard.css';
 import Sidebar from "./Sidebar";
 
@@ -9,6 +8,8 @@ function ScheduleDashboard() {
   const [sentLogs, setSentLogs] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [activeSchedules, setActiveSchedules] = useState([]);
+  const [selectedSchedule, setSelectedSchedule] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   useEffect(() => {
     const savedPage = localStorage.getItem("selectedPage");
@@ -48,7 +49,7 @@ function ScheduleDashboard() {
     setRefreshing(true);
     
     try {
-      // .นระบบจริงจะเรียก API เพื่อดึง status
+      // ในระบบจริงจะเรียก API เพื่อดึง status
       // ตอนนี้ simulate delay
       await new Promise(resolve => setTimeout(resolve, 1000));
       
@@ -146,36 +147,29 @@ function ScheduleDashboard() {
   };
 
   const viewScheduleDetails = (schedule) => {
-    // สร้าง modal หรือหน้าใหม่สำหรับดูรายละเอียด
-    const details = `
-📋 รายละเอียดตารางเวลา
+    setSelectedSchedule(schedule);
+    setShowDetailModal(true);
+  };
 
-ประเภท: ${
-      schedule.type === 'immediate' ? 'ส่งทันที' :
-      schedule.type === 'scheduled' ? 'ตามเวลา' : 'User หายไป'
+  const getScheduleDescription = (schedule) => {
+    if (schedule.type === 'immediate') return 'ส่งทันที';
+    if (schedule.type === 'scheduled') return `${new Date(schedule.date).toLocaleDateString('th-TH')} ${schedule.time}`;
+    if (schedule.type === 'user-inactive') {
+      return `${schedule.inactivityPeriod} ${
+        schedule.inactivityUnit === 'hours' ? 'ชั่วโมง' :
+        schedule.inactivityUnit === 'days' ? 'วัน' :
+        schedule.inactivityUnit === 'weeks' ? 'สัปดาห์' : 'เดือน'
+      }`;
     }
+    return '-';
+  };
 
-กลุ่ม: ${schedule.groupNames?.join(', ') || 'ไม่ระบุ'}
+  const goToMinerGroup = () => {
+    window.location.href = '/MinerGroup';
+  };
 
-เงื่อนไข: ${
-      schedule.type === 'user-inactive' ? 
-        `หายไป ${schedule.inactivityPeriod} ${schedule.inactivityUnit}` :
-      schedule.type === 'scheduled' ? 
-        `${schedule.date} ${schedule.time}` :
-        '-'
-    }
-
-จำนวนข้อความ: ${schedule.messages?.length || 0}
-
-ข้อความ:
-${schedule.messages?.map((msg, idx) => 
-  `${idx + 1}. ${msg.type === 'text' ? msg.content : `[${msg.type.toUpperCase()}] ${msg.content}`}`
-).join('\n') || 'ไม่มีข้อความ'}
-
-สถานะ: ${getScheduleStatus(schedule)}
-    `;
-    
-    alert(details);
+  const goBack = () => {
+    window.location.href = '/MinerGroup';
   };
 
   return (
@@ -242,9 +236,9 @@ ${schedule.messages?.map((msg, idx) =>
           {schedules.length === 0 ? (
             <div className="empty-table">
               <p>ยังไม่มีตารางเวลาสำหรับเพจนี้</p>
-              <Link to="/MinerGroup" className="create-link">
+              <button onClick={goToMinerGroup} className="create-link">
                 สร้างตารางเวลาใหม่
-              </Link>
+              </button>
             </div>
           ) : (
             <table>
@@ -269,13 +263,7 @@ ${schedule.messages?.map((msg, idx) =>
                         {schedule.type === 'scheduled' && '📅 ตามเวลา'}
                         {schedule.type === 'user-inactive' && '🕰️ User หาย'}
                       </td>
-                      <td>
-                        {schedule.type === 'user-inactive' && 
-                          `${schedule.inactivityPeriod} ${schedule.inactivityUnit}`}
-                        {schedule.type === 'scheduled' && 
-                          `${new Date(schedule.date).toLocaleDateString('th-TH')} ${schedule.time}`}
-                        {schedule.type === 'immediate' && '-'}
-                      </td>
+                      <td>{getScheduleDescription(schedule)}</td>
                       <td>{schedule.messages?.length || 0}</td>
                       <td>
                         <span 
@@ -309,10 +297,214 @@ ${schedule.messages?.map((msg, idx) =>
           )}
         </div>
 
-        <Link to="/MinerGroup" className="back-link">
+        <button onClick={goBack} className="back-link">
           ← กลับไปหน้ากลุ่ม
-        </Link>
+        </button>
       </div>
+
+      {/* Modal แสดงรายละเอียด */}
+      {showDetailModal && selectedSchedule && (
+        <div className="modal-overlay" onClick={() => setShowDetailModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>📋 รายละเอียดตารางเวลา</h3>
+              <button className="modal-close" onClick={() => setShowDetailModal(false)}>✖</button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="detail-section">
+                <h4>ข้อมูลทั่วไป</h4>
+                <p><strong>ประเภท:</strong> {
+                  selectedSchedule.type === 'immediate' ? 'ส่งทันที' :
+                  selectedSchedule.type === 'scheduled' ? 'ตามเวลา' : 'User หายไป'
+                }</p>
+                <p><strong>กลุ่ม:</strong> {selectedSchedule.groupNames?.join(', ') || 'ไม่ระบุ'}</p>
+                <p><strong>เงื่อนไข:</strong> {getScheduleDescription(selectedSchedule)}</p>
+                {selectedSchedule.repeat && selectedSchedule.repeat.type !== 'once' && (
+                  <p><strong>ทำซ้ำ:</strong> {
+                    selectedSchedule.repeat.type === 'daily' ? 'ทุกวัน' :
+                    selectedSchedule.repeat.type === 'weekly' ? 'ทุกสัปดาห์' : 'ทุกเดือน'
+                  }</p>
+                )}
+              </div>
+
+              <div className="detail-section">
+                <h4>ข้อความ ({selectedSchedule.messages?.length || 0})</h4>
+                <div className="messages-list">
+                  {selectedSchedule.messages?.map((msg, idx) => (
+                    <div key={idx} className="message-item">
+                      <span className="message-number">{idx + 1}.</span>
+                      <span className="message-type">
+                        {msg.type === 'text' ? '💬' : msg.type === 'image' ? '🖼️' : '📹'}
+                      </span>
+                      <span className="message-content">
+                        {msg.type === 'text' ? msg.content : `[${msg.type.toUpperCase()}] ${msg.content}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="detail-section">
+                <h4>สถานะ</h4>
+                <p><strong>สถานะปัจจุบัน:</strong> {getScheduleStatus(selectedSchedule)}</p>
+                <p><strong>สร้างเมื่อ:</strong> {new Date(selectedSchedule.createdAt).toLocaleString('th-TH')}</p>
+                {selectedSchedule.updatedAt && (
+                  <p><strong>แก้ไขล่าสุด:</strong> {new Date(selectedSchedule.updatedAt).toLocaleString('th-TH')}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button className="modal-btn" onClick={() => setShowDetailModal(false)}>ปิด</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style jsx>{`
+        .modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.5);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+        }
+
+        .modal-content {
+          background: white;
+          border-radius: 12px;
+          width: 90%;
+          max-width: 600px;
+          max-height: 80vh;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 20px;
+          border-bottom: 1px solid #e2e8f0;
+        }
+
+        .modal-header h3 {
+          margin: 0;
+          font-size: 20px;
+          color: #2d3748;
+        }
+
+        .modal-close {
+          background: none;
+          border: none;
+          font-size: 24px;
+          cursor: pointer;
+          color: #718096;
+          padding: 0;
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 4px;
+          transition: all 0.2s;
+        }
+
+        .modal-close:hover {
+          background: #f7fafc;
+          color: #2d3748;
+        }
+
+        .modal-body {
+          padding: 20px;
+          overflow-y: auto;
+          flex: 1;
+        }
+
+        .detail-section {
+          margin-bottom: 24px;
+        }
+
+        .detail-section h4 {
+          font-size: 16px;
+          color: #4a5568;
+          margin-bottom: 12px;
+        }
+
+        .detail-section p {
+          margin: 8px 0;
+          color: #2d3748;
+        }
+
+        .messages-list {
+          background: #f7fafc;
+          border-radius: 8px;
+          padding: 12px;
+          max-height: 200px;
+          overflow-y: auto;
+        }
+
+        .message-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px;
+          background: white;
+          border-radius: 6px;
+          margin-bottom: 8px;
+        }
+
+        .message-item:last-child {
+          margin-bottom: 0;
+        }
+
+        .message-number {
+          font-weight: 600;
+          color: #718096;
+          min-width: 24px;
+        }
+
+        .message-type {
+          font-size: 18px;
+        }
+
+        .message-content {
+          flex: 1;
+          color: #2d3748;
+          font-size: 14px;
+          word-break: break-word;
+        }
+
+        .modal-footer {
+          padding: 20px;
+          border-top: 1px solid #e2e8f0;
+          display: flex;
+          justify-content: flex-end;
+        }
+
+        .modal-btn {
+          padding: 10px 20px;
+          background: #4299e1;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .modal-btn:hover {
+          background: #3182ce;
+        }
+      `}</style>
     </div>
   );
 }

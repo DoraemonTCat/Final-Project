@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse
 import os
 import asyncio
 import threading
+from app.service.message_scheduler import message_scheduler
 
 # โหลด .env ไฟล์
 load_dotenv()
@@ -55,21 +56,16 @@ app.include_router(custom_messages.router)
 async def root():
     return {"message": "Facebook Bot API with FastAPI is running."}
 
-# สำหรับรันแอป
-if __name__ == "__main__":
-    uvicorn.run("backend.app:app", host="0.0.0.0", port=8000, reload=True)
-    
-
 # เพิ่มฟังก์ชันสำหรับ run scheduler
 def run_scheduler():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(message_scheduler.start_schedule_monitoring())
 
-# เพิ่มใน main block
+# สำหรับรันแอป
 if __name__ == "__main__":
     # Start scheduler in background thread
     scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
     scheduler_thread.start()
     
-    uvicorn.run("backend.app:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.app:app", host="0.0.0.0", port=8000, reload=True)
