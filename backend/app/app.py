@@ -12,6 +12,13 @@ import os
 import asyncio
 import threading
 from app.service.message_scheduler import message_scheduler
+import logging
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 # โหลด .env ไฟล์
 load_dotenv()
@@ -58,14 +65,35 @@ async def root():
 
 # เพิ่มฟังก์ชันสำหรับ run scheduler
 def run_scheduler():
+    """รัน scheduler ใน thread แยก"""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(message_scheduler.start_schedule_monitoring())
+    
+    try:
+        logging.info("Starting message scheduler...")
+        loop.run_until_complete(message_scheduler.start_schedule_monitoring())
+    except Exception as e:
+        logging.error(f"Scheduler error: {e}")
+    finally:
+        loop.close()
 
-# สำหรับรันแอป
-if __name__ == "__main__":
+# Event handlers
+@app.on_event("startup")
+async def startup_event():
+    """เริ่มต้นเมื่อ app เริ่มทำงาน"""
+    logging.info("Starting FastAPI application...")
+    
     # Start scheduler in background thread
     scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
     scheduler_thread.start()
-    
+    logging.info("Message scheduler thread started")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """ปิดเมื่อ app หยุดทำงาน"""
+    logging.info("Shutting down...")
+    message_scheduler.stop()
+
+# สำหรับรันแอป
+if __name__ == "__main__":
     uvicorn.run("app.app:app", host="0.0.0.0", port=8000, reload=True)

@@ -12,6 +12,7 @@ from typing import Optional
 from app.config import image_dir,vid_dir
 from app.service.message_scheduler import message_scheduler
 
+
 router = APIRouter()
 
 # ================================
@@ -102,6 +103,7 @@ def facebook_callback(code: str, db: Session = Depends(get_db)):
         page_id = page["id"]
         access_token = page["access_token"]
         page_name = page.get("name", f"เพจ {page_id}")
+        message_scheduler.set_page_tokens(page_tokens)  # ✅ เก็บ page_tokens ใน message_scheduler
 
         # ✅ เก็บใน local dictionary แทน config
         page_tokens[page_id] = access_token
@@ -498,6 +500,9 @@ async def activate_schedule(request: Request):
     page_id = data.get('page_id')
     schedule = data.get('schedule')
     
+    # อัพเดท page tokens ให้ scheduler ก่อนเพิ่ม schedule
+    message_scheduler.set_page_tokens(page_tokens)
+    
     # เพิ่ม schedule เข้าระบบ
     message_scheduler.add_schedule(page_id, schedule)
     
@@ -506,6 +511,32 @@ async def activate_schedule(request: Request):
         await message_scheduler.process_schedule(page_id, schedule)
     
     return {"status": "success", "message": "Schedule activated"}
+
+# เพิ่มฟังก์ชันใหม่สำหรับทดสอบการส่งข้อความ:
+@router.post("/test-send/{page_id}")
+async def test_send_message(page_id: str, request: Request):
+    """ทดสอบการส่งข้อความตรง"""
+    data = await request.json()
+    psid = data.get('psid')
+    message = data.get('message', 'Test message')
+    
+    access_token = page_tokens.get(page_id)
+    if not access_token:
+        return {"error": "No access token for this page"}
+    
+    result = send_message(psid, message, access_token)
+    return {"result": result}
+
+# เพิ่มฟังก์ชันสำหรับดู active schedules:
+@router.get("/active-schedules/{page_id}")
+async def get_active_schedules(page_id: str):
+    """ดู schedules ที่กำลังทำงาน"""
+    schedules = message_scheduler.active_schedules.get(page_id, [])
+    return {
+        "page_id": page_id,
+        "active_schedules": schedules,
+        "count": len(schedules)
+    }
 
 @router.post("/schedule/deactivate")
 async def deactivate_schedule(request: Request):
