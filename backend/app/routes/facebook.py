@@ -500,16 +500,25 @@ async def activate_schedule(request: Request):
     page_id = data.get('page_id')
     schedule = data.get('schedule')
     
+    if not page_id or not schedule:
+        return {"status": "error", "message": "Missing required data"}
+    
     # อัพเดท page tokens ให้ scheduler ก่อนเพิ่ม schedule
     message_scheduler.set_page_tokens(page_tokens)
+    
+    # Reset sent tracking สำหรับ schedule นี้
+    schedule_id = str(schedule['id'])
+    message_scheduler.sent_tracking[schedule_id] = set()
     
     # เพิ่ม schedule เข้าระบบ
     message_scheduler.add_schedule(page_id, schedule)
     
-    # ถ้าเป็นแบบส่งทันที
+    # ถ้าเป็นแบบส่งทันที ให้ process ทันที
     if schedule.get('type') == 'immediate':
         await message_scheduler.process_schedule(page_id, schedule)
+        return {"status": "success", "message": "Immediate schedule processed"}
     
+    # สำหรับ scheduled และ user-inactive จะรอให้ scheduler ทำงานตามเวลา
     return {"status": "success", "message": "Schedule activated"}
 
 # เพิ่มฟังก์ชันใหม่สำหรับทดสอบการส่งข้อความ:
@@ -531,7 +540,7 @@ async def test_send_message(page_id: str, request: Request):
 @router.get("/active-schedules/{page_id}")
 async def get_active_schedules(page_id: str):
     """ดู schedules ที่กำลังทำงาน"""
-    schedules = message_scheduler.active_schedules.get(page_id, [])
+    schedules = message_scheduler.get_active_schedules_for_page(page_id)
     return {
         "page_id": page_id,
         "active_schedules": schedules,
@@ -544,6 +553,9 @@ async def deactivate_schedule(request: Request):
     data = await request.json()
     page_id = data.get('page_id')
     schedule_id = data.get('schedule_id')
+    
+    if not page_id or schedule_id is None:
+        return {"status": "error", "message": "Missing required data"}
     
     message_scheduler.remove_schedule(page_id, schedule_id)
     
@@ -573,6 +585,42 @@ async def test_user_inactivity(page_id: str):
         ]
     }
     
+    # Reset tracking สำหรับการทดสอบ
+    message_scheduler.sent_tracking["999"] = set()
+    
     await message_scheduler.check_user_inactivity(page_id, test_schedule)
     
     return {"status": "success", "message": "Inactivity check completed"}
+
+# เพิ่มฟังก์ชันสำหรับทดสอบการส่งข้อความ:
+@router.post("/test-send/{page_id}")
+async def test_send_message(page_id: str, request: Request):
+    """ทดสอบการส่งข้อความตรง"""
+    data = await request.json()
+    psid = data.get('psid')
+    message = data.get('message', 'Test message')
+    
+    access_token = page_tokens.get(page_id)
+    if not access_token:
+        return {"error": "No access token for this page"}
+    
+    result = send_message(psid, message, access_token)
+    return {"result": result}
+
+# เพิ่ม endpoint สำหรับดู tracking data
+@router.get("/schedule/tracking/{schedule_id}")
+async def get_schedule_tracking(schedule_id: str):
+    """ดูข้อมูล tracking ของ schedule"""
+    sent_users = list(message_scheduler.sent_tracking.get(schedule_id, set()))
+    return {
+        "schedule_id": schedule_id,
+        "sent_users": sent_users,
+        "count": len(sent_users)
+    }
+
+# เพิ่ม endpoint สำหรับ reset tracking
+@router.post("/schedule/reset-tracking/{schedule_id}")
+async def reset_schedule_tracking(schedule_id: str):
+    """Reset tracking data ของ schedule"""
+    message_scheduler.sent_tracking[schedule_id] = set()
+    return {"status": "success", "message": f"Reset tracking for schedule {schedule_id}"}

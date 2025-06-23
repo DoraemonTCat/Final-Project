@@ -66,18 +66,18 @@ function ScheduleDashboard() {
   };
 
   const getScheduleStatus = (schedule) => {
-    // ตรวจสอบว่า schedule นี้ active อยู่หรือไม่
-    const isActive = activeSchedules.some(id => id === schedule.id);
-    
-    if (schedule.type === 'immediate') return 'ส่งแล้ว';
-    if (schedule.type === 'user-inactive') return isActive ? 'กำลังทำงาน' : 'หยุดชั่วคราว';
-    if (schedule.type === 'scheduled') {
-      const scheduleTime = new Date(`${schedule.date}T${schedule.time}`);
-      if (scheduleTime > new Date()) return 'รอส่ง';
-      return isActive ? 'กำลังทำงาน' : 'ส่งแล้ว';
-    }
-    return 'ไม่ทราบสถานะ';
-  };
+  // ตรวจสอบว่า schedule นี้ active อยู่หรือไม่
+  const isActive = activeSchedules.some(id => id === schedule.id);
+
+  if (schedule.type === 'immediate') return 'ส่งแล้ว';
+  if (schedule.type === 'user-inactive') return isActive ? 'กำลังทำงาน' : 'หยุดชั่วคราว';
+  if (schedule.type === 'scheduled') {
+    const scheduleTime = new Date(`${schedule.date}T${schedule.time}`);
+    if (scheduleTime > new Date()) return 'กำลังทำงาน'; // เปลี่ยนตรงนี้
+    return 'ส่งแล้ว';
+  }
+  return 'ไม่ทราบสถานะ';
+};
 
   const getStatusColor = (status) => {
     switch (status) {
