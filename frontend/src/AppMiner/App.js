@@ -586,7 +586,7 @@ function App() {
     const diffMin = Math.floor(diffMs / 60000);
     
     if (diffMin < 1) return { status: "อัพเดทล่าสุด", color: "success" };
-    if (diffMin < 5) return { status: `${diffMin} นาทีที่แcontextล้ว`, color: "warning" };
+    if (diffMin < 5) return { status: `${diffMin} นาทีที่แล้ว`, color: "warning" };
     return { status: `${diffMin} นาทีที่แล้ว`, color: "danger" };
   };
 
