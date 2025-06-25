@@ -294,6 +294,7 @@ function GroupSchedule() {
     
     if (scheduleType === 'user-inactive') {
       let summary = `ส่งเมื่อ User หายไปเกิน ${inactivityPeriod} ${
+        inactivityUnit === 'hours' ? 'นาที' :
         inactivityUnit === 'hours' ? 'ชั่วโมง' :
         inactivityUnit === 'days' ? 'วัน' :
         inactivityUnit === 'weeks' ? 'สัปดาห์' : 'เดือน'
@@ -478,6 +479,7 @@ function GroupSchedule() {
                     onChange={(e) => setInactivityUnit(e.target.value)}
                     className="form-input inactivity-select"
                   >
+                    <option value="hours">นาที</option>
                     <option value="hours">ชั่วโมง</option>
                     <option value="days">วัน</option>
                     <option value="weeks">สัปดาห์</option>

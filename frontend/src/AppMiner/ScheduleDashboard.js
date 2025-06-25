@@ -156,6 +156,8 @@ function ScheduleDashboard() {
     if (schedule.type === 'scheduled') return `${new Date(schedule.date).toLocaleDateString('th-TH')} ${schedule.time}`;
     if (schedule.type === 'user-inactive') {
       return `${schedule.inactivityPeriod} ${
+        
+        schedule.inactivityUnit === 'minutes' ? 'นาที' :
         schedule.inactivityUnit === 'hours' ? 'ชั่วโมง' :
         schedule.inactivityUnit === 'days' ? 'วัน' :
         schedule.inactivityUnit === 'weeks' ? 'สัปดาห์' : 'เดือน'
