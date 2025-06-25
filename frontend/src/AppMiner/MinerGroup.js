@@ -648,6 +648,7 @@ function SetMiner() {
                             schedule.type === 'immediate' ? 'ส่งทันที' :
                             schedule.type === 'scheduled' ? `ส่งตามเวลา: ${new Date(schedule.date).toLocaleDateString('th-TH')} ${schedule.time} น.` :
                             `ส่งเมื่อหายไป ${schedule.inactivityPeriod} ${
+                              schedule.inactivityUnit === 'minutes' ? 'นาที' :
                               schedule.inactivityUnit === 'hours' ? 'ชั่วโมง' :
                               schedule.inactivityUnit === 'days' ? 'วัน' :
                               schedule.inactivityUnit === 'weeks' ? 'สัปดาห์' : 'เดือน'

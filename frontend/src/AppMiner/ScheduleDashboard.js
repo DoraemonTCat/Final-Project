@@ -34,16 +34,30 @@ function ScheduleDashboard() {
     };
   }, []);
 
-  const loadSchedules = (pageId) => {
-    const key = `miningSchedules_${pageId}`;
-    const savedSchedules = JSON.parse(localStorage.getItem(key) || '[]');
-    setSchedules(savedSchedules);
-    
-    // โหลด active schedules
-    const activeKey = `activeSchedules_${pageId}`;
-    const activeSchedulesList = JSON.parse(localStorage.getItem(activeKey) || '[]');
-    setActiveSchedules(activeSchedulesList);
-  };
+  // ...existing code...
+
+const loadSchedules = (pageId) => {
+  const key = `miningSchedules_${pageId}`;
+  const savedSchedules = JSON.parse(localStorage.getItem(key) || '[]');
+
+  // ดึงกลุ่มทั้งหมดของเพจนี้
+  const groupKey = `customerGroups_${pageId}`;
+  const groups = JSON.parse(localStorage.getItem(groupKey) || '[]');
+  const groupIds = groups.map(g => g.id);
+
+  // filter schedule ที่กลุ่มยังอยู่
+  const filteredSchedules = savedSchedules.filter(sch =>
+    sch.groups.some(gid => groupIds.includes(gid))
+  );
+  setSchedules(filteredSchedules);
+
+  // โหลด active schedules
+  const activeKey = `activeSchedules_${pageId}`;
+  const activeSchedulesList = JSON.parse(localStorage.getItem(activeKey) || '[]');
+  setActiveSchedules(activeSchedulesList);
+};
+
+// ...existing code...
 
   const refreshStatus = async () => {
     setRefreshing(true);

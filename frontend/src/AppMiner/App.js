@@ -337,7 +337,7 @@ function App() {
   useEffect(() => {
     clockIntervalRef.current = setInterval(() => {
       setCurrentTime(new Date());
-    }, 1000);
+    }, 1000);  //  อัพเดตทุกวินาที
 
     return () => {
       if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
@@ -348,7 +348,7 @@ function App() {
     if (selectedPage) {
       pollingIntervalRef.current = setInterval(() => {
         checkForNewMessages();
-      }, 5000);
+      }, 5000); //  ตรวจสอบทุก 5 วินาที
     }
 
     return () => {
