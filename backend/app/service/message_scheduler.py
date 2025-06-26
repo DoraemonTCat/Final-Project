@@ -61,12 +61,12 @@ class MessageScheduler:
         
         while self.is_running:
             try:
-                #  ตรวจสอบ schedule ทุก 5 วินาที
+                # ตรวจสอบ schedule ทุก 30 วินาที
                 await self.check_all_schedules()
-                await asyncio.sleep(5)   # รอ 5 วินาทีระหว่างการตรวจสอบ
+                await asyncio.sleep(30)  # ลดเป็น 30 วินาทีเพื่อให้ตอบสนองเร็วขึ้น
             except Exception as e:
                 logger.error(f"Error in schedule monitoring: {e}")
-                await asyncio.sleep(5)
+                await asyncio.sleep(30)
                 
     async def check_all_schedules(self):
         """ตรวจสอบ schedule ทั้งหมด"""
@@ -94,16 +94,14 @@ class MessageScheduler:
         elif schedule_type == 'scheduled':
             await self.check_scheduled_time(page_id, schedule, current_time)
             
-        
         elif schedule_type == 'user-inactive':
-            # ป้องกันการตรวจสอบถี่เกินไป - ตรวจสอบทุก 1 นาที (จากเดิม 5 นาที)
+            # ป้องกันการตรวจสอบถี่เกินไป - ตรวจสอบทุก 30 วินาที
             last_check = self.last_check_time.get(schedule['id'])
-            if last_check and (current_time - last_check).seconds < 60:  # 1 นาที
+            if last_check and (current_time - last_check).seconds < 30:
                 return
 
             self.last_check_time[schedule['id']] = current_time
             await self.check_user_inactivity(page_id, schedule)
-
             
     async def check_scheduled_time(self, page_id: str, schedule: Dict[str, Any], current_time: datetime):
         """ตรวจสอบการส่งตามเวลาที่กำหนด"""
@@ -116,12 +114,10 @@ class MessageScheduler:
         # แปลงเป็น datetime
         schedule_datetime = datetime.strptime(f"{schedule_date} {schedule_time}", "%Y-%m-%d %H:%M")
         
-        #  ตรวจสอบว่าเวลาปัจจุบันอยู่ในช่วงเวลาที่กำหนด
+        # ตรวจสอบว่าเวลาปัจจุบันอยู่ในช่วงเวลาที่กำหนด
         time_diff = abs((current_time - schedule_datetime).total_seconds())
         
-        if time_diff <= 10:  #   ถ้าอยู่ในช่วง 10 วินาทีของเวลาที่กำหนด
-            # ถ้าอยู่ในช่วงเวลาที่กำหนด ให้ส่งข้อความ
-            logger.info(f"Scheduled time reached for page {page_id}: {schedule_datetime}")
+        if time_diff <= 30:  # ถ้าอยู่ในช่วง 30 วินาทีของเวลาที่กำหนด
             # ตรวจสอบว่าส่งไปแล้วหรือยัง
             last_sent = schedule.get('last_sent')
             if last_sent:
@@ -143,8 +139,6 @@ class MessageScheduler:
             # ตรวจสอบการทำซ้ำ
             await self.handle_repeat(page_id, schedule, current_time)
             
-   
-    
     async def check_user_inactivity(self, page_id: str, schedule: Dict[str, Any]):
         """ตรวจสอบ user ที่หายไปตามระยะเวลาที่กำหนด (เช็คจากเวลาที่ user ส่งข้อความล่าสุด)"""
         try:
@@ -159,8 +153,7 @@ class MessageScheduler:
             else:
                 activated_at = datetime.now()
 
-           
-            # คำนวณ threshold
+            # คำนวณ threshold - ใช้เวลาปัจจุบันลบด้วยระยะเวลาที่กำหนด
             if inactivity_unit == 'minutes':
                 threshold_time = datetime.now() - timedelta(minutes=inactivity_period)
             elif inactivity_unit == 'hours':
@@ -172,6 +165,7 @@ class MessageScheduler:
             else:  # months
                 threshold_time = datetime.now() - timedelta(days=inactivity_period * 30)
 
+            logger.info(f"Checking inactivity for schedule {schedule_id}: threshold={threshold_time}, unit={inactivity_unit}, period={inactivity_period}")
 
             # ดึง access token
             access_token = self.page_tokens.get(page_id)
@@ -181,11 +175,13 @@ class MessageScheduler:
 
             from app.service.facebook_api import fb_get
 
+            # ดึง conversations พร้อม last message time (ใช้ API เดียวกับหน้า App.js)
             endpoint = f"{page_id}/conversations"
             params = {
-                "fields": "participants,id",
+                "fields": "participants,updated_time,id",
                 "limit": 100
             }
+            
             conversations = fb_get(endpoint, params, access_token)
             if "error" in conversations:
                 logger.error(f"Error getting conversations: {conversations['error']}")
@@ -194,45 +190,56 @@ class MessageScheduler:
             inactive_users = []
             sent_users = self.sent_tracking.get(schedule_id, set())
 
+            # ประมวลผลแต่ละ conversation
             for conv in conversations.get('data', []):
                 conv_id = conv.get('id')
                 participants = conv.get('participants', {}).get('data', [])
+                
+                # หา user participants (ไม่ใช่ page)
                 user_participants = [p for p in participants if p.get('id') and p.get('id') != page_id]
                 if not user_participants:
                     continue
+                    
                 user_id = user_participants[0]['id']
+                
+                # ตรวจสอบว่าเคยส่งให้ user นี้แล้วหรือยัง
+                if user_id in sent_users:
+                    continue
 
-                # ดึงข้อความล่าสุด 1 รายการ
+                # ดึงข้อความล่าสุดใน conversation
                 msg_endpoint = f"{conv_id}/messages"
                 msg_params = {
                     "fields": "from,created_time",
-                    "limit": 10
+                    "limit": 10  # ดึง 10 ข้อความล่าสุด
                 }
+                
                 messages = fb_get(msg_endpoint, msg_params, access_token)
                 if "error" in messages or "data" not in messages:
                     continue
 
-                # หา message ล่าสุดที่ from.id == user_id
+                # หาข้อความล่าสุดที่ user ส่งมา
                 last_user_msg_time = None
                 for msg in messages['data']:
                     if msg.get('from', {}).get('id') == user_id:
                         last_user_msg_time = datetime.fromisoformat(msg['created_time'].replace('T', ' ').split('+')[0])
                         break
 
-                # เงื่อนไขใหม่: ต้องเป็น user ที่หายไปหลังจาก activate schedule
+                # ตรวจสอบเงื่อนไข: user ส่งข้อความล่าสุดก่อน threshold และหลัง activate
                 if last_user_msg_time and last_user_msg_time < threshold_time and last_user_msg_time > activated_at:
-                    if user_id not in sent_users:
-                        inactive_users.append(user_id)
+                    inactive_users.append(user_id)
+                    logger.info(f"User {user_id} is inactive - last message: {last_user_msg_time}, threshold: {threshold_time}")
 
+            # ส่งข้อความให้ users ที่หายไป
             if inactive_users:
                 logger.info(f"Found {len(inactive_users)} inactive users for schedule {schedule['id']}")
                 await self.send_messages_to_users(page_id, inactive_users, schedule['messages'], access_token)
+                
+                # เพิ่ม users ที่ส่งแล้วเข้า tracking
                 self.sent_tracking[schedule_id].update(inactive_users)
                 schedule['last_sent'] = datetime.now().isoformat()
 
         except Exception as e:
             logger.error(f"Error checking user inactivity: {e}")
-
             
     async def process_schedule(self, page_id: str, schedule: Dict[str, Any]):
         """ประมวลผลและส่งข้อความตาม schedule"""
@@ -290,9 +297,7 @@ class MessageScheduler:
                 
         except Exception as e:
             logger.error(f"Error processing schedule: {e}")
-        
-        
-        
+            
     async def send_messages_to_users(self, page_id: str, psids: List[str], messages: List[Dict], access_token: str):
         """ส่งข้อความไปยัง users"""
         success_count = 0
@@ -398,9 +403,6 @@ class MessageScheduler:
         """หยุดระบบ scheduler"""
         self.is_running = False
         logger.info("Message scheduler stopped")
-        
-    
 
 # สร้าง instance ของ scheduler
 message_scheduler = MessageScheduler()
-

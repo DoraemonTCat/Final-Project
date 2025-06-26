@@ -14,6 +14,7 @@ import threading
 from app.service.message_scheduler import message_scheduler
 import logging
 
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,

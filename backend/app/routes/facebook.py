@@ -13,6 +13,7 @@ from app.config import image_dir,vid_dir
 from app.service.message_scheduler import message_scheduler
 
 
+
 router = APIRouter()
 
 # ================================
@@ -562,24 +563,29 @@ async def deactivate_schedule(request: Request):
     return {"status": "success", "message": "Schedule deactivated"}
 
 @router.get("/schedule/test-inactivity/{page_id}")
-async def test_user_inactivity(page_id: str):
-    """ทดสอบระบบตรวจสอบ user ที่หายไป"""
+async def test_user_inactivity(page_id: str, minutes: int = 1):
+    """ทดสอบระบบตรวจสอบ user ที่หายไป
+    
+    Parameters:
+    - page_id: ID ของเพจ
+    - minutes: จำนวนนาทีที่ต้องการทดสอบ (default = 1)
+    """
     # Mock schedule for testing
     test_schedule = {
         "id": 999,
         "type": "user-inactive",
-        "inactivityPeriod": "1",
-        "inactivityUnit": "hours",
+        "inactivityPeriod": str(minutes),
+        "inactivityUnit": "minutes",
         "groups": [1],
         "messages": [
             {
                 "type": "text",
-                "content": "สวัสดีค่ะ คุณหายไปนานเลยนะคะ 😊",
+                "content": f"สวัสดีค่ะ คุณหายไปมา {minutes} นาทีแล้วนะคะ 😊",
                 "order": 0
             },
             {
                 "type": "text", 
-                "content": "มีโปรโมชั่นพิเศษสำหรับคุณ!",
+                "content": "มีโปรโมชั่นพิเศษสำหรับคุณ! กลับมาคุยกับเราสิคะ 💝",
                 "order": 1
             }
         ]
@@ -588,9 +594,21 @@ async def test_user_inactivity(page_id: str):
     # Reset tracking สำหรับการทดสอบ
     message_scheduler.sent_tracking["999"] = set()
     
+    # อัพเดท page tokens ก่อนทดสอบ
+    message_scheduler.set_page_tokens(page_tokens)
+    
+    # รันการตรวจสอบ
     await message_scheduler.check_user_inactivity(page_id, test_schedule)
     
-    return {"status": "success", "message": "Inactivity check completed"}
+    # ดึงผลลัพธ์
+    sent_users = list(message_scheduler.sent_tracking.get("999", set()))
+    
+    return {
+        "status": "success", 
+        "message": f"Checked users inactive for {minutes} minutes",
+        "sent_to_users": sent_users,
+        "count": len(sent_users)
+    }
 
 # เพิ่มฟังก์ชันสำหรับทดสอบการส่งข้อความ:
 @router.post("/test-send/{page_id}")
@@ -624,3 +642,20 @@ async def reset_schedule_tracking(schedule_id: str):
     """Reset tracking data ของ schedule"""
     message_scheduler.sent_tracking[schedule_id] = set()
     return {"status": "success", "message": f"Reset tracking for schedule {schedule_id}"}
+
+@router.get("/schedule/system-status")
+async def get_system_status():
+    """ดูสถานะของระบบ scheduler"""
+    return {
+        "is_running": message_scheduler.is_running,
+        "active_pages": list(message_scheduler.active_schedules.keys()),
+        "total_schedules": sum(len(schedules) for schedules in message_scheduler.active_schedules.values()),
+        "schedules_by_page": {
+            page_id: len(schedules) 
+            for page_id, schedules in message_scheduler.active_schedules.items()
+        },
+        "tracking_info": {
+            schedule_id: len(users) 
+            for schedule_id, users in message_scheduler.sent_tracking.items()
+        }
+    }
