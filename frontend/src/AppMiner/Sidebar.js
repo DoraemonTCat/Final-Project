@@ -104,9 +104,15 @@ function Sidebar() {
           >
             ▶ ตามกลุ่ม/ลูกค้า
           </Link>
+          <Link 
+            to="/schedule-dashboard" 
+            className={`dropdown-item ${isActive('/MinerGroup') || isActive('/GroupDefault') || isActive('/GroupSchedule') ? 'active' : ''}`}
+          >
+            ▶ Dashboard กลุ่มลูกค้า
+          </Link>
         </div>
         
-        <Link to="/schedule-dashboard" className={`nav-link ${isActive('/App') || isActive('/') ? 'active' : ''}`}>
+        <Link to="#" className={`nav-link ${isActive('/App') || isActive('/') ? 'active' : ''}`}>
            <span className="nav-icon">📊</span>
           Dashboard
         </Link>
