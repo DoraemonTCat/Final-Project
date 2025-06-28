@@ -302,6 +302,7 @@ body {
    ===================================================== */
 .filter-section {
   padding: var(--spacing-lg) var(--spacing-xl);
+ 
   
 }
 
@@ -337,10 +338,10 @@ body {
 }
 
 .filter-panel {
-  margin-top: var(--spacing-lg);
+  margin-top: var(--spacing-md);      /* เดิม var(--spacing-lg) */
   background: var(--bg-secondary);
-  border-radius: var(--radius-xl);
-  padding: var(--spacing-xl);
+  border-radius: var(--radius-lg);    /* เดิม var(--radius-xl) */
+  padding: var(--spacing-lg);         /* เดิม var(--spacing-xl) */
   box-shadow: var(--shadow-lg);
   animation: slideDown var(--transition-base) ease-out;
 }
