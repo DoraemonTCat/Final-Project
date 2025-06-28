@@ -3,6 +3,9 @@ import '../CSS/App.css';
 import { fetchPages, getMessagesBySetId, fetchConversations } from "../Features/Tool";
 import Sidebar from "./Sidebar"; 
 import Popup from "./MinerPopup";
+import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
+import * as mammoth from 'mammoth';
 
 // 🎨 Component สำหรับแสดงเวลาแบบ optimized
 const TimeAgoCell = React.memo(({ lastMessageTime, updatedTime }) => {
@@ -115,10 +118,10 @@ const ConversationRow = React.memo(({
 
   return (
     <tr className={`table-row ${isSelected ? 'selected' : ''}`}>
-      <td className="table-cell text-center">     {/* ลำดับ */}
+      <td className="table-cell text-center">
         <div className="row-number">{idx + 1}</div>
       </td>
-      <td className="table-cell">     {/* ผู้ใช้ */}
+      <td className="table-cell">
         <div className="user-info">
           <div className="user-avatar">
             {conv.user_name?.charAt(0) || 'U'}
@@ -129,9 +132,8 @@ const ConversationRow = React.memo(({
           </div>
         </div>
       </td>
-      <td className="table-cell">   {/*	วันที่เข้ามา */}
+      <td className="table-cell">
         <div className="date-display">
-          
           {conv.updated_time
             ? new Date(conv.updated_time).toLocaleDateString("th-TH", {
               year: 'numeric', month: 'short', day: 'numeric'
@@ -141,7 +143,7 @@ const ConversationRow = React.memo(({
         </div>
       </td>   
       <TimeAgoCell   
-        lastMessageTime={conv.last_user_message_time}   // 	ระยะเวลาที่หาย 
+        lastMessageTime={conv.last_user_message_time}
         updatedTime={conv.updated_time}
       /> 
       
@@ -177,6 +179,220 @@ const ConversationRow = React.memo(({
     </tr>
   );
 });
+
+// 🎨 Component สำหรับ File Upload Section
+const FileUploadSection = ({ onSelectUsers, onClearSelection }) => {
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadedFileName, setUploadedFileName] = useState('');
+  const [usersFromFile, setUsersFromFile] = useState([]);
+  const fileInputRef = useRef(null);
+
+  // ฟังก์ชันสำหรับอ่านไฟล์ Excel
+  const readExcelFile = async (file) => {
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      
+      // สกัดชื่อผู้ใช้จากข้อมูล (ปรับ column name ตามไฟล์จริง)
+      const userNames = [];
+      jsonData.forEach(row => {
+        // ลองหาชื่อจากหลาย column ที่เป็นไปได้
+        const name = row['ชื่อ'] || row['Name'] || row['ชื่อผู้ใช้'] || row['Username'] || 
+                    row['ชื่อ-นามสกุล'] || row['Full Name'] || row['ผู้ใช้'] || row['User'];
+        if (name) {
+          userNames.push(name.toString().trim());
+        }
+      });
+      
+      return [...new Set(userNames)]; // Remove duplicates
+    } catch (error) {
+      console.error('Error reading Excel file:', error);
+      throw new Error('ไม่สามารถอ่านไฟล์ Excel ได้');
+    }
+  };
+
+  // ฟังก์ชันสำหรับอ่านไฟล์ Word
+  const readWordFile = async (file) => {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      const text = result.value;
+      
+      // แยกชื่อจากข้อความ (สมมติว่าแต่ละชื่อขึ้นบรรทัดใหม่)
+      const lines = text.split('\n').filter(line => line.trim());
+      const userNames = lines.map(line => line.trim());
+      
+      return [...new Set(userNames)]; // Remove duplicates
+    } catch (error) {
+      console.error('Error reading Word file:', error);
+      throw new Error('ไม่สามารถอ่านไฟล์ Word ได้');
+    }
+  };
+
+  // ฟังก์ชันสำหรับอ่านไฟล์ CSV
+  const readCSVFile = async (file) => {
+    return new Promise((resolve, reject) => {
+      Papa.parse(file, {
+        complete: (results) => {
+          const userNames = [];
+          results.data.forEach(row => {
+            // ลองหาชื่อจากหลาย column
+            const name = row[0] || row['ชื่อ'] || row['Name'] || row['ชื่อผู้ใช้'];
+            if (name && name.trim()) {
+              userNames.push(name.trim());
+            }
+          });
+          resolve([...new Set(userNames)]);
+        },
+        error: (error) => {
+          reject(new Error('ไม่สามารถอ่านไฟล์ CSV ได้'));
+        },
+        header: true
+      });
+    });
+  };
+
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    setUploadedFileName(file.name);
+
+    try {
+      let userNames = [];
+      const fileType = file.name.split('.').pop().toLowerCase();
+
+      switch (fileType) {
+        case 'xlsx':
+        case 'xls':
+          userNames = await readExcelFile(file);
+          break;
+        case 'docx':
+        case 'doc':
+          userNames = await readWordFile(file);
+          break;
+        case 'csv':
+          userNames = await readCSVFile(file);
+          break;
+        default:
+          throw new Error('รองรับเฉพาะไฟล์ Excel (.xlsx, .xls), Word (.docx, .doc) และ CSV (.csv)');
+      }
+
+      if (userNames.length === 0) {
+        throw new Error('ไม่พบรายชื่อในไฟล์');
+      }
+
+      setUsersFromFile(userNames);
+      showSuccessNotification(`พบรายชื่อ ${userNames.length} คนในไฟล์`);
+    } catch (error) {
+      showErrorNotification(error.message);
+      setUploadedFileName('');
+      setUsersFromFile([]);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const selectUsersFromFile = () => {
+    if (usersFromFile.length === 0) {
+      showErrorNotification('กรุณาอัปโหลดไฟล์ที่มีรายชื่อก่อน');
+      return;
+    }
+    onSelectUsers(usersFromFile);
+    showSuccessNotification(`เลือกผู้ใช้ ${usersFromFile.length} คนจากไฟล์`);
+  };
+
+  const clearFile = () => {
+    setUploadedFileName('');
+    setUsersFromFile([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    if (onClearSelection) {
+      onClearSelection(); // ล้าง checkbox ทั้งหมด
+    }
+  };
+
+  const showSuccessNotification = (message) => {
+    const notification = document.createElement('div');
+    document.body.appendChild(notification);
+    setTimeout(() => notification.remove(), 3000);
+  };
+
+  const showErrorNotification = (message) => {
+    const notification = document.createElement('div');
+    notification.className = 'error-notification';
+    notification.innerHTML = `
+      <div class="notification-content">
+        <span class="notification-icon">❌</span>
+        <span>${message}</span>
+      </div>
+    `;
+    document.body.appendChild(notification);
+    setTimeout(() => notification.remove(), 3000);
+  };
+
+  return (
+    <div className="file-upload-section">
+      <div className="file-upload-container">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".xlsx,.xls,.doc,.docx,.csv"
+          onChange={handleFileUpload}
+          className="file-input"
+          id="file-upload"
+        />
+        <label htmlFor="file-upload" className="file-upload-label">
+          <span className="upload-icon">📁</span>
+          <span>เลือกไฟล์รายชื่อ</span>
+        </label>
+        
+        {uploadedFileName && (
+          <div className="uploaded-file-info">
+            <span className="file-name">{uploadedFileName}</span>
+            <span className="user-count">({usersFromFile.length} รายชื่อ)</span>
+            <button onClick={clearFile} className="clear-file-btn">✖</button>
+          </div>
+        )}
+        
+        <button
+          onClick={selectUsersFromFile}
+          disabled={usersFromFile.length === 0 || isUploading}
+          className="select-from-file-btn"
+        >
+          <span className="btn-icon">✓</span>
+          เลือกจากไฟล์
+        </button>
+        
+        {isUploading && (
+          <div className="upload-loading">
+            <span className="loading-spinner"></span>
+            <span>กำลังอ่านไฟล์...</span>
+          </div>
+        )}
+      </div>
+      
+      {usersFromFile.length > 0 && (
+        <div className="file-users-preview">
+          <h4>รายชื่อในไฟล์:</h4>
+          <div className="users-list">
+            {usersFromFile.slice(0, 5).map((user, index) => (
+              <span key={index} className="user-badge">{user}</span>
+            ))}
+            {usersFromFile.length > 5 && (
+              <span className="more-users">...และอีก {usersFromFile.length - 5} คน</span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 function App() {
   const [pages, setPages] = useState([]);
@@ -337,7 +553,7 @@ function App() {
   useEffect(() => {
     clockIntervalRef.current = setInterval(() => {
       setCurrentTime(new Date());
-    }, 1000);  //  อัพเดตทุกวินาที
+    }, 1000);
 
     return () => {
       if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
@@ -348,7 +564,7 @@ function App() {
     if (selectedPage) {
       pollingIntervalRef.current = setInterval(() => {
         checkForNewMessages();
-      }, 5000); //  ตรวจสอบทุก 5 วินาที
+      }, 5000);
     }
 
     return () => {
@@ -461,6 +677,25 @@ function App() {
         : [...prev, conversationId]
     );
   }, []);
+
+  // ฟังก์ชันสำหรับเลือก users จากไฟล์
+  const selectUsersFromFile = (userNames) => {
+    const conversationsToSelect = displayData.filter(conv => {
+      const userName = conv.user_name || conv.conversation_name || '';
+      return userNames.some(name => 
+        userName.toLowerCase().includes(name.toLowerCase()) ||
+        name.toLowerCase().includes(userName.toLowerCase())
+      );
+    });
+
+    const conversationIds = conversationsToSelect.map(conv => conv.conversation_id);
+    setSelectedConversationIds(prev => {
+      const newIds = [...new Set([...prev, ...conversationIds])];
+      return newIds;
+    });
+
+    showSuccessNotification(`เลือกแล้ว ${conversationsToSelect.length} จาก ${userNames.length} รายชื่อในไฟล์`);
+  };
 
   const handOpenPopup = () => {
     setIsPopupOpen(true);
@@ -639,6 +874,12 @@ function App() {
             </span>
           </div>
         </div>
+
+        {/* File Upload Section */}
+        <FileUploadSection 
+          onSelectUsers={selectUsersFromFile} 
+          onClearSelection={() => setSelectedConversationIds([])} 
+        />
 
         {/* Filter Section */}
         <div className="filter-section">
