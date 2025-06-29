@@ -511,6 +511,10 @@ async def activate_schedule(request: Request):
     schedule_id = str(schedule['id'])
     message_scheduler.sent_tracking[schedule_id] = set()
     
+    # ตรวจสอบและแก้ไขข้อมูล schedule
+    if 'pageId' not in schedule and page_id:
+        schedule['pageId'] = page_id
+    
     # เพิ่ม schedule เข้าระบบ
     message_scheduler.add_schedule(page_id, schedule)
     
@@ -521,7 +525,6 @@ async def activate_schedule(request: Request):
     
     # สำหรับ scheduled และ user-inactive จะรอให้ scheduler ทำงานตามเวลา
     return {"status": "success", "message": "Schedule activated"}
-
 # เพิ่มฟังก์ชันใหม่สำหรับทดสอบการส่งข้อความ:
 @router.post("/test-send/{page_id}")
 async def test_send_message(page_id: str, request: Request):

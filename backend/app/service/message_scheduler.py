@@ -166,7 +166,7 @@ class MessageScheduler:
             inactivity_period = int(schedule.get('inactivityPeriod', 1))
             inactivity_unit = schedule.get('inactivityUnit', 'days')
             schedule_id = str(schedule['id'])
-            
+
             # แปลงหน่วยเวลาเป็นนาที
             if inactivity_unit == 'minutes':
                 target_minutes = inactivity_period
@@ -178,50 +178,101 @@ class MessageScheduler:
                 target_minutes = inactivity_period * 7 * 24 * 60
             else:  # months
                 target_minutes = inactivity_period * 30 * 24 * 60
-                
+
             logger.info(f"Checking inactivity for schedule {schedule_id}: target={target_minutes} minutes")
-            
+
             # ดึงข้อมูล inactivity ของ page นี้
             page_inactivity_data = self.user_inactivity_data.get(page_id, {})
             if not page_inactivity_data:
-                logger.warning(f"No inactivity data for page {page_id}")
-                return
-                
+                logger.warning(f"No inactivity data for page {page_id}, will check conversations directly")
+                # ถ้าไม่มีข้อมูล inactivity ให้ดึงจาก conversations โดยตรง
+                await self.update_inactivity_from_conversations(page_id)
+                page_inactivity_data = self.user_inactivity_data.get(page_id, {})
+
             # ดึง access token
             access_token = self.page_tokens.get(page_id)
             if not access_token:
                 logger.warning(f"No access token for page {page_id}")
                 return
-                
+
             inactive_users = []
             sent_users = self.sent_tracking.get(schedule_id, set())
-            
+
             # ตรวจสอบแต่ละ user
             for user_id, user_data in page_inactivity_data.items():
                 # ตรวจสอบว่าเคยส่งให้ user นี้แล้วหรือยัง
                 if user_id in sent_users:
                     continue
-                    
+
                 # ดึงระยะเวลาที่หายไป (เป็นนาที)
                 user_inactivity_minutes = user_data.get('inactivity_minutes', 0)
-                
+
                 # เทียบกับเงื่อนไข - ต้องตรงกันหรือมากกว่า
                 if user_inactivity_minutes >= target_minutes:
                     inactive_users.append(user_id)
                     logger.info(f"User {user_id} is inactive for {user_inactivity_minutes} minutes (target: {target_minutes})")
-                    
+
             # ส่งข้อความให้ users ที่ตรงเงื่อนไข
             if inactive_users:
                 logger.info(f"Found {len(inactive_users)} inactive users for schedule {schedule['id']}")
                 await self.send_messages_to_users(page_id, inactive_users, schedule['messages'], access_token)
-                
+
                 # เพิ่ม users ที่ส่งแล้วเข้า tracking
                 self.sent_tracking[schedule_id].update(inactive_users)
                 schedule['last_sent'] = datetime.now().isoformat()
-                
+
         except Exception as e:
             logger.error(f"Error checking user inactivity v2: {e}")
-            
+
+    async def update_inactivity_from_conversations(self, page_id: str):
+        """อัพเดทข้อมูล inactivity จาก conversations โดยตรง"""
+        try:
+            access_token = self.page_tokens.get(page_id)
+            if not access_token:
+                return
+
+            from app.service.facebook_api import fb_get
+
+            # ดึง conversations
+            endpoint = f"{page_id}/conversations"
+            params = {
+                "fields": "participants,updated_time,id",
+                "limit": 100
+            }
+
+            conversations = fb_get(endpoint, params, access_token)
+            if "error" in conversations or not conversations.get('data'):
+                return
+
+            # สร้างข้อมูล inactivity
+            if page_id not in self.user_inactivity_data:
+                self.user_inactivity_data[page_id] = {}
+
+            for conv in conversations['data']:
+                participants = conv.get('participants', {}).get('data', [])
+                for participant in participants:
+                    user_id = participant.get('id')
+                    if user_id and user_id != page_id:
+                        # คำนวณระยะเวลาที่หายไป
+                        updated_time = conv.get('updated_time')
+                        if updated_time:
+                            # updated_time อาจเป็น ISO8601 ที่ลงท้ายด้วย Z
+                            try:
+                                past = datetime.fromisoformat(updated_time.replace('Z', '+00:00'))
+                            except Exception:
+                                continue
+                            now = datetime.now(past.tzinfo)
+                            diff_minutes = int((now - past).total_seconds() / 60)
+
+                            self.user_inactivity_data[page_id][user_id] = {
+                                'last_message_time': updated_time,
+                                'inactivity_minutes': diff_minutes,
+                                'updated_at': datetime.now()
+                            }
+
+        except Exception as e:
+            logger.error(f"Error updating inactivity from conversations: {e}")
+
     async def process_schedule(self, page_id: str, schedule: Dict[str, Any]):
         """ประมวลผลและส่งข้อความตาม schedule"""
         try:

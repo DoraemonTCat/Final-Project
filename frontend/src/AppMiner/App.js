@@ -487,6 +487,21 @@ function App() {
     }));
   }, []);
 
+  // ฟังก์ชันตรวจสอบ active schedules
+  const checkActiveSchedules = async () => {
+    if (!selectedPage) return;
+    
+    try {
+      const response = await fetch(`http://localhost:8000/active-schedules/${selectedPage}`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Active schedules:', data);
+      }
+    } catch (error) {
+      console.error('Error checking active schedules:', error);
+    }
+  };
+
   // ฟังก์ชันส่งข้อมูล inactivity ไปยัง backend แบบ batch
   const sendInactivityBatch = useCallback(async () => {
     if (!selectedPage || displayData.length === 0) return;
@@ -521,7 +536,10 @@ function App() {
       
       const result = await response.json();
       console.log('✅ Batch update inactivity data:', result);
-      
+
+      // อัพเดท active schedules หลังส่งข้อมูล
+      await checkActiveSchedules();
+
     } catch (error) {
       console.error('❌ Error sending inactivity batch:', error);
     }

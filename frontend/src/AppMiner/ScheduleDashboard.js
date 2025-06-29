@@ -5,9 +5,8 @@ import Sidebar from "./Sidebar";
 function ScheduleDashboard() {
   const [selectedPage, setSelectedPage] = useState('');
   const [schedules, setSchedules] = useState([]);
-  const [sentLogs, setSentLogs] = useState([]);
-  const [refreshing, setRefreshing] = useState(false);
   const [activeSchedules, setActiveSchedules] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
 
@@ -16,60 +15,46 @@ function ScheduleDashboard() {
     if (savedPage) {
       setSelectedPage(savedPage);
       loadSchedules(savedPage);
+      loadActiveSchedules(savedPage); // โหลด active schedules จาก backend
     }
   }, []);
 
-  // Listen for page changes from Sidebar
-  useEffect(() => {
-    const handlePageChange = (event) => {
-      const pageId = event.detail.pageId;
-      setSelectedPage(pageId);
-      loadSchedules(pageId);
-    };
+  // โหลด active schedules จาก backend
+  const loadActiveSchedules = async (pageId) => {
+    try {
+      const response = await fetch(`http://localhost:8000/active-schedules/${pageId}`);
+      if (!response.ok) throw new Error('Failed to load active schedules');
+      const data = await response.json();
+      // สมมติ backend ส่ง { active_schedules: [{id: ...}, ...] }
+      const activeIds = data.active_schedules.map(s => s.id);
+      setActiveSchedules(activeIds);
+      // ไม่ต้อง set localStorage แล้ว
+    } catch (error) {
+      console.error('Error loading active schedules:', error);
+    }
+  };
 
-    window.addEventListener('pageChanged', handlePageChange);
-    
-    return () => {
-      window.removeEventListener('pageChanged', handlePageChange);
-    };
-  }, []);
+  const loadSchedules = (pageId) => {
+    const key = `miningSchedules_${pageId}`;
+    const savedSchedules = JSON.parse(localStorage.getItem(key) || '[]');
 
-  // ...existing code...
+    // ดึงกลุ่มทั้งหมดของเพจนี้
+    const groupKey = `customerGroups_${pageId}`;
+    const groups = JSON.parse(localStorage.getItem(groupKey) || '[]');
+    const groupIds = groups.map(g => g.id);
 
-const loadSchedules = (pageId) => {
-  const key = `miningSchedules_${pageId}`;
-  const savedSchedules = JSON.parse(localStorage.getItem(key) || '[]');
-
-  // ดึงกลุ่มทั้งหมดของเพจนี้
-  const groupKey = `customerGroups_${pageId}`;
-  const groups = JSON.parse(localStorage.getItem(groupKey) || '[]');
-  const groupIds = groups.map(g => g.id);
-
-  // filter schedule ที่กลุ่มยังอยู่
-  const filteredSchedules = savedSchedules.filter(sch =>
-    sch.groups.some(gid => groupIds.includes(gid))
-  );
-  setSchedules(filteredSchedules);
-
-  // โหลด active schedules
-  const activeKey = `activeSchedules_${pageId}`;
-  const activeSchedulesList = JSON.parse(localStorage.getItem(activeKey) || '[]');
-  setActiveSchedules(activeSchedulesList);
-};
-
-// ...existing code...
+    // filter schedule ที่กลุ่มยังอยู่
+    const filteredSchedules = savedSchedules.filter(sch =>
+      sch.groups?.some(gid => groupIds.includes(gid))
+    );
+    setSchedules(filteredSchedules);
+  };
 
   const refreshStatus = async () => {
     setRefreshing(true);
-    
     try {
-      // ในระบบจริงจะเรียก API เพื่อดึง status
-      // ตอนนี้ simulate delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Reload schedules
       loadSchedules(selectedPage);
-      
+      await loadActiveSchedules(selectedPage); // รีเฟรช active schedules
       alert("รีเฟรชสถานะสำเร็จ!");
     } catch (error) {
       console.error('Error refreshing status:', error);
@@ -80,18 +65,17 @@ const loadSchedules = (pageId) => {
   };
 
   const getScheduleStatus = (schedule) => {
-  // ตรวจสอบว่า schedule นี้ active อยู่หรือไม่
-  const isActive = activeSchedules.some(id => id === schedule.id);
+    const isActive = activeSchedules.includes(schedule.id);
 
-  if (schedule.type === 'immediate') return 'ส่งแล้ว';
-  if (schedule.type === 'user-inactive') return isActive ? 'กำลังทำงาน' : 'หยุดชั่วคราว';
-  if (schedule.type === 'scheduled') {
-    const scheduleTime = new Date(`${schedule.date}T${schedule.time}`);
-    if (scheduleTime > new Date()) return isActive ? 'กำลังทำงาน' : 'หยุดชั่วคราว'; // เปลี่ยนตรงนี้
-    return 'ส่งแล้ว';
-  }
-  return 'ไม่ทราบสถานะ';
-};
+    if (schedule.type === 'immediate') return 'ส่งแล้ว';
+    if (schedule.type === 'user-inactive') return isActive ? 'กำลังทำงาน' : 'หยุดชั่วคราว';
+    if (schedule.type === 'scheduled') {
+      const scheduleTime = new Date(`${schedule.date}T${schedule.time}`);
+      if (scheduleTime > new Date()) return isActive ? 'กำลังทำงาน' : 'หยุดชั่วคราว';
+      return 'ส่งแล้ว';
+    }
+    return 'ไม่ทราบสถานะ';
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -103,64 +87,56 @@ const loadSchedules = (pageId) => {
     }
   };
 
-  // เพิ่มในไฟล์ ScheduleDashboard.js ฟังก์ชัน toggleScheduleStatus
+  const toggleScheduleStatus = async (schedule) => {
+    const status = getScheduleStatus(schedule);
 
-const toggleScheduleStatus = async (schedule) => {
-  const status = getScheduleStatus(schedule);
-  
-  try {
-    if (status === 'กำลังทำงาน') {
-      // หยุดการทำงาน
-      const response = await fetch('http://localhost:8000/schedule/deactivate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          page_id: selectedPage,
-          schedule_id: schedule.id
-        })
-      });
+    try {
+      if (status === 'กำลังทำงาน') {
+        // หยุดการทำงาน
+        const response = await fetch('http://localhost:8000/schedule/deactivate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            page_id: selectedPage,
+            schedule_id: schedule.id
+          })
+        });
 
-      if (!response.ok) throw new Error('Failed to deactivate');
-      
-      // อัพเดท active schedules
-      const newActiveSchedules = activeSchedules.filter(id => id !== schedule.id);
-      setActiveSchedules(newActiveSchedules);
-      localStorage.setItem(`activeSchedules_${selectedPage}`, JSON.stringify(newActiveSchedules));
-      
-      alert("หยุดการทำงานสำเร็จ!");
-    } else {
-      // เปิดใช้งาน
-      const response = await fetch('http://localhost:8000/schedule/activate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          page_id: selectedPage,
-          schedule: schedule
-        })
-      });
+        if (!response.ok) throw new Error('Failed to deactivate');
 
-      if (!response.ok) throw new Error('Failed to activate');
-      
-      // อัพเดท active schedules
-      const newActiveSchedules = [...activeSchedules, schedule.id];
-      setActiveSchedules(newActiveSchedules);
-      localStorage.setItem(`activeSchedules_${selectedPage}`, JSON.stringify(newActiveSchedules));
-      
-      alert("เปิดใช้งานสำเร็จ!");
+        // ไม่ต้อง set localStorage แล้ว
+        alert("หยุดการทำงานสำเร็จ!");
+      } else {
+        // เปิดใช้งาน - ส่งข้อมูล schedule แบบครบถ้วน
+        const response = await fetch('http://localhost:8000/schedule/activate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            page_id: selectedPage,
+            schedule: {
+              ...schedule,
+              pageId: selectedPage // เพิ่ม pageId
+            }
+          })
+        });
+
+        if (!response.ok) throw new Error('Failed to activate');
+
+        alert("เปิดใช้งานสำเร็จ!");
+      }
+
+      // รีเฟรช active schedules
+      await loadActiveSchedules(selectedPage);
+
+    } catch (error) {
+      console.error('Error toggling schedule:', error);
+      alert("เกิดข้อผิดพลาดในการเปลี่ยนสถานะ");
     }
-    
-    // Reload schedules
-    loadSchedules(selectedPage);
-    
-  } catch (error) {
-    console.error('Error toggling schedule:', error);
-    alert("เกิดข้อผิดพลาดในการเปลี่ยนสถานะ");
-  }
-};
+  };
 
   const viewScheduleDetails = (schedule) => {
     setSelectedSchedule(schedule);
@@ -172,7 +148,6 @@ const toggleScheduleStatus = async (schedule) => {
     if (schedule.type === 'scheduled') return `${new Date(schedule.date).toLocaleDateString('th-TH')} ${schedule.time}`;
     if (schedule.type === 'user-inactive') {
       return `${schedule.inactivityPeriod} ${
-        
         schedule.inactivityUnit === 'minutes' ? 'นาที' :
         schedule.inactivityUnit === 'hours' ? 'ชั่วโมง' :
         schedule.inactivityUnit === 'days' ? 'วัน' :
