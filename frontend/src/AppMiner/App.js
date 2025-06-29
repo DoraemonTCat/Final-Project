@@ -8,14 +8,16 @@ import * as XLSX from 'xlsx';
 import * as mammoth from 'mammoth';
 
 // 🎨 Component สำหรับแสดงเวลาแบบ optimized
-const TimeAgoCell = React.memo(({ lastMessageTime, updatedTime }) => {
+const TimeAgoCell = React.memo(({ lastMessageTime, updatedTime, userId, onInactivityChange }) => {
   const [displayTime, setDisplayTime] = useState('');
+  const [inactivityMinutes, setInactivityMinutes] = useState(0);
   
   useEffect(() => {
     const updateTime = () => {
       const referenceTime = lastMessageTime || updatedTime;
       if (!referenceTime) {
         setDisplayTime('-');
+        setInactivityMinutes(0);
         return;
       }
       
@@ -23,6 +25,15 @@ const TimeAgoCell = React.memo(({ lastMessageTime, updatedTime }) => {
       const now = new Date();
       const diffMs = now.getTime() - past.getTime();
       const diffSec = Math.floor(diffMs / 1000);
+      const diffMin = Math.floor(diffSec / 60);
+      
+      // เก็บค่านาทีที่หายไป
+      setInactivityMinutes(diffMin > 0 ? diffMin : 0);
+      
+      // แจ้งการเปลี่ยนแปลงไปยัง parent component
+      if (onInactivityChange && userId) {
+        onInactivityChange(userId, diffMin > 0 ? diffMin : 0);
+      }
       
       if (diffSec < 0) {
         setDisplayTime('0 วินาทีที่แล้ว');
@@ -81,7 +92,7 @@ const TimeAgoCell = React.memo(({ lastMessageTime, updatedTime }) => {
     const interval = setInterval(updateTime, intervalMs);
     
     return () => clearInterval(interval);
-  }, [lastMessageTime, updatedTime]);
+  }, [lastMessageTime, updatedTime, userId, onInactivityChange]);
   
   const isRecent = lastMessageTime && 
     new Date(lastMessageTime) > new Date(Date.now() - 60000);
@@ -91,6 +102,9 @@ const TimeAgoCell = React.memo(({ lastMessageTime, updatedTime }) => {
       <div className="time-display">
         {isRecent && <span className="pulse-dot"></span>}
         {displayTime}
+        <span className="inactivity-minutes" style={{ display: 'none' }}>
+          {inactivityMinutes}
+        </span>
       </div>
     </td>
   );
@@ -101,7 +115,8 @@ const ConversationRow = React.memo(({
   conv, 
   idx, 
   isSelected, 
-  onToggleCheckbox 
+  onToggleCheckbox,
+  onInactivityChange 
 }) => {
   const statusColors = {
     'ขุดแล้ว': '#48bb78',
@@ -145,6 +160,8 @@ const ConversationRow = React.memo(({
       <TimeAgoCell   
         lastMessageTime={conv.last_user_message_time}
         updatedTime={conv.updated_time}
+        userId={conv.raw_psid}
+        onInactivityChange={onInactivityChange}
       /> 
       
       <td className="table-cell">
@@ -415,6 +432,10 @@ function App() {
   const [selectedMessageSetIds, setSelectedMessageSetIds] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
+  
+  // เพิ่ม state สำหรับเก็บข้อมูล inactivity
+  const [userInactivityData, setUserInactivityData] = useState({});
+  const inactivityUpdateTimerRef = useRef(null);
 
   const clockIntervalRef = useRef(null);
   const pollingIntervalRef = useRef(null);
@@ -441,6 +462,92 @@ function App() {
       timestamp: Date.now()
     };
   };
+
+  // ฟังก์ชันคำนวณระยะเวลาที่หายไปเป็นนาที
+  const calculateInactivityMinutes = (lastMessageTime, updatedTime) => {
+    const referenceTime = lastMessageTime || updatedTime;
+    if (!referenceTime) return 0;
+    
+    const past = new Date(referenceTime);
+    const now = new Date();
+    const diffMs = now.getTime() - past.getTime();
+    const diffMinutes = Math.floor(diffMs / 60000);
+    
+    return diffMinutes > 0 ? diffMinutes : 0;
+  };
+
+  // ฟังก์ชันอัพเดทข้อมูล inactivity ของแต่ละ user
+  const handleInactivityChange = useCallback((userId, minutes) => {
+    setUserInactivityData(prev => ({
+      ...prev,
+      [userId]: {
+        minutes,
+        updatedAt: new Date()
+      }
+    }));
+  }, []);
+
+  // ฟังก์ชันส่งข้อมูล inactivity ไปยัง backend แบบ batch
+  const sendInactivityBatch = useCallback(async () => {
+    if (!selectedPage || displayData.length === 0) return;
+    
+    try {
+      // เตรียมข้อมูลสำหรับส่ง
+      const userData = displayData.map(conv => {
+        const inactivityInfo = userInactivityData[conv.raw_psid] || {};
+        return {
+          user_id: conv.raw_psid,
+          conversation_id: conv.conversation_id,
+          last_message_time: conv.last_user_message_time || conv.updated_time,
+          inactivity_minutes: inactivityInfo.minutes || calculateInactivityMinutes(
+            conv.last_user_message_time,
+            conv.updated_time
+          )
+        };
+      });
+      
+      // ส่งข้อมูลไปยัง backend
+      const response = await fetch(`http://localhost:8000/update-user-inactivity/${selectedPage}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ users: userData })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to update inactivity data');
+      }
+      
+      const result = await response.json();
+      console.log('✅ Batch update inactivity data:', result);
+      
+    } catch (error) {
+      console.error('❌ Error sending inactivity batch:', error);
+    }
+  }, [selectedPage, displayData, userInactivityData]);
+
+  // ส่งข้อมูล inactivity แบบ batch ทุก 30 วินาที
+  useEffect(() => {
+    // Clear previous timer
+    if (inactivityUpdateTimerRef.current) {
+      clearInterval(inactivityUpdateTimerRef.current);
+    }
+    
+    // ส่งข้อมูลทันทีเมื่อมีการเปลี่ยนแปลง
+    sendInactivityBatch();
+    
+    // ตั้ง timer สำหรับส่งข้อมูลทุก 30 วินาที
+    inactivityUpdateTimerRef.current = setInterval(() => {
+      sendInactivityBatch();
+    }, 30000);
+    
+    return () => {
+      if (inactivityUpdateTimerRef.current) {
+        clearInterval(inactivityUpdateTimerRef.current);
+      }
+    };
+  }, [sendInactivityBatch]);
 
   useEffect(() => {
     const handlePageChange = (event) => {
@@ -514,15 +621,49 @@ function App() {
     try {
       const newConversations = await fetchConversations(selectedPage);
       
-      const hasChanges = newConversations.some(newConv => {
+      // ตรวจสอบว่ามีข้อความใหม่จาก user หรือไม่
+      const conversationsWithNewUserMessages = newConversations.filter(newConv => {
         const oldConv = allConversations.find(c => c.conversation_id === newConv.conversation_id);
-        if (!oldConv) return true;
-        return newConv.last_user_message_time !== oldConv.last_user_message_time;
+        if (!oldConv) return false;
+        
+        // ตรวจสอบว่ามีข้อความใหม่จาก user โดยเปรียบเทียบ last_user_message_time
+        return newConv.last_user_message_time && 
+               oldConv.last_user_message_time &&
+               new Date(newConv.last_user_message_time) > new Date(oldConv.last_user_message_time);
       });
       
-      if (hasChanges) {
-        setConversations(newConversations);
-        setAllConversations(newConversations);
+      // อัพเดทเฉพาะ conversations ที่มีข้อความใหม่จาก user
+      if (conversationsWithNewUserMessages.length > 0) {
+        // สร้าง updated conversations โดยอัพเดทเฉพาะที่มีข้อความใหม่จาก user
+        const updatedConversations = allConversations.map(oldConv => {
+          const newConv = newConversations.find(c => c.conversation_id === oldConv.conversation_id);
+          if (!newConv) return oldConv;
+          
+          // ถ้ามีข้อความใหม่จาก user ให้อัพเดททั้งหมด
+          const hasNewUserMessage = conversationsWithNewUserMessages.some(
+            c => c.conversation_id === oldConv.conversation_id
+          );
+          
+          if (hasNewUserMessage) {
+            return newConv; // อัพเดททั้ง conversation
+          } else {
+            // ไม่มีข้อความใหม่จาก user ให้คง last_user_message_time เดิม
+            return {
+              ...newConv,
+              last_user_message_time: oldConv.last_user_message_time
+            };
+          }
+        });
+        
+        // เพิ่ม conversations ใหม่ที่ยังไม่มีใน list เดิม
+        newConversations.forEach(newConv => {
+          if (!updatedConversations.find(c => c.conversation_id === newConv.conversation_id)) {
+            updatedConversations.push(newConv);
+          }
+        });
+        
+        setConversations(updatedConversations);
+        setAllConversations(updatedConversations);
         setLastUpdateTime(new Date());
         
         conversationCache.current = {};
@@ -531,16 +672,15 @@ function App() {
           setTimeout(() => applyFilters(), 100);
         }
         
-        const newMessages = newConversations.filter(newConv => {
-          const oldConv = allConversations.find(c => c.conversation_id === newConv.conversation_id);
-          if (!oldConv) return false;
-          return newConv.last_user_message_time && 
-                 new Date(newConv.last_user_message_time) > new Date(oldConv.last_user_message_time || 0);
-        });
+        // ส่งข้อมูล inactivity หลังจากอัพเดทข้อมูลใหม่
+        setTimeout(() => {
+          sendInactivityBatch();
+        }, 500);
         
-        if (newMessages.length > 0 && Notification.permission === "granted") {
+        // แจ้งเตือนเมื่อมีข้อความใหม่จาก user
+        if (conversationsWithNewUserMessages.length > 0 && Notification.permission === "granted") {
           new Notification("มีข้อความใหม่!", {
-            body: `มีข้อความใหม่จาก ${newMessages.length} การสนทนา`,
+            body: `มีข้อความใหม่จาก ${conversationsWithNewUserMessages.length} การสนทนา`,
             icon: "/favicon.ico"
           });
         }
@@ -548,7 +688,7 @@ function App() {
     } catch (err) {
       console.error("❌ เกิดข้อผิดพลาดในการตรวจสอบ:", err);
     }
-  }, [selectedPage, allConversations, loading, filteredConversations]);
+  }, [selectedPage, allConversations, loading, filteredConversations, sendInactivityBatch]);
 
   useEffect(() => {
     clockIntervalRef.current = setInterval(() => {
@@ -1095,6 +1235,7 @@ function App() {
                       idx={idx}
                       isSelected={selectedConversationIds.includes(conv.conversation_id)}
                       onToggleCheckbox={toggleCheckbox}
+                      onInactivityChange={handleInactivityChange}
                     />
                   ))}
                 </tbody>

@@ -659,3 +659,27 @@ async def get_system_status():
             for schedule_id, users in message_scheduler.sent_tracking.items()
         }
     }
+# เพิ่ม endpoint นี้ในไฟล์ facebook.py
+
+@router.post("/update-user-inactivity/{page_id}")
+async def update_user_inactivity(page_id: str, request: Request):
+    """อัพเดทข้อมูลระยะเวลาที่หายไปของ users จาก frontend"""
+    try:
+        data = await request.json()
+        user_data = data.get('users', [])
+        
+        if not user_data:
+            return {"status": "error", "message": "No user data provided"}
+        
+        # อัพเดทข้อมูลใน scheduler
+        message_scheduler.update_user_inactivity_data(page_id, user_data)
+        
+        return {
+            "status": "success", 
+            "message": f"Updated inactivity data for {len(user_data)} users",
+            "updated_count": len(user_data)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error updating user inactivity data: {e}")
+        return {"status": "error", "message": str(e)}
