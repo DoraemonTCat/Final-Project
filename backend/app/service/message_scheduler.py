@@ -207,19 +207,43 @@ class MessageScheduler:
                 # ดึงระยะเวลาที่หายไป (เป็นนาที)
                 user_inactivity_minutes = user_data.get('inactivity_minutes', 0)
 
-                # เทียบกับเงื่อนไข - ต้องตรงกันหรือมากกว่า
-                if user_inactivity_minutes >= target_minutes:
+                # 🔥 แก้ไข: ตรวจสอบว่าอยู่ในช่วงที่ตรงกับเงื่อนไข
+                # กำหนด tolerance (ความคลาดเคลื่อนที่ยอมรับได้) เช่น ±5%
+                tolerance = target_minutes * 0.02  #  2% ของเป้าหมาย
+                
+                min_tolerance = max(0.2, tolerance)  # อย่างน้อย  0.2 นาที (12 วินาที) เพื่อป้องกันความผิดพลาดเล็กน้อย
+                
+                # ตรวจสอบว่าอยู่ในช่วงที่ต้องส่ง
+                lower_bound = target_minutes - min_tolerance
+                upper_bound = target_minutes + min_tolerance
+                
+                if lower_bound <= user_inactivity_minutes <= upper_bound:
                     inactive_users.append(user_id)
-                    logger.info(f"User {user_id} is inactive for {user_inactivity_minutes} minutes (target: {target_minutes})")
+                    logger.info(f"User {user_id} matches condition: inactive for {user_inactivity_minutes} minutes (target: {target_minutes}±{min_tolerance})")
+                else:
+                    logger.debug(f"User {user_id} doesn't match: inactive for {user_inactivity_minutes} minutes (target: {target_minutes}±{min_tolerance})")
 
             # ส่งข้อความให้ users ที่ตรงเงื่อนไข
             if inactive_users:
-                logger.info(f"Found {len(inactive_users)} inactive users for schedule {schedule['id']}")
+                logger.info(f"Found {len(inactive_users)} users matching inactivity condition for schedule {schedule['id']}")
                 await self.send_messages_to_users(page_id, inactive_users, schedule['messages'], access_token)
 
                 # เพิ่ม users ที่ส่งแล้วเข้า tracking
                 self.sent_tracking[schedule_id].update(inactive_users)
                 schedule['last_sent'] = datetime.now().isoformat()
+                
+                # 🔥 เพิ่ม: บันทึกประวัติการส่งแบบละเอียด
+                if schedule_id not in self.sent_history:
+                    self.sent_history[schedule_id] = []
+                
+                for user_id in inactive_users:
+                    user_inactivity = page_inactivity_data.get(user_id, {}).get('inactivity_minutes', 0)
+                    self.sent_history[schedule_id].append({
+                        'user_id': user_id,
+                        'sent_at': datetime.now().isoformat(),
+                        'inactivity_minutes': user_inactivity,
+                        'target_minutes': target_minutes
+                    })
 
         except Exception as e:
             logger.error(f"Error checking user inactivity v2: {e}")
