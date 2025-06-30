@@ -214,12 +214,8 @@ function ManageMessageSets() {
                         <div className="empty-state">
                             <div className="empty-icon">📭</div>
                             <h3>ไม่พบชุดข้อความ</h3>
-                            <p>{searchTerm ? 'ไม่พบชุดข้อความที่ตรงกับคำค้นหา' : 'ยังไม่มีชุดข้อความสำหรับเพจนี้'}</p>
-                            {!searchTerm && (
-                                <button onClick={() => navigate('/default')} className="empty-add-btn">
-                                    เริ่มสร้างชุดข้อความแรก
-                                </button>
-                            )}
+                          
+                           
                         </div>
                     ) : (
                         <div className="message-sets-grid">
