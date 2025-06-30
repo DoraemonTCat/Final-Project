@@ -354,6 +354,8 @@ async def debug_conversations(page_id: str):
     }
 
 # เพิ่ม endpoint ใหม่ใน facebook.py
+# เพิ่มฟังก์ชันนี้ใน facebook.py หลังจากฟังก์ชัน get_conversations_with_last_message
+
 @router.get("/conversations-with-last-message/{page_id}")
 async def get_conversations_with_last_message(page_id: str):
     """ดึง conversations พร้อมข้อความล่าสุดในครั้งเดียว - เพื่อลดการเรียก API"""
@@ -398,7 +400,7 @@ async def get_conversations_with_last_message(page_id: str):
             conversation_id = conv.get("id")
             batch_requests.append({
                 "method": "GET",
-                "relative_url": f"{conversation_id}/messages?fields=message,from,created_time&limit=10"
+                "relative_url": f"{conversation_id}/messages?fields=message,from,created_time&limit=25"  # เพิ่ม limit เป็น 25
             })
         
         # 🚀 ส่ง batch request เพื่อดึงข้อความทั้งหมดในครั้งเดียว
@@ -450,14 +452,22 @@ async def get_conversations_with_last_message(page_id: str):
                     
                     # หาข้อความล่าสุดของ user และข้อความแรกสุด
                     if messages:
-                        first_created_time = messages[-1].get("created_time")  # ข้อความแรกสุด
+                        # ข้อความแรกสุด (เรียงจากใหม่ไปเก่า)
+                        first_created_time = messages[-1].get("created_time") if messages else None
                         
-                        # หาข้อความล่าสุดของ user (ไม่ใช่ page)
+                        # 🔥 สำคัญ: หาข้อความล่าสุดของ user (ไม่ใช่ page) อย่างถูกต้อง
                         for message in messages:
                             sender_id = message.get("from", {}).get("id")
-                            if sender_id and sender_id != page_id:
+                            # ตรวจสอบว่าผู้ส่งไม่ใช่ page และเป็น user จริงๆ
+                            if sender_id and sender_id != page_id and sender_id in user_psids:
                                 last_user_message_time = message.get("created_time")
+                                print(f"✅ Found last user message for conversation {conversation_id} from user {sender_id} at {last_user_message_time}")
                                 break
+                        
+                        # ถ้าไม่พบข้อความจาก user ให้ใช้ created_time ของ conversation แรก
+                        if not last_user_message_time and first_created_time:
+                            last_user_message_time = first_created_time
+                            print(f"⚠️ No user message found for conversation {conversation_id}, using first message time: {first_created_time}")
                                 
                 except Exception as e:
                     print(f"⚠️ Error parsing messages for conversation {conversation_id}: {e}")
@@ -476,10 +486,14 @@ async def get_conversations_with_last_message(page_id: str):
                     "raw_psid": user_psids[0],
                     "updated_time": updated_time,
                     "created_time": first_created_time,
-                    "last_user_message_time": last_user_message_time  # 🔥 เวลาข้อความล่าสุดของ user
+                    "last_user_message_time": last_user_message_time  # 🔥 เวลาข้อความล่าสุดของ user ที่ถูกต้อง
                 })
         
         print(f"✅ ประมวลผลเสร็จสิ้น: {len(result_conversations)} conversations พร้อมข้อมูลข้อความล่าสุด")
+        
+        # Debug log สำหรับตรวจสอบ
+        for conv in result_conversations[:3]:  # แสดงแค่ 3 รายการแรก
+            print(f"Conversation {conv['conversation_id']}: last_user_message_time = {conv['last_user_message_time']}")
         
         return {
             "conversations": result_conversations, 

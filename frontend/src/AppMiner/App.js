@@ -11,7 +11,8 @@ import * as mammoth from 'mammoth';
 const TimeAgoCell = React.memo(({ lastMessageTime, updatedTime, userId, onInactivityChange }) => {
   const [displayTime, setDisplayTime] = useState('');
   const [inactivityMinutes, setInactivityMinutes] = useState(0);
-  
+  const intervalRef = useRef(null); // <--- เพิ่ม ref
+
   useEffect(() => {
     const updateTime = () => {
       const referenceTime = lastMessageTime || updatedTime;
@@ -20,21 +21,19 @@ const TimeAgoCell = React.memo(({ lastMessageTime, updatedTime, userId, onInacti
         setInactivityMinutes(0);
         return;
       }
-      
+
       const past = new Date(referenceTime);
       const now = new Date();
       const diffMs = now.getTime() - past.getTime();
       const diffSec = Math.floor(diffMs / 1000);
       const diffMin = Math.floor(diffSec / 60);
-      
-      // เก็บค่านาทีที่หายไป
+
       setInactivityMinutes(diffMin > 0 ? diffMin : 0);
-      
-      // แจ้งการเปลี่ยนแปลงไปยัง parent component
+
       if (onInactivityChange && userId) {
         onInactivityChange(userId, diffMin > 0 ? diffMin : 0);
       }
-      
+
       if (diffSec < 0) {
         setDisplayTime('0 วินาทีที่แล้ว');
       } else if (diffSec < 60) {
@@ -69,30 +68,36 @@ const TimeAgoCell = React.memo(({ lastMessageTime, updatedTime, userId, onInacti
         }
       }
     };
-    
-    updateTime();
-    
+
+    // เคลียร์ interval เดิมก่อนตั้งใหม่ทุกครั้งที่ prop เปลี่ยน
+    if (intervalRef.current) clearInterval(intervalRef.current);
+
+    updateTime(); // เรียกทันทีเมื่อ prop เปลี่ยน
+
     const referenceTime = lastMessageTime || updatedTime;
     if (!referenceTime) return;
-    
+
     const past = new Date(referenceTime);
     const now = new Date();
     const diffMs = now.getTime() - past.getTime();
-    const diffMin = Math.floor(diffMs / 60000);
-    
-    let intervalMs;
-    if (diffMin < 1) {
+    const diffMin = Math.floor(diffMs / 60000); 
+
+    let intervalMs; // ตัวนับเวลาที่หายไป ในตาราง ระยะเวลาที่หายไป
+    if (diffMin < 1) { 
       intervalMs = 1000;
     } else if (diffMin < 60) {
       intervalMs = 60000;
     } else {
       intervalMs = 3600000;
     }
-    
-    const interval = setInterval(updateTime, intervalMs);
-    
-    return () => clearInterval(interval);
+
+    intervalRef.current = setInterval(updateTime, intervalMs);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, [lastMessageTime, updatedTime, userId, onInactivityChange]);
+  
   
   const isRecent = lastMessageTime && 
     new Date(lastMessageTime) > new Date(Date.now() - 60000);
@@ -633,16 +638,29 @@ function App() {
     }
   };
 
+  // ฟังก์ชันตรวจสอบข้อความใหม่จาก user
+  // ฟังก์ชันตรวจสอบข้อความใหม่จาก user
   const checkForNewMessages = useCallback(async () => {
     if (!selectedPage || loading) return;
     
     try {
       const newConversations = await fetchConversations(selectedPage);
       
+      // Debug log
+      console.log("🔍 Checking for new messages...");
+      
       // ตรวจสอบว่ามีข้อความใหม่จาก user หรือไม่
       const conversationsWithNewUserMessages = newConversations.filter(newConv => {
         const oldConv = allConversations.find(c => c.conversation_id === newConv.conversation_id);
         if (!oldConv) return false;
+        
+        // Debug log สำหรับแต่ละ conversation
+        console.log(`Conversation ${newConv.conversation_id}:`, {
+          old_last_user_message: oldConv.last_user_message_time,
+          new_last_user_message: newConv.last_user_message_time,
+          old_updated: oldConv.updated_time,
+          new_updated: newConv.updated_time
+        });
         
         // ตรวจสอบว่ามีข้อความใหม่จาก user โดยเปรียบเทียบ last_user_message_time
         return newConv.last_user_message_time && 
@@ -650,25 +668,35 @@ function App() {
                new Date(newConv.last_user_message_time) > new Date(oldConv.last_user_message_time);
       });
       
-      // อัพเดทเฉพาะ conversations ที่มีข้อความใหม่จาก user
-      if (conversationsWithNewUserMessages.length > 0) {
-        // สร้าง updated conversations โดยอัพเดทเฉพาะที่มีข้อความใหม่จาก user
+      console.log(`✅ Found ${conversationsWithNewUserMessages.length} conversations with new user messages`);
+      
+      // อัพเดทข้อมูล conversations
+      if (newConversations.length > 0) {
+        // สร้าง updated conversations โดยรักษา last_user_message_time เดิมไว้ถ้าไม่มีข้อความใหม่จาก user
         const updatedConversations = allConversations.map(oldConv => {
           const newConv = newConversations.find(c => c.conversation_id === oldConv.conversation_id);
           if (!newConv) return oldConv;
           
-          // ถ้ามีข้อความใหม่จาก user ให้อัพเดททั้งหมด
+          // ถ้ามีข้อความใหม่จาก user ให้อัพเดททั้ง conversation
           const hasNewUserMessage = conversationsWithNewUserMessages.some(
             c => c.conversation_id === oldConv.conversation_id
           );
           
           if (hasNewUserMessage) {
-            return newConv; // อัพเดททั้ง conversation
+            console.log(`📨 Updating conversation ${oldConv.conversation_id} with new user message`);
+            return newConv; // อัพเดททั้ง conversation รวมถึง last_user_message_time ใหม่
           } else {
             // ไม่มีข้อความใหม่จาก user ให้คง last_user_message_time เดิม
+            // สำคัญ: ต้องคงค่า last_user_message_time เดิมไว้เสมอ
+            const preservedLastUserMessage = oldConv.last_user_message_time || oldConv.updated_time;
+            
+            console.log(`🔒 Preserving last_user_message_time for ${oldConv.conversation_id}: ${preservedLastUserMessage}`);
+            
             return {
               ...newConv,
-              last_user_message_time: oldConv.last_user_message_time
+              last_user_message_time: preservedLastUserMessage,
+              // เพิ่ม flag เพื่อระบุว่านี่คือข้อความจากระบบ
+              _systemMessageUpdate: true
             };
           }
         });
@@ -695,7 +723,7 @@ function App() {
           sendInactivityBatch();
         }, 500);
         
-        // แจ้งเตือนเมื่อมีข้อความใหม่จาก user
+        // แจ้งเตือนเฉพาะเมื่อมีข้อความใหม่จาก user
         if (conversationsWithNewUserMessages.length > 0 && Notification.permission === "granted") {
           new Notification("มีข้อความใหม่!", {
             body: `มีข้อความใหม่จาก ${conversationsWithNewUserMessages.length} การสนทนา`,
@@ -710,7 +738,7 @@ function App() {
 
   useEffect(() => {
     clockIntervalRef.current = setInterval(() => {
-      setCurrentTime(new Date());
+      setCurrentTime(new Date()); //   อัพเดตเวลาในทุกๆ 5 วินาที
     }, 1000);
 
     return () => {
@@ -722,7 +750,7 @@ function App() {
     if (selectedPage) {
       pollingIntervalRef.current = setInterval(() => {
         checkForNewMessages();
-      }, 5000);
+      }, 3000); //  ตรวจสอบทุกๆ 3 วินาที
     }
 
     return () => {
