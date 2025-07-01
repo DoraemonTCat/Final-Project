@@ -208,7 +208,7 @@ function ManageMessageSets() {
                     ) : loading ? (
                         <div className="loading-state">
                             <div className="loading-spinner"></div>
-                            <p>กำลังโหลดข้อมูล...</p>
+                         
                         </div>
                     ) : filteredAndSortedSets.length === 0 ? (
                         <div className="empty-state">
