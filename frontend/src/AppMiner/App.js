@@ -6,6 +6,8 @@ import Popup from "./MinerPopup";
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import * as mammoth from 'mammoth';
+import SyncCustomersButton from './SyncCustomersButton';
+
 
 // 🎨 Component สำหรับแสดงเวลาแบบ optimized
 const TimeAgoCell = React.memo(({ lastMessageTime, updatedTime, userId, onInactivityChange }) => {
@@ -758,43 +760,51 @@ function App() {
     };
   }, [selectedPage, checkForNewMessages]);
 
-  const loadConversations = async (pageId) => {
-    if (!pageId) return;
+  // 3. อัพเดท loadConversations function ให้แสดง status ว่าข้อมูลมาจากไหน
+const loadConversations = async (pageId) => {
+  if (!pageId) return;
 
-    const cached = getCachedData(`conversations_${pageId}`, conversationCache);
-    if (cached && !loading) {
-      setConversations(cached);
-      setAllConversations(cached);
-      return;
-    }
+  const cached = getCachedData(`conversations_${pageId}`, conversationCache);
+  if (cached && !loading) {
+    setConversations(cached);
+    setAllConversations(cached);
+    return;
+  }
 
-    setLoading(true);
-    try {
-      const conversations = await fetchConversations(pageId);
-      setConversations(conversations);
-      setAllConversations(conversations);
-      setLastUpdateTime(new Date());
-      setCachedData(`conversations_${pageId}`, conversations, conversationCache);
-      
-      setDisappearTime("");
-      setCustomerType("");
-      setPlatformType("");
-      setMiningStatus("");
-      setStartDate("");
-      setEndDate("");
-      setFilteredConversations([]);
-      setSelectedConversationIds([]);
-    } catch (err) {
-      console.error("❌ เกิดข้อผิดพลาด:", err);
-      if (err.response?.status === 400) {
-        alert("กรุณาเชื่อมต่อ Facebook Page ก่อนใช้งาน");
-      } else {
-        alert(`เกิดข้อผิดพลาด: ${err.message || err}`);
-      }
-    } finally {
-      setLoading(false);
+  setLoading(true);
+  try {
+    const conversations = await fetchConversations(pageId);
+    
+    // เช็คว่าข้อมูลมาจาก database หรือ facebook
+    if (conversations.source === 'database') {
+      console.log('📊 ใช้ข้อมูลจาก database');
     }
-  };
+    
+    setConversations(conversations);
+    setAllConversations(conversations);
+    setLastUpdateTime(new Date());
+    setCachedData(`conversations_${pageId}`, conversations, conversationCache);
+    
+    // Reset filters
+    setDisappearTime("");
+    setCustomerType("");
+    setPlatformType("");
+    setMiningStatus("");
+    setStartDate("");
+    setEndDate("");
+    setFilteredConversations([]);
+    setSelectedConversationIds([]);
+  } catch (err) {
+    console.error("❌ เกิดข้อผิดพลาด:", err);
+    if (err.response?.status === 400) {
+      alert("กรุณาเชื่อมต่อ Facebook Page ก่อนใช้งาน");
+    } else {
+      alert(`เกิดข้อผิดพลาด: ${err.message || err}`);
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleloadConversations = () => {
     if (!selectedPage) {
@@ -1053,6 +1063,17 @@ function App() {
               <span className="update-icon">🔄</span>
               <span className="update-text">{updateStatus.status}</span>
             </div>
+            
+            {/* เพิ่ม Sync Button ตรงนี้ */}
+            {selectedPage && (
+              <SyncCustomersButton 
+                selectedPage={selectedPage}
+                onSyncComplete={() => {
+                  // Refresh conversations หลัง sync เสร็จ
+                  loadConversations(selectedPage);
+                }}
+              />
+            )}
           </div>
           <div className="status-right">
             <span className="clock-display">

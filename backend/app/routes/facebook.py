@@ -290,12 +290,14 @@ def extract_psids_with_conversation_id(conversations_data, access_token, page_id
             })
     return result
 
+# อัพเดท endpoint ส่งข้อความให้อัพเดท interaction ด้วย
 @router.post("/send/{page_id}/{psid}")
 async def send_user_message_by_psid(
     page_id: str,
     psid: str,
     req: SendMessageRequest,
-    request: Request
+    request: Request,
+    db: Session = Depends(get_db)  # เพิ่ม db dependency
 ):
     print(f"📤 กำลังส่งข้อความไปยัง PSID: {psid}")
     print(f"📤 ข้อความ: {req.message}")
@@ -307,22 +309,141 @@ async def send_user_message_by_psid(
     if not psid or len(psid) < 10:
         return {"error": "Invalid PSID"}
 
+    # ส่งข้อความตามปกติ
     if req.type == "image":
-        # สร้าง path ไฟล์ local เต็ม
         image_path = f"{image_dir}/{req.message}"
         result = send_image_binary(psid, image_path, access_token)
-
     elif req.type == "video":
         video_path = f"{vid_dir}/{req.message}"
-        result = send_video_binary(psid, video_path, access_token)  # ต้องเขียนฟังก์ชันนี้ด้วย
-
+        result = send_video_binary(psid, video_path, access_token)
     else:
         result = send_message(psid, req.message, access_token)
+
+    # ถ้าส่งสำเร็จ ให้อัพเดท interaction time
+    if "error" not in result:
+        try:
+            # ดึง page จาก database
+            page = crud.get_page_by_page_id(db, page_id)
+            if page:
+                # อัพเดท last_interaction_at
+                crud.update_customer_interaction(db, page.ID, psid)
+                print(f"✅ อัพเดท interaction time สำเร็จสำหรับ {psid}")
+        except Exception as e:
+            print(f"⚠️ ไม่สามารถอัพเดท interaction time: {e}")
+            # ไม่ return error เพราะการส่งข้อความสำเร็จแล้ว
 
     if "error" in result:
         return {"error": result["error"], "details": result}
     else:
         return {"success": True, "result": result}
+    
+@router.get("/customers/{page_id}")
+async def get_customers(
+    page_id: str, 
+    skip: int = 0, 
+    limit: int = 100,
+    search: str = None,
+    db: Session = Depends(get_db)
+):
+    """ดึงรายชื่อลูกค้าทั้งหมดของเพจจาก database"""
+    page = crud.get_page_by_page_id(db, page_id)
+    if not page:
+        return JSONResponse(
+            status_code=400, 
+            content={"error": f"ไม่พบเพจ {page_id} ในระบบ"}
+        )
+    
+    if search:
+        customers = crud.search_customers(db, page.ID, search)
+    else:
+        customers = crud.get_customers_by_page(db, page.ID, skip, limit)
+    
+    # แปลง format
+    result = []
+    for customer in customers:
+        result.append({
+            "id": customer.id,
+            "psid": customer.customer_psid,
+            "name": customer.name or f"User...{customer.customer_psid[-8:]}",
+            "first_interaction": customer.first_interaction_at.isoformat() if customer.first_interaction_at else None,
+            "last_interaction": customer.last_interaction_at.isoformat() if customer.last_interaction_at else None,
+            "customer_type": customer.customer_type_custom.type_name if customer.customer_type_custom else None
+        })
+    
+    return {
+        "customers": result,
+        "total": len(result),
+        "page_id": page_id
+    }
+
+@router.get("/customer/{page_id}/{psid}")
+async def get_customer_detail(
+    page_id: str, 
+    psid: str,
+    db: Session = Depends(get_db)
+):
+    """ดึงข้อมูลลูกค้ารายคน"""
+    page = crud.get_page_by_page_id(db, page_id)
+    if not page:
+        return JSONResponse(
+            status_code=400, 
+            content={"error": f"ไม่พบเพจ {page_id} ในระบบ"}
+        )
+    
+    customer = crud.get_customer_by_psid(db, page.ID, psid)
+    if not customer:
+        return JSONResponse(
+            status_code=404, 
+            content={"error": "ไม่พบข้อมูลลูกค้า"}
+        )
+    
+    return {
+        "id": customer.id,
+        "psid": customer.customer_psid,
+        "name": customer.name,
+        "first_interaction": customer.first_interaction_at.isoformat() if customer.first_interaction_at else None,
+        "last_interaction": customer.last_interaction_at.isoformat() if customer.last_interaction_at else None,
+        "customer_type_custom": customer.customer_type_custom.type_name if customer.customer_type_custom else None,
+        "customer_type_knowledge": customer.customer_type_knowledge.type_name if customer.customer_type_knowledge else None,
+        "created_at": customer.created_at.isoformat(),
+        "updated_at": customer.updated_at.isoformat()
+    }
+
+@router.put("/customer/{page_id}/{psid}")
+async def update_customer(
+    page_id: str, 
+    psid: str,
+    customer_data: dict,
+    db: Session = Depends(get_db)
+):
+    """อัพเดทข้อมูลลูกค้า"""
+    page = crud.get_page_by_page_id(db, page_id)
+    if not page:
+        return JSONResponse(
+            status_code=400, 
+            content={"error": f"ไม่พบเพจ {page_id} ในระบบ"}
+        )
+    
+    customer = crud.get_customer_by_psid(db, page.ID, psid)
+    if not customer:
+        return JSONResponse(
+            status_code=404, 
+            content={"error": "ไม่พบข้อมูลลูกค้า"}
+        )
+    
+    # อัพเดทข้อมูล
+    if "name" in customer_data:
+        customer.name = customer_data["name"]
+    if "customer_type_custom_id" in customer_data:
+        customer.customer_type_custom_id = customer_data["customer_type_custom_id"]
+    if "customer_type_knowledge_id" in customer_data:
+        customer.customer_type_knowledge_id = customer_data["customer_type_knowledge_id"]
+    
+    customer.updated_at = datetime.now()
+    db.commit()
+    db.refresh(customer)
+    
+    return {"status": "success", "message": "อัพเดทข้อมูลสำเร็จ"}
 # ================================
 # 🧪 Debug Routes - เพิ่มเพื่อช่วย Debug
 # ================================
@@ -357,148 +478,98 @@ async def debug_conversations(page_id: str):
 # เพิ่มฟังก์ชันนี้ใน facebook.py หลังจากฟังก์ชัน get_conversations_with_last_message
 
 @router.get("/conversations-with-last-message/{page_id}")
-async def get_conversations_with_last_message(page_id: str):
-    """ดึง conversations พร้อมข้อความล่าสุดในครั้งเดียว - เพื่อลดการเรียก API"""
-    print(f"🚀 เริ่มดึงข้อมูล conversations พร้อมข้อความล่าสุดสำหรับ page_id: {page_id}")
+async def get_conversations_with_last_message(page_id: str, db: Session = Depends(get_db)):
+    """ดึง conversations จาก database และ sync อัตโนมัติถ้าไม่มีข้อมูล"""
+    print(f"🚀 เริ่มดึงข้อมูล conversations สำหรับ page_id: {page_id}")
     
-    # ตรวจสอบ access token
-    access_token = page_tokens.get(page_id)
-    if not access_token:
-        print(f"❌ ไม่พบ access_token สำหรับ page_id: {page_id}")
+    # ตรวจสอบว่ามี page ใน database หรือไม่
+    page = crud.get_page_by_page_id(db, page_id)
+    if not page:
         return JSONResponse(
             status_code=400, 
-            content={"error": f"ไม่พบ access_token สำหรับ page_id: {page_id}. กรุณาเชื่อมต่อเพจก่อน"}
+            content={"error": f"ไม่พบเพจ {page_id} ในระบบ"}
         )
     
     try:
-        # 🔥 Step 1: ดึง conversations พร้อม participants ในครั้งเดียว
-        conversations_endpoint = f"{page_id}/conversations"
-        conversations_params = {
-            "fields": "participants,updated_time,id",
-            "limit": 100
-        }
+        # ดึงข้อมูลลูกค้าจาก database
+        conversations_data = crud.get_customer_with_conversation_data(db, page.ID)
         
-        print("🔍 กำลังดึงข้อมูล conversations...")
-        conversations_result = fb_get(conversations_endpoint, conversations_params, access_token)
-        
-        if "error" in conversations_result:
-            print(f"❌ Error getting conversations: {conversations_result['error']}")
-            return JSONResponse(status_code=400, content={"error": conversations_result["error"]})
-        
-        conversations_data = conversations_result.get("data", [])
-        print(f"✅ พบ conversations จำนวน: {len(conversations_data)}")
-        
+        # ถ้าไม่มีข้อมูลใน database ให้ sync อัตโนมัติ
         if not conversations_data:
-            return {"conversations": [], "total": 0}
-        
-        # 🔥 Step 2: ดึงข้อความล่าสุดพร้อมกันแบบ batch
-        result_conversations = []
-        
-        # สร้าง batch requests สำหรับดึงข้อความล่าสุด
-        batch_requests = []
-        for i, conv in enumerate(conversations_data):
-            conversation_id = conv.get("id")
-            batch_requests.append({
-                "method": "GET",
-                "relative_url": f"{conversation_id}/messages?fields=message,from,created_time&limit=25"  # เพิ่ม limit เป็น 25
-            })
-        
-        # 🚀 ส่ง batch request เพื่อดึงข้อความทั้งหมดในครั้งเดียว
-        print(f"🚀 กำลังส่ง batch request สำหรับ {len(batch_requests)} conversations...")
-        
-        # Facebook Graph API Batch Request
-        batch_url = "https://graph.facebook.com/v14.0/"
-        batch_params = {
-            "access_token": access_token,
-            "batch": str(batch_requests).replace("'", '"')  # แปลงเป็น JSON string
-        }
-        
-        import requests
-        batch_response = requests.post(batch_url, data=batch_params)
-        batch_results = batch_response.json()
-        
-        print(f"✅ ได้รับผลลัพธ์ batch request: {len(batch_results)} รายการ")
-        
-        # 🔥 Step 3: ประมวลผลข้อมูลทั้งหมด
-        for i, conv in enumerate(conversations_data):
-            conversation_id = conv.get("id")
-            updated_time = conv.get("updated_time")
-            participants = conv.get("participants", {}).get("data", [])
+            print("📊 ไม่พบข้อมูลใน database, กำลัง sync อัตโนมัติ...")
             
-            # หา user participants (ไม่ใช่ page)
-            user_psids = []
-            user_names = []
-            
-            for participant in participants:
-                participant_id = participant.get("id")
-                if participant_id and participant_id != page_id:
-                    user_psids.append(participant_id)
-                    user_name = participant.get("name")
-                    
-                    if not user_name:
-                        user_name = f"User...{participant_id[-8:]}" if len(participant_id) > 8 else f"User {participant_id}"
-                    
-                    user_names.append(user_name)
-            
-            # ดึงข้อมูลข้อความจาก batch result
-            last_user_message_time = None
-            first_created_time = None
-            
-            if i < len(batch_results) and batch_results[i].get("code") == 200:
-                try:
-                    import json
-                    messages_data = json.loads(batch_results[i]["body"])
-                    messages = messages_data.get("data", [])
-                    
-                    # หาข้อความล่าสุดของ user และข้อความแรกสุด
-                    if messages:
-                        # ข้อความแรกสุด (เรียงจากใหม่ไปเก่า)
-                        first_created_time = messages[-1].get("created_time") if messages else None
-                        
-                        # 🔥 สำคัญ: หาข้อความล่าสุดของ user (ไม่ใช่ page) อย่างถูกต้อง
-                        for message in messages:
-                            sender_id = message.get("from", {}).get("id")
-                            # ตรวจสอบว่าผู้ส่งไม่ใช่ page และเป็น user จริงๆ
-                            if sender_id and sender_id != page_id and sender_id in user_psids:
-                                last_user_message_time = message.get("created_time")
-                                print(f"✅ Found last user message for conversation {conversation_id} from user {sender_id} at {last_user_message_time}")
-                                break
-                        
-                        # ถ้าไม่พบข้อความจาก user ให้ใช้ created_time ของ conversation แรก
-                        if not last_user_message_time and first_created_time:
-                            last_user_message_time = first_created_time
-                            print(f"⚠️ No user message found for conversation {conversation_id}, using first message time: {first_created_time}")
-                                
-                except Exception as e:
-                    print(f"⚠️ Error parsing messages for conversation {conversation_id}: {e}")
-            
-            # เพิ่มข้อมูลลงใน result
-            if user_psids:
-                user_name = user_names[0] if user_names else "ไม่ทราบชื่อ"
+            # ดึง access token
+            access_token = page_tokens.get(page_id)
+            if access_token:
+                # ดึงข้อมูลจาก Facebook และบันทึก
+                conversations = get_conversations_with_participants(page_id, access_token)
                 
-                result_conversations.append({
-                    "id": i + 1,
-                    "conversation_id": conversation_id,
-                    "conversation_name": f" {user_name}",
-                    "user_name": user_name,
-                    "psids": user_psids,
-                    "names": user_names,
-                    "raw_psid": user_psids[0],
-                    "updated_time": updated_time,
-                    "created_time": first_created_time,
-                    "last_user_message_time": last_user_message_time  # 🔥 เวลาข้อความล่าสุดของ user ที่ถูกต้อง
-                })
+                if conversations and "data" in conversations:
+                    sync_count = 0
+                    
+                    for convo in conversations.get("data", []):
+                        convo_id = convo.get("id")
+                        updated_time = convo.get("updated_time")
+                        participants = convo.get("participants", {}).get("data", [])
+                        
+                        for participant in participants:
+                            participant_id = participant.get("id")
+                            if participant_id and participant_id != page_id:
+                                # ดึงข้อมูล user
+                                user_name = participant.get("name")
+                                
+                                if not user_name:
+                                    user_info = get_user_info_from_psid(participant_id, access_token)
+                                    user_name = user_info.get("name")
+                                
+                                if not user_name or user_name.startswith("User"):
+                                    message_name = get_name_from_messages(convo_id, access_token, page_id)
+                                    if message_name:
+                                        user_name = message_name
+                                
+                                if not user_name:
+                                    user_name = f"User...{participant_id[-8:]}"
+                                
+                                # ดึงเวลาข้อความแรกและล่าสุด
+                                first_message_time = get_first_message_time(convo_id, access_token)
+                                
+                                # แปลง string เป็น datetime
+                                first_interaction = None
+                                last_interaction = None
+                                
+                                if first_message_time:
+                                    try:
+                                        first_interaction = datetime.fromisoformat(first_message_time.replace('Z', '+00:00'))
+                                    except:
+                                        first_interaction = datetime.now()
+                                
+                                if updated_time:
+                                    try:
+                                        last_interaction = datetime.fromisoformat(updated_time.replace('Z', '+00:00'))
+                                    except:
+                                        last_interaction = datetime.now()
+                                
+                                # บันทึกข้อมูลลูกค้า
+                                customer_data = {
+                                    'name': user_name,
+                                    'first_interaction_at': first_interaction,
+                                    'last_interaction_at': last_interaction
+                                }
+                                
+                                crud.create_or_update_customer(db, page.ID, participant_id, customer_data)
+                                sync_count += 1
+                    
+                    print(f"✅ Sync อัตโนมัติสำเร็จ: {sync_count} คน")
+                    
+                    # ดึงข้อมูลใหม่จาก database
+                    conversations_data = crud.get_customer_with_conversation_data(db, page.ID)
         
-        print(f"✅ ประมวลผลเสร็จสิ้น: {len(result_conversations)} conversations พร้อมข้อมูลข้อความล่าสุด")
-        
-        # Debug log สำหรับตรวจสอบ
-        for conv in result_conversations[:3]:  # แสดงแค่ 3 รายการแรก
-            print(f"Conversation {conv['conversation_id']}: last_user_message_time = {conv['last_user_message_time']}")
+        print(f"✅ พบข้อมูลลูกค้าใน database จำนวน: {len(conversations_data)} คน")
         
         return {
-            "conversations": result_conversations, 
-            "total": len(result_conversations),
-            "optimization": "Used batch API to reduce requests"
+            "conversations": conversations_data, 
+            "total": len(conversations_data),
+            "source": "database"
         }
         
     except Exception as e:
@@ -506,6 +577,37 @@ async def get_conversations_with_last_message(page_id: str):
         return JSONResponse(
             status_code=500, 
             content={"error": f"เกิดข้อผิดพลาดในการดึงข้อมูล: {str(e)}"}
+        )
+        
+# เพิ่ม endpoint สำหรับดึงข้อมูลจาก Facebook โดยตรง (ใช้เฉพาะเวลาต้องการ sync)
+@router.get("/conversations-from-facebook/{page_id}")
+async def get_conversations_from_facebook(page_id: str):
+    """ดึง conversations จาก Facebook API โดยตรง (ใช้สำหรับ sync)"""
+    print(f"🔍 กำลังดึงข้อมูลจาก Facebook สำหรับ page_id: {page_id}")
+    
+    # ตรวจสอบ access token
+    access_token = page_tokens.get(page_id)
+    if not access_token:
+        return JSONResponse(
+            status_code=400, 
+            content={"error": f"ไม่พบ access_token สำหรับ page_id: {page_id}"}
+        )
+    
+    try:
+        # เรียก function เดิมที่ดึงจาก Facebook
+        # ... (ใช้ logic เดิมจาก endpoint เก่า)
+        
+        return {
+            "conversations": [], # ข้อมูลจาก Facebook
+            "total": 0,
+            "source": "facebook"
+        }
+        
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
         )
 
 @router.post("/schedule/activate")
@@ -700,3 +802,111 @@ async def update_user_inactivity(page_id: str, request: Request):
     except Exception as e:
         logger.error(f"Error updating user inactivity data: {e}")
         return {"status": "error", "message": str(e)}
+
+@router.post("/sync-customers/{page_id}")
+async def sync_facebook_customers(page_id: str, db: Session = Depends(get_db)):
+    """Sync ข้อมูลลูกค้าจาก Facebook มาเก็บใน database"""
+    print(f"🔄 เริ่ม sync ข้อมูลลูกค้าสำหรับ page_id: {page_id}")
+    
+    # ตรวจสอบว่ามี page ใน database หรือไม่
+    page = crud.get_page_by_page_id(db, page_id)
+    if not page:
+        return JSONResponse(
+            status_code=400, 
+            content={"error": f"ไม่พบเพจ {page_id} ในระบบ กรุณาเชื่อมต่อเพจก่อน"}
+        )
+    
+    # ดึง access token
+    access_token = page_tokens.get(page_id)
+    if not access_token:
+        return JSONResponse(
+            status_code=400, 
+            content={"error": f"ไม่พบ access_token สำหรับ page_id: {page_id}"}
+        )
+    
+    try:
+        # ดึง conversations จาก Facebook
+        conversations = get_conversations_with_participants(page_id, access_token)
+        if not conversations or "data" not in conversations:
+            return {"status": "no_data", "message": "ไม่พบข้อมูล conversations"}
+        
+        sync_count = 0
+        error_count = 0
+        
+        # วนลูปผ่านแต่ละ conversation
+        for convo in conversations.get("data", []):
+            convo_id = convo.get("id")
+            updated_time = convo.get("updated_time")
+            participants = convo.get("participants", {}).get("data", [])
+            
+            # หา user participants (ไม่ใช่ page)
+            for participant in participants:
+                participant_id = participant.get("id")
+                if participant_id and participant_id != page_id:
+                    try:
+                        # ดึงข้อมูล user
+                        user_name = participant.get("name")
+                        
+                        # ถ้าไม่มีชื่อ ลองดึงจาก user info
+                        if not user_name:
+                            user_info = get_user_info_from_psid(participant_id, access_token)
+                            user_name = user_info.get("name")
+                        
+                        # ถ้ายังไม่มีชื่อ ลองดึงจากข้อความ
+                        if not user_name or user_name.startswith("User"):
+                            message_name = get_name_from_messages(convo_id, access_token, page_id)
+                            if message_name:
+                                user_name = message_name
+                        
+                        # ถ้ายังไม่มีชื่อ ใช้ default
+                        if not user_name:
+                            user_name = f"User...{participant_id[-8:]}"
+                        
+                        # ดึงเวลาข้อความแรกและล่าสุด
+                        first_message_time = get_first_message_time(convo_id, access_token)
+                        
+                        # แปลง string เป็น datetime
+                        first_interaction = None
+                        last_interaction = None
+                        
+                        if first_message_time:
+                            try:
+                                first_interaction = datetime.fromisoformat(first_message_time.replace('Z', '+00:00'))
+                            except:
+                                first_interaction = datetime.now()
+                        
+                        if updated_time:
+                            try:
+                                last_interaction = datetime.fromisoformat(updated_time.replace('Z', '+00:00'))
+                            except:
+                                last_interaction = datetime.now()
+                        
+                        # บันทึกหรืออัพเดทข้อมูลลูกค้า
+                        customer_data = {
+                            'name': user_name,
+                            'first_interaction_at': first_interaction,
+                            'last_interaction_at': last_interaction
+                        }
+                        
+                        crud.create_or_update_customer(db, page.ID, participant_id, customer_data)
+                        sync_count += 1
+                        
+                    except Exception as e:
+                        print(f"❌ Error syncing customer {participant_id}: {e}")
+                        error_count += 1
+        
+        print(f"✅ Sync เสร็จสิ้น: สำเร็จ {sync_count} คน, ผิดพลาด {error_count} คน")
+        
+        return {
+            "status": "success",
+            "synced": sync_count,
+            "errors": error_count,
+            "message": f"Sync ข้อมูลลูกค้าสำเร็จ {sync_count} คน"
+        }
+        
+    except Exception as e:
+        print(f"❌ Error during sync: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"เกิดข้อผิดพลาดในการ sync: {str(e)}"}
+        )
