@@ -12,9 +12,8 @@ import os
 import asyncio
 import threading
 from app.service.message_scheduler import message_scheduler
+from app.service.websocket_service import socket_app, sio
 import logging
-
-
 
 # Setup logging
 logging.basicConfig(
@@ -34,6 +33,10 @@ vid_dir = os.getenv("VID_DIR")
 if not vid_dir:
     raise RuntimeError("VID_DIR is not set in .env")
 
+# Mount WebSocket app first
+app.mount("/ws", socket_app)
+
+# Mount static files
 app.mount("/images", StaticFiles(directory=image_dir), name="images")
 app.mount("/videos", StaticFiles(directory=vid_dir), name="videos")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -63,7 +66,7 @@ app.include_router(custom_messages.router)
 # Root endpoint
 @app.get("/")
 async def root():
-    return {"message": "Facebook Bot API with FastAPI is running."}
+    return {"message": "Facebook Bot API with FastAPI and WebSocket is running."}
 
 # เพิ่มฟังก์ชันสำหรับ run scheduler
 def run_scheduler():
@@ -89,6 +92,9 @@ async def startup_event():
     scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
     scheduler_thread.start()
     logging.info("Message scheduler thread started")
+    
+    # Log WebSocket status
+    logging.info("WebSocket server is ready at /ws/socket.io/")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -99,54 +105,3 @@ async def shutdown_event():
 # สำหรับรันแอป
 if __name__ == "__main__":
     uvicorn.run("app.app:app", host="0.0.0.0", port=8000, reload=True)
-    
-# เพิ่มฟังก์ชันสำหรับ run scheduler
-def run_scheduler():
-    """รัน scheduler ใน thread แยก"""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    try:
-        logging.info("Starting message scheduler...")
-        loop.run_until_complete(message_scheduler.start_schedule_monitoring())
-    except Exception as e:
-        logging.error(f"Scheduler error: {e}")
-    finally:
-        loop.close()
-
-# เพิ่มฟังก์ชันสำหรับ run customer sync
-def run_customer_sync():
-    """รัน customer sync ใน thread แยก"""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    try:
-        logging.info("Starting customer sync service...")
-        loop.run_until_complete(customer_sync_service.start_sync_monitoring())
-    except Exception as e:
-        logging.error(f"Customer sync error: {e}")
-    finally:
-        loop.close()
-
-# Event handlers
-@app.on_event("startup")
-async def startup_event():
-    """เริ่มต้นเมื่อ app เริ่มทำงาน"""
-    logging.info("Starting FastAPI application...")
-    
-    # Start scheduler in background thread
-    scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
-    scheduler_thread.start()
-    logging.info("Message scheduler thread started")
-    
-    # Start customer sync in background thread
-    customer_sync_thread = threading.Thread(target=run_customer_sync, daemon=True)
-    customer_sync_thread.start()
-    logging.info("Customer sync thread started")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """ปิดเมื่อ app หยุดทำงาน"""
-    logging.info("Shutting down...")
-    message_scheduler.stop()
-    customer_sync_service.stop()
