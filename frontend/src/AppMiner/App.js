@@ -7,7 +7,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import * as mammoth from 'mammoth';
 import SyncCustomersButton from './SyncCustomersButton';
-
+import DateFilterBadge from './DateFilterBadge';
 
 // 🎨 Component สำหรับแสดงเวลาแบบ optimized
 const TimeAgoCell = React.memo(({ lastMessageTime, updatedTime, userId, onInactivityChange }) => {
@@ -439,6 +439,7 @@ function App() {
   const [selectedMessageSetIds, setSelectedMessageSetIds] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
+  const [syncDateRange, setSyncDateRange] = useState(null);
   
   // เพิ่ม state สำหรับเก็บข้อมูล inactivity
   const [userInactivityData, setUserInactivityData] = useState({});
@@ -1031,6 +1032,13 @@ const loadConversations = async (pageId) => {
   const updateStatus = getUpdateStatus();
   const selectedPageInfo = pages.find(p => p.id === selectedPage);
 
+  // ฟังก์ชันสำหรับ clear filter
+  const handleClearDateFilter = () => {
+    setSyncDateRange(null);
+    // โหลดข้อมูลทั้งหมดใหม่
+    loadConversations(selectedPage);
+  };
+
   return (
     <div className="app-container">
       <Sidebar />
@@ -1064,16 +1072,22 @@ const loadConversations = async (pageId) => {
               <span className="update-text">{updateStatus.status}</span>
             </div>
             
-            {/* เพิ่ม Sync Button ตรงนี้ */}
+            {/* Sync Button */}
             {selectedPage && (
               <SyncCustomersButton 
                 selectedPage={selectedPage}
-                onSyncComplete={() => {
-                  // Refresh conversations หลัง sync เสร็จ
+                onSyncComplete={(dateRange) => {
+                  setSyncDateRange(dateRange);
                   loadConversations(selectedPage);
                 }}
               />
             )}
+
+            {/* Date Filter Badge */}
+            <DateFilterBadge 
+              dateRange={syncDateRange}
+              onClear={handleClearDateFilter}
+            />
           </div>
           <div className="status-right">
             <span className="clock-display">

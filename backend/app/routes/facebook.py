@@ -11,7 +11,8 @@ from pydantic import BaseModel
 from typing import Optional
 from app.config import image_dir,vid_dir
 from app.service.message_scheduler import message_scheduler
-
+from datetime import datetime, timedelta
+from fastapi import Query
 
 
 router = APIRouter()
@@ -804,9 +805,16 @@ async def update_user_inactivity(page_id: str, request: Request):
         return {"status": "error", "message": str(e)}
 
 @router.post("/sync-customers/{page_id}")
-async def sync_facebook_customers(page_id: str, db: Session = Depends(get_db)):
-    """Sync ข้อมูลลูกค้าจาก Facebook มาเก็บใน database"""
+async def sync_facebook_customers(
+    page_id: str, 
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    period: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """Sync ข้อมูลลูกค้าจาก Facebook มาเก็บใน database พร้อมตัวกรองช่วงเวลา"""
     print(f"🔄 เริ่ม sync ข้อมูลลูกค้าสำหรับ page_id: {page_id}")
+    print(f"📅 ช่วงเวลา: period={period}, start={start_date}, end={end_date}")
     
     # ตรวจสอบว่ามี page ใน database หรือไม่
     page = crud.get_page_by_page_id(db, page_id)
@@ -825,6 +833,33 @@ async def sync_facebook_customers(page_id: str, db: Session = Depends(get_db)):
         )
     
     try:
+        # คำนวณช่วงเวลาที่ต้องการดึงข้อมูล
+        filter_start_date = None
+        filter_end_date = None
+        
+        if period:
+            now = datetime.now()
+            if period == 'today':
+                filter_start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            elif period == 'week':
+                filter_start_date = now - timedelta(days=7)
+            elif period == 'month':
+                filter_start_date = now - timedelta(days=30)
+            elif period == '3months':
+                filter_start_date = now - timedelta(days=90)
+            elif period == '6months':
+                filter_start_date = now - timedelta(days=180)
+            elif period == 'year':
+                filter_start_date = now - timedelta(days=365)
+            
+            filter_end_date = now
+        
+        elif start_date and end_date:
+            filter_start_date = datetime.fromisoformat(start_date)
+            filter_end_date = datetime.fromisoformat(end_date + 'T23:59:59')
+        
+        print(f"🕒 กรองข้อมูลตั้งแต่: {filter_start_date} ถึง {filter_end_date}")
+        
         # ดึง conversations จาก Facebook
         conversations = get_conversations_with_participants(page_id, access_token)
         if not conversations or "data" not in conversations:
@@ -832,12 +867,24 @@ async def sync_facebook_customers(page_id: str, db: Session = Depends(get_db)):
         
         sync_count = 0
         error_count = 0
+        filtered_count = 0
         
         # วนลูปผ่านแต่ละ conversation
         for convo in conversations.get("data", []):
             convo_id = convo.get("id")
             updated_time = convo.get("updated_time")
             participants = convo.get("participants", {}).get("data", [])
+            
+            # ตรวจสอบช่วงเวลาถ้ามีการกำหนด
+            if filter_start_date and updated_time:
+                try:
+                    convo_time = datetime.fromisoformat(updated_time.replace('Z', '+00:00'))
+                    # ถ้า conversation อยู่นอกช่วงเวลาที่กำหนด ให้ข้าม
+                    if convo_time < filter_start_date or convo_time > filter_end_date:
+                        filtered_count += 1
+                        continue
+                except:
+                    pass
             
             # หา user participants (ไม่ใช่ page)
             for participant in participants:
@@ -895,13 +942,15 @@ async def sync_facebook_customers(page_id: str, db: Session = Depends(get_db)):
                         print(f"❌ Error syncing customer {participant_id}: {e}")
                         error_count += 1
         
-        print(f"✅ Sync เสร็จสิ้น: สำเร็จ {sync_count} คน, ผิดพลาด {error_count} คน")
+        print(f"✅ Sync เสร็จสิ้น: สำเร็จ {sync_count} คน, ผิดพลาด {error_count} คน, กรองออก {filtered_count} conversations")
         
         return {
             "status": "success",
             "synced": sync_count,
             "errors": error_count,
-            "message": f"Sync ข้อมูลลูกค้าสำเร็จ {sync_count} คน"
+            "filtered": filtered_count,
+            "message": f"Sync ข้อมูลลูกค้าสำเร็จ {sync_count} คน" + 
+                      (f" (กรองออก {filtered_count} conversations)" if filtered_count > 0 else "")
         }
         
     except Exception as e:
