@@ -6,7 +6,7 @@ import Popup from "./MinerPopup";
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import * as mammoth from 'mammoth';
-import { useWebSocket } from '../hooks/useWebSocket';
+import SyncCustomersButton from './SyncCustomersButton';
 
 
 // 🎨 Component สำหรับแสดงเวลาแบบ optimized
@@ -138,11 +138,8 @@ const ConversationRow = React.memo(({
 
   const status = getRandomStatus();
 
-  // เพิ่ม highlight class สำหรับ new/updated customer
-  const rowClassName = `table-row ${isSelected ? 'selected' : ''} ${conv.is_new ? 'new-customer' : ''} ${conv.is_updated ? 'updated-customer' : ''}`;
-
   return (
-    <tr className={rowClassName}>
+    <tr className={`table-row ${isSelected ? 'selected' : ''}`}>
       <td className="table-cell text-center">
         <div className="row-number">{idx + 1}</div>
       </td>
@@ -1034,88 +1031,6 @@ const loadConversations = async (pageId) => {
   const updateStatus = getUpdateStatus();
   const selectedPageInfo = pages.find(p => p.id === selectedPage);
 
-  // WebSocket handlers
-  const handleNewCustomer = useCallback((customerData) => {
-    console.log('🆕 New customer received:', customerData);
-
-    const newConversation = {
-      id: Date.now(),
-      conversation_id: `conv_${customerData.psid}`,
-      conversation_name: customerData.name || `User...${customerData.psid.slice(-8)}`,
-      user_name: customerData.name || `User...${customerData.psid.slice(-8)}`,
-      raw_psid: customerData.psid,
-      updated_time: customerData.last_interaction,
-      created_time: customerData.first_interaction,
-      last_user_message_time: customerData.last_interaction,
-      is_new: true // Flag สำหรับ highlight
-    };
-
-    setConversations(prev => {
-      const exists = prev.some(conv => conv.raw_psid === customerData.psid);
-      if (exists) return prev;
-      return [newConversation, ...prev];
-    });
-
-    setAllConversations(prev => {
-      const exists = prev.some(conv => conv.raw_psid === customerData.psid);
-      if (exists) return prev;
-      return [newConversation, ...prev];
-    });
-
-    if (Notification.permission === "granted") {
-      new Notification("มีลูกค้าใหม่!", {
-        body: `${customerData.name} ได้ทักมาใหม่`,
-        icon: "/favicon.ico"
-      });
-    }
-
-    showSuccessNotification(`ลูกค้าใหม่: ${customerData.name}`);
-
-    setTimeout(() => {
-      sendInactivityBatch();
-    }, 500);
-  }, [sendInactivityBatch]);
-
-  const handleCustomerUpdate = useCallback((customerData) => {
-    console.log('🔄 Customer update received:', customerData);
-
-    const updateConversations = (convList) => {
-      return convList.map(conv => {
-        if (conv.raw_psid === customerData.psid) {
-          return {
-            ...conv,
-            conversation_name: customerData.name || conv.conversation_name,
-            user_name: customerData.name || conv.user_name,
-            last_user_message_time: customerData.last_interaction,
-            updated_time: customerData.last_interaction,
-            is_updated: true // Flag สำหรับ highlight
-          };
-        }
-        return conv;
-      });
-    };
-
-    setConversations(prev => updateConversations(prev));
-    setAllConversations(prev => updateConversations(prev));
-
-    setTimeout(() => {
-      sendInactivityBatch();
-    }, 500);
-  }, [sendInactivityBatch]);
-
-  // Initialize WebSocket
-  const { isConnected, subscribePage } = useWebSocket(
-    selectedPage,
-    handleNewCustomer,
-    handleCustomerUpdate
-  );
-
-  useEffect(() => {
-    if (selectedPage && isConnected) {
-      subscribePage(selectedPage);
-    }
-  }, [selectedPage, isConnected, subscribePage]);
-
   return (
     <div className="app-container">
       <Sidebar />
@@ -1132,6 +1047,7 @@ const loadConversations = async (pageId) => {
               จัดการและติดตามการสนทนากับลูกค้าของคุณอย่างมีประสิทธิภาพ
             </p>
           </div>
+         
         </div>
 
         {/* Connection Status Bar */}
@@ -1147,11 +1063,16 @@ const loadConversations = async (pageId) => {
               <span className="update-icon">🔄</span>
               <span className="update-text">{updateStatus.status}</span>
             </div>
-            {isConnected && (
-              <div className="connection-badge connected">
-                <span className="status-icon">🔌</span>
-                <span className="status-text">WebSocket Connected</span>
-              </div>
+            
+            {/* เพิ่ม Sync Button ตรงนี้ */}
+            {selectedPage && (
+              <SyncCustomersButton 
+                selectedPage={selectedPage}
+                onSyncComplete={() => {
+                  // Refresh conversations หลัง sync เสร็จ
+                  loadConversations(selectedPage);
+                }}
+              />
             )}
           </div>
           <div className="status-right">

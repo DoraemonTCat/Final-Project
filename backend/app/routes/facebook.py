@@ -479,7 +479,7 @@ async def debug_conversations(page_id: str):
 
 @router.get("/conversations-with-last-message/{page_id}")
 async def get_conversations_with_last_message(page_id: str, db: Session = Depends(get_db)):
-    """ดึง conversations จาก database (ข้อมูลจะถูก sync อัตโนมัติจาก webhook)"""
+    """ดึง conversations จาก database และ sync อัตโนมัติถ้าไม่มีข้อมูล"""
     print(f"🚀 เริ่มดึงข้อมูล conversations สำหรับ page_id: {page_id}")
     
     # ตรวจสอบว่ามี page ใน database หรือไม่
@@ -491,16 +491,85 @@ async def get_conversations_with_last_message(page_id: str, db: Session = Depend
         )
     
     try:
-        # ดึงข้อมูลลูกค้าจาก database เท่านั้น (ไม่ต้อง sync)
+        # ดึงข้อมูลลูกค้าจาก database
         conversations_data = crud.get_customer_with_conversation_data(db, page.ID)
+        
+        # ถ้าไม่มีข้อมูลใน database ให้ sync อัตโนมัติ
+        if not conversations_data:
+            print("📊 ไม่พบข้อมูลใน database, กำลัง sync อัตโนมัติ...")
+            
+            # ดึง access token
+            access_token = page_tokens.get(page_id)
+            if access_token:
+                # ดึงข้อมูลจาก Facebook และบันทึก
+                conversations = get_conversations_with_participants(page_id, access_token)
+                
+                if conversations and "data" in conversations:
+                    sync_count = 0
+                    
+                    for convo in conversations.get("data", []):
+                        convo_id = convo.get("id")
+                        updated_time = convo.get("updated_time")
+                        participants = convo.get("participants", {}).get("data", [])
+                        
+                        for participant in participants:
+                            participant_id = participant.get("id")
+                            if participant_id and participant_id != page_id:
+                                # ดึงข้อมูล user
+                                user_name = participant.get("name")
+                                
+                                if not user_name:
+                                    user_info = get_user_info_from_psid(participant_id, access_token)
+                                    user_name = user_info.get("name")
+                                
+                                if not user_name or user_name.startswith("User"):
+                                    message_name = get_name_from_messages(convo_id, access_token, page_id)
+                                    if message_name:
+                                        user_name = message_name
+                                
+                                if not user_name:
+                                    user_name = f"User...{participant_id[-8:]}"
+                                
+                                # ดึงเวลาข้อความแรกและล่าสุด
+                                first_message_time = get_first_message_time(convo_id, access_token)
+                                
+                                # แปลง string เป็น datetime
+                                first_interaction = None
+                                last_interaction = None
+                                
+                                if first_message_time:
+                                    try:
+                                        first_interaction = datetime.fromisoformat(first_message_time.replace('Z', '+00:00'))
+                                    except:
+                                        first_interaction = datetime.now()
+                                
+                                if updated_time:
+                                    try:
+                                        last_interaction = datetime.fromisoformat(updated_time.replace('Z', '+00:00'))
+                                    except:
+                                        last_interaction = datetime.now()
+                                
+                                # บันทึกข้อมูลลูกค้า
+                                customer_data = {
+                                    'name': user_name,
+                                    'first_interaction_at': first_interaction,
+                                    'last_interaction_at': last_interaction
+                                }
+                                
+                                crud.create_or_update_customer(db, page.ID, participant_id, customer_data)
+                                sync_count += 1
+                    
+                    print(f"✅ Sync อัตโนมัติสำเร็จ: {sync_count} คน")
+                    
+                    # ดึงข้อมูลใหม่จาก database
+                    conversations_data = crud.get_customer_with_conversation_data(db, page.ID)
         
         print(f"✅ พบข้อมูลลูกค้าใน database จำนวน: {len(conversations_data)} คน")
         
         return {
             "conversations": conversations_data, 
             "total": len(conversations_data),
-            "source": "database",
-            "note": "ข้อมูลจะถูกอัพเดทอัตโนมัติเมื่อมี user ทักเข้ามา"
+            "source": "database"
         }
         
     except Exception as e:
