@@ -13,7 +13,7 @@ import asyncio
 import threading
 from app.service.message_scheduler import message_scheduler
 import logging
-from app.service.customer_sync import customer_sync_service
+
 
 
 # Setup logging

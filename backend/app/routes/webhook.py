@@ -36,6 +36,9 @@ async def webhook_post(request: Request, db: Session = Depends(get_db)):
                     from app.routes.facebook import page_tokens
                     access_token = page_tokens.get(page_id)
                     
+                    print(f"page: {page}, page_id: {page_id}, sender_id: {sender_id}")
+                    print(f"access_token: {access_token}")
+                    
                     if access_token:
                         # ดึงข้อมูล user
                         user_info = fb_get(sender_id, {"fields": "name,first_name,last_name,profile_pic"}, access_token)
@@ -57,6 +60,14 @@ async def webhook_post(request: Request, db: Session = Depends(get_db)):
                         customer = crud.create_or_update_customer(db, page.ID, sender_id, customer_data)
                         
                         print(f"✅ บันทึก/อัพเดทข้อมูลลูกค้าอัตโนมัติ: {user_name} ({sender_id})")
+                        
+                        # ส่ง WebSocket event เพื่อแจ้ง Frontend
+                        await notify_new_customer(page_id, {
+                            'psid': sender_id,
+                            'name': user_name,
+                            'first_interaction': customer_data['first_interaction_at'].isoformat(),
+                            'last_interaction': customer_data['last_interaction_at'].isoformat()
+                        })
                     else:
                         # ถ้าไม่มี access token ให้บันทึกเฉพาะ PSID
                         customer_data = {
@@ -64,10 +75,24 @@ async def webhook_post(request: Request, db: Session = Depends(get_db)):
                             'first_interaction_at': datetime.now(),
                             'last_interaction_at': datetime.now()
                         }
-                        crud.create_or_update_customer(db, page.ID, sender_id, customer_data)
+                        customer = crud.create_or_update_customer(db, page.ID, sender_id, customer_data)
                         print(f"⚠️ บันทึกลูกค้าด้วย PSID เท่านั้น: {sender_id}")
+                        
+                        # ส่ง WebSocket event
+                        await notify_new_customer(page_id, {
+                            'psid': sender_id,
+                            'name': customer_data['name'],
+                            'first_interaction': customer_data['first_interaction_at'].isoformat(),
+                            'last_interaction': customer_data['last_interaction_at'].isoformat()
+                        })
                     
                 except Exception as e:
                     print(f"❌ ไม่สามารถบันทึกข้อมูลลูกค้า: {e}")
     
     return PlainTextResponse("EVENT_RECEIVED", status_code=200)
+
+# ฟังก์ชันสำหรับส่ง notification (จะต้องสร้าง WebSocket ในภายหลัง)
+async def notify_new_customer(page_id: str, customer_data: dict):
+    # ในอนาคตจะใช้ WebSocket แจ้ง frontend
+    # ตอนนี้ใช้ print ไปก่อน
+    print(f"📢 New customer on page {page_id}: {customer_data}")

@@ -6,7 +6,7 @@ import Popup from "./MinerPopup";
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import * as mammoth from 'mammoth';
-import SyncCustomersButton from './SyncCustomersButton';
+
 
 
 // 🎨 Component สำหรับแสดงเวลาแบบ optimized
@@ -1064,16 +1064,7 @@ const loadConversations = async (pageId) => {
               <span className="update-text">{updateStatus.status}</span>
             </div>
             
-            {/* เพิ่ม Sync Button ตรงนี้ */}
-            {selectedPage && (
-              <SyncCustomersButton 
-                selectedPage={selectedPage}
-                onSyncComplete={() => {
-                  // Refresh conversations หลัง sync เสร็จ
-                  loadConversations(selectedPage);
-                }}
-              />
-            )}
+           
           </div>
           <div className="status-right">
             <span className="clock-display">
