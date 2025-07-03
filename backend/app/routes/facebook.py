@@ -804,15 +804,16 @@ async def update_user_inactivity(page_id: str, request: Request):
         logger.error(f"Error updating user inactivity data: {e}")
         return {"status": "error", "message": str(e)}
 
+# ปรับปรุงฟังก์ชัน sync-customers ให้ดึงข้อมูลแบบละเอียด
 @router.post("/sync-customers/{page_id}")
-async def sync_facebook_customers(
+async def sync_facebook_customers_enhanced(
     page_id: str, 
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     period: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
-    """Sync ข้อมูลลูกค้าจาก Facebook มาเก็บใน database พร้อมตัวกรองช่วงเวลา"""
+    """Sync ข้อมูลลูกค้าจาก Facebook มาเก็บใน database พร้อมข้อมูลเวลาที่ถูกต้อง"""
     print(f"🔄 เริ่ม sync ข้อมูลลูกค้าสำหรับ page_id: {page_id}")
     print(f"📅 ช่วงเวลา: period={period}, start={start_date}, end={end_date}")
     
@@ -860,26 +861,37 @@ async def sync_facebook_customers(
         
         print(f"🕒 กรองข้อมูลตั้งแต่: {filter_start_date} ถึง {filter_end_date}")
         
-        # ดึง conversations จาก Facebook
-        conversations = get_conversations_with_participants(page_id, access_token)
-        if not conversations or "data" not in conversations:
-            return {"status": "no_data", "message": "ไม่พบข้อมูล conversations"}
+        # ดึง conversations จาก Facebook พร้อมข้อความ
+        endpoint = f"{page_id}/conversations"
+        params = {
+            "fields": "participants,updated_time,id,messages.limit(100){created_time,from,message}",
+            "limit": 100
+        }
+        
+        conversations = fb_get(endpoint, params, access_token)
+        if "error" in conversations:
+            logger.error(f"Error getting conversations: {conversations['error']}")
+            return JSONResponse(
+                status_code=500,
+                content={"error": "ไม่สามารถดึง conversations ได้"}
+            )
         
         sync_count = 0
         error_count = 0
         filtered_count = 0
+        customers_to_sync = []
         
         # วนลูปผ่านแต่ละ conversation
         for convo in conversations.get("data", []):
             convo_id = convo.get("id")
             updated_time = convo.get("updated_time")
             participants = convo.get("participants", {}).get("data", [])
+            messages = convo.get("messages", {}).get("data", [])
             
             # ตรวจสอบช่วงเวลาถ้ามีการกำหนด
             if filter_start_date and updated_time:
                 try:
                     convo_time = datetime.fromisoformat(updated_time.replace('Z', '+00:00'))
-                    # ถ้า conversation อยู่นอกช่วงเวลาที่กำหนด ให้ข้าม
                     if convo_time < filter_start_date or convo_time > filter_end_date:
                         filtered_count += 1
                         continue
@@ -891,58 +903,82 @@ async def sync_facebook_customers(
                 participant_id = participant.get("id")
                 if participant_id and participant_id != page_id:
                     try:
+                        # หาข้อความแรกและล่าสุดของ user
+                        user_messages = [
+                            msg for msg in messages 
+                            if msg.get("from", {}).get("id") == participant_id
+                        ]
+                        
+                        first_interaction = None
+                        last_interaction = None
+                        
+                        if user_messages:
+                            # เรียงตามเวลา
+                            user_messages.sort(key=lambda x: x.get("created_time", ""))
+                            
+                            # ข้อความแรก
+                            first_msg_time = user_messages[0].get("created_time")
+                            if first_msg_time:
+                                try:
+                                    first_interaction = datetime.fromisoformat(first_msg_time.replace('Z', '+00:00'))
+                                except:
+                                    pass
+                            
+                            # ข้อความล่าสุด
+                            last_msg_time = user_messages[-1].get("created_time")
+                            if last_msg_time:
+                                try:
+                                    last_interaction = datetime.fromisoformat(last_msg_time.replace('Z', '+00:00'))
+                                except:
+                                    pass
+                        
+                        # ถ้าไม่มีข้อความของ user ใช้เวลาของ conversation
+                        if not first_interaction:
+                            try:
+                                first_interaction = datetime.fromisoformat(updated_time.replace('Z', '+00:00'))
+                            except:
+                                first_interaction = datetime.now()
+                        
+                        if not last_interaction:
+                            last_interaction = first_interaction
+                        
                         # ดึงข้อมูล user
                         user_name = participant.get("name")
                         
-                        # ถ้าไม่มีชื่อ ลองดึงจาก user info
                         if not user_name:
                             user_info = get_user_info_from_psid(participant_id, access_token)
                             user_name = user_info.get("name")
                         
-                        # ถ้ายังไม่มีชื่อ ลองดึงจากข้อความ
                         if not user_name or user_name.startswith("User"):
                             message_name = get_name_from_messages(convo_id, access_token, page_id)
                             if message_name:
                                 user_name = message_name
                         
-                        # ถ้ายังไม่มีชื่อ ใช้ default
                         if not user_name:
                             user_name = f"User...{participant_id[-8:]}"
                         
-                        # ดึงเวลาข้อความแรกและล่าสุด
-                        first_message_time = get_first_message_time(convo_id, access_token)
-                        
-                        # แปลง string เป็น datetime
-                        first_interaction = None
-                        last_interaction = None
-                        
-                        if first_message_time:
-                            try:
-                                first_interaction = datetime.fromisoformat(first_message_time.replace('Z', '+00:00'))
-                            except:
-                                first_interaction = datetime.now()
-                        
-                        if updated_time:
-                            try:
-                                last_interaction = datetime.fromisoformat(updated_time.replace('Z', '+00:00'))
-                            except:
-                                last_interaction = datetime.now()
-                        
-                        # บันทึกหรืออัพเดทข้อมูลลูกค้า
+                        # เตรียมข้อมูลสำหรับ sync
                         customer_data = {
+                            'customer_psid': participant_id,
                             'name': user_name,
                             'first_interaction_at': first_interaction,
-                            'last_interaction_at': last_interaction
+                            'last_interaction_at': last_interaction,
+                            'source_type': 'imported'  # ระบุว่าเป็นการ import จาก sync
                         }
                         
-                        crud.create_or_update_customer(db, page.ID, participant_id, customer_data)
-                        sync_count += 1
+                        customers_to_sync.append(customer_data)
                         
                     except Exception as e:
-                        print(f"❌ Error syncing customer {participant_id}: {e}")
+                        print(f"❌ Error processing customer {participant_id}: {e}")
                         error_count += 1
         
-        print(f"✅ Sync เสร็จสิ้น: สำเร็จ {sync_count} คน, ผิดพลาด {error_count} คน, กรองออก {filtered_count} conversations")
+        # Bulk sync ข้อมูลลง database
+        if customers_to_sync:
+            sync_results = crud.bulk_create_or_update_customers(db, page.ID, customers_to_sync)
+            sync_count = sync_results["created"] + sync_results["updated"]
+            error_count += sync_results["errors"]
+            
+            print(f"✅ Sync เสร็จสิ้น: สร้างใหม่ {sync_results['created']} คน, อัพเดท {sync_results['updated']} คน")
         
         return {
             "status": "success",
@@ -950,7 +986,11 @@ async def sync_facebook_customers(
             "errors": error_count,
             "filtered": filtered_count,
             "message": f"Sync ข้อมูลลูกค้าสำเร็จ {sync_count} คน" + 
-                      (f" (กรองออก {filtered_count} conversations)" if filtered_count > 0 else "")
+                      (f" (กรองออก {filtered_count} conversations)" if filtered_count > 0 else ""),
+            "details": {
+                "created": sync_results.get("created", 0),
+                "updated": sync_results.get("updated", 0)
+            }
         }
         
     except Exception as e:
@@ -959,3 +999,26 @@ async def sync_facebook_customers(
             status_code=500,
             content={"error": f"เกิดข้อผิดพลาดในการ sync: {str(e)}"}
         )
+
+# เพิ่ม endpoint สำหรับดึงสถิติลูกค้า
+@router.get("/customer-statistics/{page_id}")
+async def get_customer_statistics(
+    page_id: str,
+    db: Session = Depends(get_db)
+):
+    """ดึงสถิติลูกค้าของเพจ"""
+    page = crud.get_page_by_page_id(db, page_id)
+    if not page:
+        return JSONResponse(
+            status_code=400, 
+            content={"error": f"ไม่พบเพจ {page_id} ในระบบ"}
+        )
+    
+    stats = crud.get_customer_statistics(db, page.ID)
+    
+    return {
+        "page_id": page_id,
+        "page_name": page.page_name,
+        "statistics": stats,
+        "generated_at": datetime.now().isoformat()
+    }

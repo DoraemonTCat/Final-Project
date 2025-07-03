@@ -27,43 +27,5 @@ export default function DateFilterBadge({ dateRange, onClear }) {
     }
   };
 
-  return (
-    <div style={{
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '8px',
-      padding: '8px 16px',
-      background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
-      border: '1px solid #f59e0b',
-      borderRadius: '20px',
-      fontSize: '14px',
-      fontWeight: '500',
-      color: '#92400e'
-    }}>
-      <span>📅 กำลังแสดง: {getFilterText()}</span>
-      <button
-        onClick={onClear}
-        style={{
-          background: 'none',
-          border: 'none',
-          color: '#92400e',
-          cursor: 'pointer',
-          fontSize: '16px',
-          padding: '0 4px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transition: 'all 0.2s ease'
-        }}
-        onMouseEnter={(e) => {
-          e.target.style.transform = 'scale(1.2)';
-        }}
-        onMouseLeave={(e) => {
-          e.target.style.transform = 'scale(1)';
-        }}
-      >
-        ✕
-      </button>
-    </div>
-  );
+  
 }

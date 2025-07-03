@@ -36,12 +36,6 @@ export default function SyncCustomersButton({ selectedPage, onSyncComplete }) {
         throw new Error('Sync failed');
       }
 
-      const result = await response.json();
-      
-      setSyncStatus({
-        type: 'success',
-        message: `Sync สำเร็จ! ดึงข้อมูล ${result.synced} คน`
-      });
 
       // รีเซ็ตการเลือกช่วงเวลา
       setShowDateFilter(false);

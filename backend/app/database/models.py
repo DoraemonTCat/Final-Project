@@ -16,6 +16,7 @@ class FacebookPage(Base):
     message_sets = relationship("MessageSets", back_populates="page", cascade="all, delete-orphan")
     customer_type_messages = relationship("CustomerTypeMessage", back_populates="page", cascade="all, delete-orphan")
     customers = relationship("FbCustomer", back_populates="page", cascade="all, delete-orphan")
+    page_customer_type_knowledge = relationship("PageCustomerTypeKnowledge", back_populates="page", cascade="all, delete-orphan")
 
 
 class CustomerTypeCustom(Base):
@@ -49,9 +50,9 @@ class CustomerTypeKnowledge(Base):
     supports_image = Column(Boolean, server_default="false")
     image_label_keywords = Column(Text, server_default="")
 
-    # Relationships
-    customer_type_messages = relationship("CustomerTypeMessage", back_populates="customer_type_knowledge", cascade="all, delete-orphan")
+    # Relationships - ลบ relationship ที่ไม่มี foreign key โดยตรง
     customers = relationship("FbCustomer", back_populates="customer_type_knowledge")
+    page_customer_type_knowledge = relationship("PageCustomerTypeKnowledge", back_populates="customer_type_knowledge")
 
 
 class CustomerTypeMessage(Base):
@@ -60,7 +61,7 @@ class CustomerTypeMessage(Base):
     id = Column(Integer, primary_key=True, index=True)
     page_id = Column(Integer, ForeignKey("facebook_pages.ID", ondelete="CASCADE"), nullable=False)
     customer_type_custom_id = Column(Integer, ForeignKey("customer_type_custom.id", ondelete="CASCADE"), nullable=True)
-    page_customer_type_knowledge_id = Column(Integer, ForeignKey("page_customer_type_knowledge_id.id", ondelete="CASCADE"), nullable=True)
+    page_customer_type_knowledge_id = Column(Integer, ForeignKey("page_customer_type_knowledge.id", ondelete="CASCADE"), nullable=True)
     message_type = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
     ctm_character = Column(String(50), server_default="")
@@ -71,7 +72,7 @@ class CustomerTypeMessage(Base):
     # Relationships
     page = relationship("FacebookPage", back_populates="customer_type_messages", foreign_keys=[page_id])
     customer_type_custom = relationship("CustomerTypeCustom", back_populates="customer_type_messages")
-    page_customer_type_knowledge_id = relationship("PageCustomerTypeKnowledge", back_populates="customer_type_messages")
+    page_customer_type_knowledge_rel = relationship("PageCustomerTypeKnowledge", back_populates="customer_type_messages")
     message_schedules = relationship("MessageSchedule", back_populates="customer_type_message", cascade="all, delete-orphan")
 
 
@@ -122,8 +123,9 @@ class FbCustomer(Base):
         CheckConstraint(
             "source_type IN ('new', 'imported')",
             name="fb_customers_source_type_check"
-        )
+        ),
     )
+    
     # Relationships
     page = relationship("FacebookPage", back_populates="customers", foreign_keys=[page_id])
     customer_type_custom = relationship("CustomerTypeCustom", back_populates="customers")
@@ -158,8 +160,9 @@ class CustomMessage(Base):
     message_set = relationship("MessageSets", back_populates="messages")
     page = relationship("FacebookPage", back_populates="messages", foreign_keys=[page_id])
 
+
 class PageCustomerTypeKnowledge(Base):
-    __tablename__ = "fb_custom_messages"
+    __tablename__ = "page_customer_type_knowledge"
 
     id = Column(Integer, primary_key=True, index=True)
     page_id = Column(String, ForeignKey("facebook_pages.page_id", ondelete="CASCADE"), nullable=False)
@@ -171,5 +174,6 @@ class PageCustomerTypeKnowledge(Base):
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     # Relationships
-    page = relationship("FacebookPage", back_populates="messages", foreign_keys=[page_id])
-    customer_type_knowledge = relationship("CustomerTypeKnowledge", back_populates="customers")
+    page = relationship("FacebookPage", back_populates="page_customer_type_knowledge", foreign_keys=[page_id])
+    customer_type_knowledge = relationship("CustomerTypeKnowledge", back_populates="page_customer_type_knowledge")
+    customer_type_messages = relationship("CustomerTypeMessage", back_populates="page_customer_type_knowledge_rel")

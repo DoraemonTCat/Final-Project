@@ -118,6 +118,79 @@ const TimeAgoCell = React.memo(({ lastMessageTime, updatedTime, userId, onInacti
   );
 });
 
+// เพิ่ม Component สำหรับแสดงข้อมูลลูกค้าจาก Database
+const CustomerInfoBadge = ({ customer }) => {
+  const getTimeDiff = (dateStr) => {
+    if (!dateStr) return 'ไม่ทราบ';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    if (diffDays > 0) return `${diffDays} วัน`;
+    if (diffHours > 0) return `${diffHours} ชั่วโมง`;
+    if (diffMinutes > 0) return `${diffMinutes} นาที`;
+    return 'เมื่อสักครู่';
+  };
+
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '4px',
+      fontSize: '11px',
+      color: '#718096',
+      marginTop: '4px'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <span>🕐</span>
+        <span>ครั้งแรก: {getTimeDiff(customer.first_interaction_at)} ที่แล้ว</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <span>📅</span>
+        <span>สร้างในระบบ: {customer.created_at ? new Date(customer.created_at).toLocaleDateString('th-TH') : '-'}</span>
+      </div>
+      {customer.source_type && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span>📍</span>
+          <span>ที่มา: {customer.source_type === 'new' ? 'User ใหม่' : 'Import'}</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Component สำหรับแสดงสถิติลูกค้า
+const CustomerStatistics = ({ selectedPage }) => {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (selectedPage) {
+      loadStatistics();
+    }
+    // eslint-disable-next-line
+  }, [selectedPage]);
+
+  const loadStatistics = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`http://localhost:8000/customer-statistics/${selectedPage}`);
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data.statistics);
+      }
+    } catch (error) {
+      console.error('Error loading statistics:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+ 
+};
+
 // 🎨 Component สำหรับแสดงแต่ละแถวในตาราง
 const ConversationRow = React.memo(({ 
   conv, 
@@ -152,6 +225,8 @@ const ConversationRow = React.memo(({
           <div className="user-details">
             <div className="user-name">{conv.conversation_name || `บทสนทนาที่ ${idx + 1}`}</div>
             <div className="user-id">{conv.raw_psid?.slice(-8) || 'N/A'}</div>
+            {/* เพิ่ม CustomerInfoBadge ถ้ามีข้อมูลจาก database */}
+            {conv.source_type && <CustomerInfoBadge customer={conv} />}
           </div>
         </div>
       </td>
@@ -1056,8 +1131,10 @@ const loadConversations = async (pageId) => {
               จัดการและติดตามการสนทนากับลูกค้าของคุณอย่างมีประสิทธิภาพ
             </p>
           </div>
-         
         </div>
+
+        {/* Customer Statistics */}
+        <CustomerStatistics selectedPage={selectedPage} />
 
         {/* Connection Status Bar */}
         <div className="connection-status-bar">
