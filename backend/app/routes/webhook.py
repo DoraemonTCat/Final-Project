@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Request, Depends
+# backend/app/routes/webhook.py
+from fastapi import APIRouter, Request, Depends, BackgroundTasks
 from fastapi.responses import PlainTextResponse
 from app.database import crud
 from app.database.database import get_db
@@ -6,8 +7,14 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 import os
 from app.service.facebook_api import fb_get
+import logging
+import asyncio
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+# Dictionary เก็บสถานะการแจ้งเตือน user ใหม่
+new_user_notifications = {}
 
 @router.get("/webhook")
 async def verify_webhook(request: Request):
@@ -16,8 +23,106 @@ async def verify_webhook(request: Request):
         return PlainTextResponse(content=params.get("hub.challenge"), status_code=200)
     return PlainTextResponse(content="Verification failed", status_code=403)
 
+async def sync_new_user_data(page_id: str, sender_id: str, page_db_id: int, db: Session):
+    """ฟังก์ชันสำหรับ sync ข้อมูล user ใหม่แบบละเอียด"""
+    try:
+        from app.routes.facebook import page_tokens
+        access_token = page_tokens.get(page_id)
+        
+        if not access_token:
+            logger.error(f"❌ ไม่พบ access token สำหรับ page {page_id}")
+            return None
+            
+        # 1. ดึงข้อมูล user profile แบบละเอียด
+        user_fields = "id,name,first_name,last_name,profile_pic,gender,locale,timezone"
+        user_info = fb_get(sender_id, {"fields": user_fields}, access_token)
+        
+        # 2. ดึงชื่อผู้ใช้จากหลายแหล่ง
+        user_name = user_info.get("name", "")
+        if not user_name:
+            user_name = f"{user_info.get('first_name', '')} {user_info.get('last_name', '')}".strip()
+            
+        # 3. หาข้อมูล conversation ของ user นี้
+        endpoint = f"{page_id}/conversations"
+        params = {
+            "fields": "participants,updated_time,id,messages.limit(1){created_time}",
+            "user_id": sender_id,
+            "limit": 1
+        }
+        
+        conversations = fb_get(endpoint, params, access_token)
+        
+        # 4. หาเวลาที่เริ่มคุยครั้งแรก
+        first_interaction = datetime.now()
+        last_interaction = datetime.now()
+        
+        if conversations and "data" in conversations and conversations["data"]:
+            conv = conversations["data"][0]
+            
+            # ดึงเวลาข้อความแรก
+            if "messages" in conv and "data" in conv["messages"] and conv["messages"]["data"]:
+                first_msg_time = conv["messages"]["data"][0].get("created_time")
+                if first_msg_time:
+                    try:
+                        first_interaction = datetime.fromisoformat(first_msg_time.replace('Z', '+00:00'))
+                    except:
+                        pass
+                        
+            # เวลาล่าสุด
+            if conv.get("updated_time"):
+                try:
+                    last_interaction = datetime.fromisoformat(conv["updated_time"].replace('Z', '+00:00'))
+                except:
+                    pass
+        
+        # 5. เตรียมข้อมูลสำหรับบันทึก
+        customer_data = {
+            'name': user_name or f"User...{sender_id[-8:]}",
+            'first_interaction_at': first_interaction,
+            'last_interaction_at': last_interaction,
+            'profile_pic': user_info.get('profile_pic', ''),
+            'metadata': {
+                'gender': user_info.get('gender'),
+                'locale': user_info.get('locale'),
+                'timezone': user_info.get('timezone')
+            }
+        }
+        
+        # 6. บันทึกข้อมูลลง database
+        customer = crud.create_or_update_customer(db, page_db_id, sender_id, customer_data)
+        
+        logger.info(f"✅ Auto sync สำเร็จสำหรับ user ใหม่: {user_name} ({sender_id})")
+        
+        # 7. เก็บข้อมูลการแจ้งเตือน
+        if page_id not in new_user_notifications:
+            new_user_notifications[page_id] = []
+            
+        new_user_notifications[page_id].append({
+            'user_name': user_name,
+            'psid': sender_id,
+            'timestamp': datetime.now().isoformat(),
+            'profile_pic': user_info.get('profile_pic', '')
+        })
+        
+        # ลบการแจ้งเตือนเก่าที่เกิน 24 ชั่วโมง
+        cutoff_time = datetime.now().timestamp() - (24 * 60 * 60)
+        new_user_notifications[page_id] = [
+            notif for notif in new_user_notifications[page_id]
+            if datetime.fromisoformat(notif['timestamp']).timestamp() > cutoff_time
+        ]
+        
+        return customer
+        
+    except Exception as e:
+        logger.error(f"❌ Error syncing new user data: {e}")
+        return None
+
 @router.post("/webhook")
-async def webhook_post(request: Request, db: Session = Depends(get_db)):
+async def webhook_post(
+    request: Request, 
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks()
+):
     body = await request.json()
     
     for entry in body.get("entry", []):
@@ -32,42 +137,40 @@ async def webhook_post(request: Request, db: Session = Depends(get_db)):
             # ตรวจสอบว่าไม่ใช่ข้อความจาก page เอง
             if page and sender_id != page_id:
                 try:
-                    # ดึงข้อมูล user จาก Facebook API
-                    from app.routes.facebook import page_tokens
-                    access_token = page_tokens.get(page_id)
+                    # ตรวจสอบว่ามี user ในระบบแล้วหรือไม่
+                    existing_customer = crud.get_customer_by_psid(db, page.ID, sender_id)
                     
-                    if access_token:
-                        # ดึงข้อมูล user
-                        user_info = fb_get(sender_id, {"fields": "name,first_name,last_name,profile_pic"}, access_token)
+                    if not existing_customer:
+                        # เป็น user ใหม่! ทำการ sync อัตโนมัติทันที
+                        logger.info(f"🆕 พบ User ใหม่: {sender_id} ในเพจ {page.page_name}")
                         
-                        # เตรียมข้อมูลสำหรับบันทึก
-                        user_name = user_info.get("name", "")
-                        if not user_name:
-                            user_name = f"{user_info.get('first_name', '')} {user_info.get('last_name', '')}".strip()
-                        if not user_name:
-                            user_name = f"User...{sender_id[-8:]}"
+                        # Sync ข้อมูลในพื้นหลัง
+                        background_tasks.add_task(
+                            sync_new_user_data,
+                            page_id,
+                            sender_id,
+                            page.ID,
+                            db
+                        )
                         
-                        customer_data = {
-                            'name': user_name,
-                            'first_interaction_at': datetime.now(),
-                            'last_interaction_at': datetime.now()
-                        }
-                        
-                        # สร้างหรืออัพเดทข้อมูลลูกค้า
-                        customer = crud.create_or_update_customer(db, page.ID, sender_id, customer_data)
-                        
-                        print(f"✅ บันทึก/อัพเดทข้อมูลลูกค้าอัตโนมัติ: {user_name} ({sender_id})")
                     else:
-                        # ถ้าไม่มี access token ให้บันทึกเฉพาะ PSID
-                        customer_data = {
-                            'name': f"User...{sender_id[-8:]}",
-                            'first_interaction_at': datetime.now(),
-                            'last_interaction_at': datetime.now()
-                        }
-                        crud.create_or_update_customer(db, page.ID, sender_id, customer_data)
-                        print(f"⚠️ บันทึกลูกค้าด้วย PSID เท่านั้น: {sender_id}")
+                        # User เก่า - อัพเดทเวลาล่าสุด
+                        crud.update_customer_interaction(db, page.ID, sender_id)
+                        logger.info(f"📝 อัพเดท interaction time สำหรับ: {existing_customer.name}")
                     
                 except Exception as e:
-                    print(f"❌ ไม่สามารถบันทึกข้อมูลลูกค้า: {e}")
+                    logger.error(f"❌ Error processing webhook: {e}")
     
     return PlainTextResponse("EVENT_RECEIVED", status_code=200)
+
+# เพิ่ม endpoint สำหรับดึงการแจ้งเตือน user ใหม่
+@router.get("/new-user-notifications/{page_id}")
+async def get_new_user_notifications(page_id: str):
+    """ดึงรายการ user ใหม่ที่เพิ่งเข้ามาใน 24 ชั่วโมงที่ผ่านมา"""
+    notifications = new_user_notifications.get(page_id, [])
+    
+    return {
+        "page_id": page_id,
+        "new_users": notifications,
+        "count": len(notifications)
+    }

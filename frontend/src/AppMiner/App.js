@@ -8,6 +8,7 @@ import * as XLSX from 'xlsx';
 import * as mammoth from 'mammoth';
 import SyncCustomersButton from './SyncCustomersButton';
 import DateFilterBadge from './DateFilterBadge';
+import NewUserNotification from './NewUserNotification';
 
 // 🎨 Component สำหรับแสดงเวลาแบบ optimized
 const TimeAgoCell = React.memo(({ lastMessageTime, updatedTime, userId, onInactivityChange }) => {
@@ -1357,6 +1358,9 @@ const loadConversations = async (pageId) => {
             count={selectedConversationIds.length}
           />
         )}
+
+        {/* เพิ่ม NewUserNotification Component ตรงนี้ */}
+        <NewUserNotification selectedPage={selectedPage} />
       </main>
     </div>
   );
