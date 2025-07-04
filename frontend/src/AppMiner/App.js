@@ -914,12 +914,14 @@ useEffect(() => {
                 messageContent = `http://localhost:8000/videos/${messageContent.replace('[VIDEO] ', '')}`;
               }
 
+              // 🔥 เพิ่ม parameter is_system_message
               await fetch(`http://localhost:8000/send/${selectedPage}/${psid}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ 
                   message: messageContent,
                   type: messageObj.message_type,
+                  is_system_message: true  // 🔥 บอกว่าเป็นข้อความจากระบบ
                 }),
               });
 
@@ -941,6 +943,9 @@ useEffect(() => {
       if (successCount > 0) {   
         showSuccessNotification(`ส่งข้อความสำเร็จ ${successCount} การสนทนา`);
         setSelectedConversationIds([]);
+        
+        // 🔥 ไม่ต้อง refresh ข้อมูลทันที เพื่อให้เห็นเวลาเดิม
+        // หรือจะ refresh แต่เวลาจะไม่เปลี่ยนเพราะไม่ได้อัพเดท last_interaction_at
       } else {
         showErrorNotification(`ส่งข้อความไม่สำเร็จ ${failCount} การสนทนา`);
       }

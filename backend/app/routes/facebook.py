@@ -302,7 +302,7 @@ async def send_user_message_by_psid(
     psid: str,
     req: SendMessageRequest,
     request: Request,
-    db: Session = Depends(get_db)  # เพิ่ม db dependency
+    db: Session = Depends(get_db)
 ):
     print(f"📤 กำลังส่งข้อความไปยัง PSID: {psid}")
     print(f"📤 ข้อความ: {req.message}")
@@ -324,18 +324,18 @@ async def send_user_message_by_psid(
     else:
         result = send_message(psid, req.message, access_token)
 
-    # ถ้าส่งสำเร็จ ให้อัพเดท interaction time
-    if "error" not in result:
-        try:
-            # ดึง page จาก database
-            page = crud.get_page_by_page_id(db, page_id)
-            if page:
-                # อัพเดท last_interaction_at
-                crud.update_customer_interaction(db, page.ID, psid)
-                print(f"✅ อัพเดท interaction time สำเร็จสำหรับ {psid}")
-        except Exception as e:
-            print(f"⚠️ ไม่สามารถอัพเดท interaction time: {e}")
-            # ไม่ return error เพราะการส่งข้อความสำเร็จแล้ว
+    # 🔥 ลบหรือ comment ส่วนนี้ออก เพื่อไม่ให้อัพเดท interaction time
+    # if "error" not in result:
+    #     try:
+    #         # ดึง page จาก database
+    #         page = crud.get_page_by_page_id(db, page_id)
+    #         if page:
+    #             # อัพเดท last_interaction_at
+    #             crud.update_customer_interaction(db, page.ID, psid)
+    #             print(f"✅ อัพเดท interaction time สำเร็จสำหรับ {psid}")
+    #     except Exception as e:
+    #         print(f"⚠️ ไม่สามารถอัพเดท interaction time: {e}")
+    #         # ไม่ return error เพราะการส่งข้อความสำเร็จแล้ว
 
     if "error" in result:
         return {"error": result["error"], "details": result}
@@ -646,6 +646,7 @@ async def activate_schedule(request: Request):
     
     # สำหรับ scheduled และ user-inactive จะรอให้ scheduler ทำงานตามเวลา
     return {"status": "success", "message": "Schedule activated"}
+
 # เพิ่มฟังก์ชันใหม่สำหรับทดสอบการส่งข้อความ:
 @router.post("/test-send/{page_id}")
 async def test_send_message(page_id: str, request: Request):

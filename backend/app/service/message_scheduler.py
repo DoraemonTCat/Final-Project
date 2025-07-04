@@ -370,19 +370,17 @@ class MessageScheduler:
                     
                     logger.info(f"Sending {message_type} message to {psid}")
                     
+                    # 🔥 ส่งข้อความโดยตรงผ่าน facebook_api แทนการเรียก endpoint
+                    # เพื่อหลีกเลี่ยงการอัพเดท interaction time
                     if message_type == 'text':
                         result = send_message(psid, content, access_token)
                     elif message_type == 'image':
-                        # สร้าง path สำหรับรูปภาพ
                         from app.config import image_dir
-                        # ลบ prefix [IMAGE] ถ้ามี
                         clean_content = content.replace('[IMAGE] ', '')
                         image_path = f"{image_dir}/{clean_content}"
                         result = send_image_binary(psid, image_path, access_token)
                     elif message_type == 'video':
-                        # สร้าง path สำหรับวิดีโอ
                         from app.config import vid_dir
-                        # ลบ prefix [VIDEO] ถ้ามี
                         clean_content = content.replace('[VIDEO] ', '')
                         video_path = f"{vid_dir}/{clean_content}"
                         result = send_video_binary(psid, video_path, access_token)
@@ -395,12 +393,9 @@ class MessageScheduler:
                         break
                     else:
                         logger.info(f"Successfully sent message to {psid}")
-                        # หน่วงเวลาระหว่างข้อความ
                         await asyncio.sleep(0.5)
                         
                 success_count += 1
-                
-                # หน่วงเวลาระหว่าง users
                 await asyncio.sleep(1)
                 
             except Exception as e:
