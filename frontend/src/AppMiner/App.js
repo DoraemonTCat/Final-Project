@@ -741,9 +741,16 @@ function App() {
         });
         
         // ตรวจสอบว่ามีข้อความใหม่จาก user โดยเปรียบเทียบ last_user_message_time
-        return newConv.last_user_message_time && 
+        // หรือถ้า updated_time เปลี่ยนแปลง (กรณีที่ API ไม่ส่ง last_user_message_time)
+        const hasNewMessageByLastUserTime = newConv.last_user_message_time && 
                oldConv.last_user_message_time &&
                new Date(newConv.last_user_message_time) > new Date(oldConv.last_user_message_time);
+               
+        const hasNewMessageByUpdatedTime = newConv.updated_time && 
+               oldConv.updated_time &&
+               new Date(newConv.updated_time) > new Date(oldConv.updated_time);
+               
+        return hasNewMessageByLastUserTime || hasNewMessageByUpdatedTime;
       });
       
       console.log(`✅ Found ${conversationsWithNewUserMessages.length} conversations with new user messages`);
@@ -766,11 +773,18 @@ function App() {
             // รีเซ็ตข้อมูล inactivity สำหรับ user นี้
             setUserInactivityData(prev => {
               const newData = { ...prev };
-              delete newData[oldConv.raw_psid]; // ลบข้อมูลเก่าออกเพื่อให้คำนวณใหม่
+              delete newData[newConv.raw_psid]; // ใช้ newConv เพื่อให้ได้ข้อมูลล่าสุด
               return newData;
             });
             
-            return newConv; // อัพเดททั้ง conversation รวมถึง last_user_message_time ใหม่
+            // Force update TimeAgoCell โดยการเปลี่ยน key
+            const updatedConv = {
+              ...newConv,
+              last_user_message_time: newConv.last_user_message_time || newConv.updated_time,
+              _forceUpdate: Date.now() // เพิ่มเพื่อให้ React re-render
+            };
+            
+            return updatedConv; // อัพเดททั้ง conversation รวมถึง last_user_message_time ใหม่
           } else {
             // ไม่มีข้อความใหม่จาก user ให้คง last_user_message_time เดิม
             // สำคัญ: ต้องคงค่า last_user_message_time เดิมไว้เสมอ
