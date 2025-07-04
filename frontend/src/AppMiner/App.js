@@ -717,8 +717,7 @@ function App() {
     }
   };
 
-  // ฟังก์ชันตรวจสอบข้อความใหม่จาก user
-  // ฟังก์ชันตรวจสอบข้อความใหม่จาก user
+ // ฟังก์ชันตรวจสอบข้อความใหม่จาก user
   const checkForNewMessages = useCallback(async () => {
     if (!selectedPage || loading) return;
     
@@ -763,6 +762,14 @@ function App() {
           
           if (hasNewUserMessage) {
             console.log(`📨 Updating conversation ${oldConv.conversation_id} with new user message`);
+            
+            // รีเซ็ตข้อมูล inactivity สำหรับ user นี้
+            setUserInactivityData(prev => {
+              const newData = { ...prev };
+              delete newData[oldConv.raw_psid]; // ลบข้อมูลเก่าออกเพื่อให้คำนวณใหม่
+              return newData;
+            });
+            
             return newConv; // อัพเดททั้ง conversation รวมถึง last_user_message_time ใหม่
           } else {
             // ไม่มีข้อความใหม่จาก user ให้คง last_user_message_time เดิม
@@ -784,6 +791,13 @@ function App() {
         newConversations.forEach(newConv => {
           if (!updatedConversations.find(c => c.conversation_id === newConv.conversation_id)) {
             updatedConversations.push(newConv);
+            
+            // ถ้าเป็น conversation ใหม่ ให้รีเซ็ต inactivity data
+            setUserInactivityData(prev => {
+              const newData = { ...prev };
+              delete newData[newConv.raw_psid];
+              return newData;
+            });
           }
         });
         
