@@ -13,7 +13,7 @@ import asyncio
 import threading
 from app.service.message_scheduler import message_scheduler
 import logging
-from app.service.customer_sync import customer_sync_service
+from app.service.auto_sync_service import auto_sync_service
 
 
 # Setup logging
@@ -89,12 +89,18 @@ async def startup_event():
     scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
     scheduler_thread.start()
     logging.info("Message scheduler thread started")
+    
+    # Start auto sync service (แทนที่ customer sync เดิม)
+    auto_sync_thread = threading.Thread(target=run_auto_sync, daemon=True)
+    auto_sync_thread.start()
+    logging.info("Auto sync thread started - จะดึงข้อมูลจาก Facebook ทุก 10 วินาที")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """ปิดเมื่อ app หยุดทำงาน"""
     logging.info("Shutting down...")
     message_scheduler.stop()
+    auto_sync_service.stop()
 
 # สำหรับรันแอป
 if __name__ == "__main__":
@@ -113,21 +119,7 @@ def run_scheduler():
         logging.error(f"Scheduler error: {e}")
     finally:
         loop.close()
-
-# เพิ่มฟังก์ชันสำหรับ run customer sync
-def run_customer_sync():
-    """รัน customer sync ใน thread แยก"""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    try:
-        logging.info("Starting customer sync service...")
-        loop.run_until_complete(customer_sync_service.start_sync_monitoring())
-    except Exception as e:
-        logging.error(f"Customer sync error: {e}")
-    finally:
-        loop.close()
-
+        
 # Event handlers
 @app.on_event("startup")
 async def startup_event():
@@ -139,14 +131,23 @@ async def startup_event():
     scheduler_thread.start()
     logging.info("Message scheduler thread started")
     
-    # Start customer sync in background thread
-    customer_sync_thread = threading.Thread(target=run_customer_sync, daemon=True)
-    customer_sync_thread.start()
-    logging.info("Customer sync thread started")
-
+   
 @app.on_event("shutdown")
 async def shutdown_event():
     """ปิดเมื่อ app หยุดทำงาน"""
     logging.info("Shutting down...")
     message_scheduler.stop()
-    customer_sync_service.stop()
+ 
+# เพิ่มฟังก์ชันสำหรับ run auto sync
+def run_auto_sync():
+    """รัน auto sync ใน thread แยก"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        logging.info("Starting auto sync service...")
+        loop.run_until_complete(auto_sync_service.start_auto_sync())
+    except Exception as e:
+        logging.error(f"Auto sync error: {e}")
+    finally:
+        loop.close()

@@ -41,10 +41,12 @@ export async function saveMessageToDB({ pageId, messageSetId, messageType, conte
   if (!res.ok) throw new Error("บันทึกข้อความไม่สำเร็จ");
   return res.json();
 }
+
 export const fetchConversations = async (pageId) => {
   if (!pageId) return [];
 
   try {
+    // ดึงข้อมูลจาก database โดยตรง (backend จะ sync อัตโนมัติ)
     const res = await axios.get(`http://localhost:8000/conversations-with-last-message/${pageId}`);
 
     if (res.data.error) {
@@ -53,16 +55,19 @@ export const fetchConversations = async (pageId) => {
 
     const conversationsData = res.data.conversations || [];
 
+    // Format ข้อมูลให้ตรงกับที่ frontend ต้องการ
     const formattedConversations = conversationsData.map((conv, idx) => ({
       id: idx + 1,
       updated_time: conv.updated_time,
       created_time: conv.created_time,
       last_user_message_time: conv.last_user_message_time,
-      sender_name: conv.psids[0] || "Unknown",
+      first_interaction_at: conv.first_interaction_at,
+      sender_name: conv.user_name || conv.conversation_name,
       conversation_id: conv.conversation_id,
       conversation_name: conv.conversation_name,
       user_name: conv.user_name,
-      raw_psid: conv.raw_psid || conv.psids[0]
+      raw_psid: conv.raw_psid,
+      source_type: conv.source_type
     }));
 
     return formattedConversations;

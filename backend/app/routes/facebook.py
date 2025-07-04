@@ -106,6 +106,10 @@ def facebook_callback(code: str, db: Session = Depends(get_db)):
         access_token = page["access_token"]
         page_name = page.get("name", f"เพจ {page_id}")
         message_scheduler.set_page_tokens(page_tokens)  # ✅ เก็บ page_tokens ใน message_scheduler
+        
+        # ✅ ส่ง tokens ให้ auto sync service ด้วย
+        from app.service.auto_sync_service import auto_sync_service
+        auto_sync_service.set_page_tokens(page_tokens)
 
         # ✅ เก็บใน local dictionary แทน config
         page_tokens[page_id] = access_token

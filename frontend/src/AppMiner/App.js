@@ -147,10 +147,6 @@ const CustomerInfoBadge = ({ customer }) => {
         <span>🕐</span>
         <span>ครั้งแรก: {getTimeDiff(customer.first_interaction_at)} ที่แล้ว</span>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-        <span>📅</span>
-        <span>สร้างในระบบ: {customer.created_at ? new Date(customer.created_at).toLocaleDateString('th-TH') : '-'}</span>
-      </div>
       {customer.source_type && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <span>📍</span>
@@ -215,16 +211,16 @@ const ConversationRow = React.memo(({
   return (
     <tr className={`table-row ${isSelected ? 'selected' : ''}`}>
       <td className="table-cell text-center">
-        <div className="row-number">{idx + 1}</div>
+        <div className="row-number">{idx + 1}</div>   {/* เพิ่มเลขแถว */}
       </td>
-      <td className="table-cell">
+      <td className="table-cell">                     {/*  ผู้ใช้ */}
         <div className="user-info">
           <div className="user-avatar">
             {conv.user_name?.charAt(0) || 'U'}
           </div>
           <div className="user-details">
             <div className="user-name">{conv.conversation_name || `บทสนทนาที่ ${idx + 1}`}</div>
-            <div className="user-id">{conv.raw_psid?.slice(-8) || 'N/A'}</div>
+           
             {/* เพิ่ม CustomerInfoBadge ถ้ามีข้อมูลจาก database */}
             {conv.source_type && <CustomerInfoBadge customer={conv} />}
           </div>
@@ -522,15 +518,9 @@ function App() {
   const inactivityUpdateTimerRef = useRef(null);
 
   const clockIntervalRef = useRef(null);
-  const pollingIntervalRef = useRef(null);
   
   const messageCache = useRef({});
-  const conversationCache = useRef({});
   const cacheTimeout = 5 * 60 * 1000;
-
-  const displayData = useMemo(() => {
-    return filteredConversations.length > 0 ? filteredConversations : conversations;
-  }, [filteredConversations, conversations]);
 
   const getCachedData = (key, cache) => {
     const cached = cache.current[key];
@@ -546,6 +536,21 @@ function App() {
       timestamp: Date.now()
     };
   };
+ 
+  // เพิ่มหลังจาก loadConversations function
+  const handleloadConversations = () => {
+    if (!selectedPage) {
+      alert("กรุณาเลือกเพจ");
+      return;
+    }
+    messageCache.current = {};
+    loadConversations(selectedPage);
+  };
+  
+
+  const displayData = useMemo(() => {
+    return filteredConversations.length > 0 ? filteredConversations : conversations;
+  }, [filteredConversations, conversations]);
 
   // ฟังก์ชันคำนวณระยะเวลาที่หายไปเป็นนาที
   const calculateInactivityMinutes = (lastMessageTime, updatedTime) => {
@@ -717,132 +722,6 @@ function App() {
     }
   };
 
- // ฟังก์ชันตรวจสอบข้อความใหม่จาก user
-  const checkForNewMessages = useCallback(async () => {
-    if (!selectedPage || loading) return;
-    
-    try {
-      const newConversations = await fetchConversations(selectedPage);
-      
-      // Debug log
-      console.log("🔍 Checking for new messages...");
-      
-      // ตรวจสอบว่ามีข้อความใหม่จาก user หรือไม่
-      const conversationsWithNewUserMessages = newConversations.filter(newConv => {
-        const oldConv = allConversations.find(c => c.conversation_id === newConv.conversation_id);
-        if (!oldConv) return false;
-        
-        // Debug log สำหรับแต่ละ conversation
-        console.log(`Conversation ${newConv.conversation_id}:`, {
-          old_last_user_message: oldConv.last_user_message_time,
-          new_last_user_message: newConv.last_user_message_time,
-          old_updated: oldConv.updated_time,
-          new_updated: newConv.updated_time
-        });
-        
-        // ตรวจสอบว่ามีข้อความใหม่จาก user โดยเปรียบเทียบ last_user_message_time
-        // หรือถ้า updated_time เปลี่ยนแปลง (กรณีที่ API ไม่ส่ง last_user_message_time)
-        const hasNewMessageByLastUserTime = newConv.last_user_message_time && 
-               oldConv.last_user_message_time &&
-               new Date(newConv.last_user_message_time) > new Date(oldConv.last_user_message_time);
-               
-        const hasNewMessageByUpdatedTime = newConv.updated_time && 
-               oldConv.updated_time &&
-               new Date(newConv.updated_time) > new Date(oldConv.updated_time);
-               
-        return hasNewMessageByLastUserTime || hasNewMessageByUpdatedTime;
-      });
-      
-      console.log(`✅ Found ${conversationsWithNewUserMessages.length} conversations with new user messages`);
-      
-      // อัพเดทข้อมูล conversations
-      if (newConversations.length > 0) {
-        // สร้าง updated conversations โดยรักษา last_user_message_time เดิมไว้ถ้าไม่มีข้อความใหม่จาก user
-        const updatedConversations = allConversations.map(oldConv => {
-          const newConv = newConversations.find(c => c.conversation_id === oldConv.conversation_id);
-          if (!newConv) return oldConv;
-          
-          // ถ้ามีข้อความใหม่จาก user ให้อัพเดททั้ง conversation
-          const hasNewUserMessage = conversationsWithNewUserMessages.some(
-            c => c.conversation_id === oldConv.conversation_id
-          );
-          
-          if (hasNewUserMessage) {
-            console.log(`📨 Updating conversation ${oldConv.conversation_id} with new user message`);
-            
-            // รีเซ็ตข้อมูล inactivity สำหรับ user นี้
-            setUserInactivityData(prev => {
-              const newData = { ...prev };
-              delete newData[newConv.raw_psid]; // ใช้ newConv เพื่อให้ได้ข้อมูลล่าสุด
-              return newData;
-            });
-            
-            // Force update TimeAgoCell โดยการเปลี่ยน key
-            const updatedConv = {
-              ...newConv,
-              last_user_message_time: newConv.last_user_message_time || newConv.updated_time,
-              _forceUpdate: Date.now() // เพิ่มเพื่อให้ React re-render
-            };
-            
-            return updatedConv; // อัพเดททั้ง conversation รวมถึง last_user_message_time ใหม่
-          } else {
-            // ไม่มีข้อความใหม่จาก user ให้คง last_user_message_time เดิม
-            // สำคัญ: ต้องคงค่า last_user_message_time เดิมไว้เสมอ
-            const preservedLastUserMessage = oldConv.last_user_message_time || oldConv.updated_time;
-            
-            console.log(`🔒 Preserving last_user_message_time for ${oldConv.conversation_id}: ${preservedLastUserMessage}`);
-            
-            return {
-              ...newConv,
-              last_user_message_time: preservedLastUserMessage,
-              // เพิ่ม flag เพื่อระบุว่านี่คือข้อความจากระบบ
-              _systemMessageUpdate: true
-            };
-          }
-        });
-        
-        // เพิ่ม conversations ใหม่ที่ยังไม่มีใน list เดิม
-        newConversations.forEach(newConv => {
-          if (!updatedConversations.find(c => c.conversation_id === newConv.conversation_id)) {
-            updatedConversations.push(newConv);
-            
-            // ถ้าเป็น conversation ใหม่ ให้รีเซ็ต inactivity data
-            setUserInactivityData(prev => {
-              const newData = { ...prev };
-              delete newData[newConv.raw_psid];
-              return newData;
-            });
-          }
-        });
-        
-        setConversations(updatedConversations);
-        setAllConversations(updatedConversations);
-        setLastUpdateTime(new Date());
-        
-        conversationCache.current = {};
-        
-        if (filteredConversations.length > 0) {
-          setTimeout(() => applyFilters(), 100);
-        }
-        
-        // ส่งข้อมูล inactivity หลังจากอัพเดทข้อมูลใหม่
-        setTimeout(() => {
-          sendInactivityBatch();
-        }, 500);
-        
-        // แจ้งเตือนเฉพาะเมื่อมีข้อความใหม่จาก user
-        if (conversationsWithNewUserMessages.length > 0 && Notification.permission === "granted") {
-          new Notification("มีข้อความใหม่!", {
-            body: `มีข้อความใหม่จาก ${conversationsWithNewUserMessages.length} การสนทนา`,
-            icon: "/favicon.ico"
-          });
-        }
-      }
-    } catch (err) {
-      console.error("❌ เกิดข้อผิดพลาดในการตรวจสอบ:", err);
-    }
-  }, [selectedPage, allConversations, loading, filteredConversations, sendInactivityBatch]);
-
   useEffect(() => {
     clockIntervalRef.current = setInterval(() => {
       setCurrentTime(new Date()); //   อัพเดตเวลาในทุกๆ 5 วินาที
@@ -853,42 +732,21 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (selectedPage) {
-      pollingIntervalRef.current = setInterval(() => {
-        checkForNewMessages();
-      }, 3000); //  ตรวจสอบทุกๆ 3 วินาที
-    }
 
-    return () => {
-      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-    };
-  }, [selectedPage, checkForNewMessages]);
-
-  // 3. อัพเดท loadConversations function ให้แสดง status ว่าข้อมูลมาจากไหน
+////////// ฟังก์ชันโหลด conversations จาก database เท่านั้น (ไม่ต้อง poll) /////////
 const loadConversations = async (pageId) => {
   if (!pageId) return;
-
-  const cached = getCachedData(`conversations_${pageId}`, conversationCache);
-  if (cached && !loading) {
-    setConversations(cached);
-    setAllConversations(cached);
-    return;
-  }
 
   setLoading(true);
   try {
     const conversations = await fetchConversations(pageId);
     
-    // เช็คว่าข้อมูลมาจาก database หรือ facebook
-    if (conversations.source === 'database') {
-      console.log('📊 ใช้ข้อมูลจาก database');
-    }
+    // เช็คว่าข้อมูลมาจาก database
+    console.log('📊 โหลดข้อมูลจาก database สำเร็จ');
     
     setConversations(conversations);
     setAllConversations(conversations);
     setLastUpdateTime(new Date());
-    setCachedData(`conversations_${pageId}`, conversations, conversationCache);
     
     // Reset filters
     setDisappearTime("");
@@ -910,16 +768,18 @@ const loadConversations = async (pageId) => {
     setLoading(false);
   }
 };
+//////////////////////////////////////////////////////////////////////////////
 
-  const handleloadConversations = () => {
-    if (!selectedPage) {
-      alert("กรุณาเลือกเพจ");
-      return;
-    }
-    conversationCache.current = {};
-    messageCache.current = {};
-    loadConversations(selectedPage);
-  };
+// Auto refresh ข้อมูลทุก 5 วินาที (ดึงจาก database ที่ sync แล้ว)
+useEffect(() => {
+  if (selectedPage) {
+    const interval = setInterval(() => {
+      loadConversations(selectedPage);
+    }, 15000); // refresh ทุก    50 วินาที
+
+    return () => clearInterval(interval);
+  }
+}, [selectedPage]);
 
   const applyFilters = () => {
     let filtered = [...allConversations];
