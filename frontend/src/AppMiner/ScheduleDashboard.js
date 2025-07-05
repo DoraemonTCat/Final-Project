@@ -10,25 +10,25 @@ function ScheduleDashboard() {
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
 
+  // 🔥 กลุ่ม Default IDs
+  const DEFAULT_GROUP_IDS = ['default_1', 'default_2', 'default_3'];
+
   useEffect(() => {
     const savedPage = localStorage.getItem("selectedPage");
     if (savedPage) {
       setSelectedPage(savedPage);
       loadSchedules(savedPage);
-      loadActiveSchedules(savedPage); // โหลด active schedules จาก backend
+      loadActiveSchedules(savedPage);
     }
   }, []);
 
-  // โหลด active schedules จาก backend
   const loadActiveSchedules = async (pageId) => {
     try {
       const response = await fetch(`http://localhost:8000/active-schedules/${pageId}`);
       if (!response.ok) throw new Error('Failed to load active schedules');
       const data = await response.json();
-      // สมมติ backend ส่ง { active_schedules: [{id: ...}, ...] }
       const activeIds = data.active_schedules.map(s => s.id);
       setActiveSchedules(activeIds);
-      // ไม่ต้อง set localStorage แล้ว
     } catch (error) {
       console.error('Error loading active schedules:', error);
     }
@@ -38,23 +38,46 @@ function ScheduleDashboard() {
     const key = `miningSchedules_${pageId}`;
     const savedSchedules = JSON.parse(localStorage.getItem(key) || '[]');
 
-    // ดึงกลุ่มทั้งหมดของเพจนี้
+    // 🔥 ดึงกลุ่มทั้งหมดของเพจนี้ (รวม default groups)
     const groupKey = `customerGroups_${pageId}`;
-    const groups = JSON.parse(localStorage.getItem(groupKey) || '[]');
-    const groupIds = groups.map(g => g.id);
+    const userGroups = JSON.parse(localStorage.getItem(groupKey) || '[]');
+    
+    // 🔥 สร้าง array ของ group IDs ทั้งหมด (รวม default)
+    const userGroupIds = userGroups.map(g => g.id);
+    const allGroupIds = [...DEFAULT_GROUP_IDS, ...userGroupIds];
 
-    // filter schedule ที่กลุ่มยังอยู่
+    // 🔥 filter schedule ที่กลุ่มยังอยู่ (รวม default groups)
     const filteredSchedules = savedSchedules.filter(sch =>
-      sch.groups?.some(gid => groupIds.includes(gid))
+      sch.groups?.some(gid => allGroupIds.includes(gid))
     );
-    setSchedules(filteredSchedules);
+
+    // 🔥 เพิ่มชื่อกลุ่มให้กับ schedule (รวม default groups)
+    const schedulesWithNames = filteredSchedules.map(schedule => {
+      const groupNames = schedule.groups.map(groupId => {
+        // ตรวจสอบว่าเป็น default group หรือไม่
+        if (groupId === 'default_1') return 'กลุ่มคนหาย';
+        if (groupId === 'default_2') return 'กลุ่มคนหายนาน';
+        if (groupId === 'default_3') return 'กลุ่มคนหายนานมาก';
+        
+        // ถ้าไม่ใช่ default ให้หาจาก user groups
+        const userGroup = userGroups.find(g => g.id === groupId);
+        return userGroup?.name || 'ไม่ระบุ';
+      });
+
+      return {
+        ...schedule,
+        groupNames
+      };
+    });
+
+    setSchedules(schedulesWithNames);
   };
 
   const refreshStatus = async () => {
     setRefreshing(true);
     try {
       loadSchedules(selectedPage);
-      await loadActiveSchedules(selectedPage); // รีเฟรช active schedules
+      await loadActiveSchedules(selectedPage);
       alert("รีเฟรชสถานะสำเร็จ!");
     } catch (error) {
       console.error('Error refreshing status:', error);
@@ -92,7 +115,6 @@ function ScheduleDashboard() {
 
     try {
       if (status === 'กำลังทำงาน') {
-        // หยุดการทำงาน
         const response = await fetch('http://localhost:8000/schedule/deactivate', {
           method: 'POST',
           headers: {
@@ -105,11 +127,8 @@ function ScheduleDashboard() {
         });
 
         if (!response.ok) throw new Error('Failed to deactivate');
-
-        // ไม่ต้อง set localStorage แล้ว
         alert("หยุดการทำงานสำเร็จ!");
       } else {
-        // เปิดใช้งาน - ส่งข้อมูล schedule แบบครบถ้วน
         const response = await fetch('http://localhost:8000/schedule/activate', {
           method: 'POST',
           headers: {
@@ -119,17 +138,15 @@ function ScheduleDashboard() {
             page_id: selectedPage,
             schedule: {
               ...schedule,
-              pageId: selectedPage // เพิ่ม pageId
+              pageId: selectedPage
             }
           })
         });
 
         if (!response.ok) throw new Error('Failed to activate');
-
         alert("เปิดใช้งานสำเร็จ!");
       }
 
-      // รีเฟรช active schedules
       await loadActiveSchedules(selectedPage);
 
     } catch (error) {
@@ -163,6 +180,11 @@ function ScheduleDashboard() {
 
   const goBack = () => {
     window.location.href = '/MinerGroup';
+  };
+
+  // 🔥 ฟังก์ชันตรวจสอบว่าเป็นกลุ่ม default หรือไม่
+  const isDefaultGroup = (groupIds) => {
+    return groupIds.some(id => DEFAULT_GROUP_IDS.includes(id));
   };
 
   return (
@@ -248,9 +270,18 @@ function ScheduleDashboard() {
               <tbody>
                 {schedules.map((schedule, index) => {
                   const status = getScheduleStatus(schedule);
+                  const isDefault = isDefaultGroup(schedule.groups || []);
+                  
                   return (
-                    <tr key={schedule.id}>
-                      <td>{schedule.groupNames?.join(', ') || 'ไม่ระบุ'}</td>
+                    <tr key={schedule.id} className={isDefault ? 'default-schedule-row' : ''}>
+                      <td>
+                        <div className="group-names-cell">
+                          {schedule.groupNames?.join(', ') || 'ไม่ระบุ'}
+                          {isDefault && (
+                            <span className="default-badge-small">พื้นฐาน</span>
+                          )}
+                        </div>
+                      </td>
                       <td>
                         {schedule.type === 'immediate' && '⚡ ส่งทันที'}
                         {schedule.type === 'scheduled' && '📅 ตามเวลา'}
@@ -311,7 +342,11 @@ function ScheduleDashboard() {
                   selectedSchedule.type === 'immediate' ? 'ส่งทันที' :
                   selectedSchedule.type === 'scheduled' ? 'ตามเวลา' : 'User หายไป'
                 }</p>
-                <p><strong>กลุ่ม:</strong> {selectedSchedule.groupNames?.join(', ') || 'ไม่ระบุ'}</p>
+                <p><strong>กลุ่ม:</strong> {selectedSchedule.groupNames?.join(', ') || 'ไม่ระบุ'}
+                  {isDefaultGroup(selectedSchedule.groups || []) && (
+                    <span className="default-badge-small" style={{ marginLeft: '8px' }}>พื้นฐาน</span>
+                  )}
+                </p>
                 <p><strong>เงื่อนไข:</strong> {getScheduleDescription(selectedSchedule)}</p>
                 {selectedSchedule.repeat && selectedSchedule.repeat.type !== 'once' && (
                   <p><strong>ทำซ้ำ:</strong> {

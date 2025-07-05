@@ -1,3 +1,6 @@
+## 2. อัพเดทไฟล์ CSS `MinerGroup.css`
+
+```css
 /* Reset and Base */
 * {
   margin: 0;
@@ -27,12 +30,10 @@
   align-items: center;
   gap: 12px;
   margin-bottom: 20px;
-  
 }
 
 .title-icon {
   font-size: 36px;
-  
 }
 
 /* Breadcrumb */
@@ -180,7 +181,6 @@
   font-size: 16px;
   margin-bottom: 20px;
   transition: all 0.3s ease;
-  
 }
 
 .group-name-input:focus {
@@ -234,6 +234,54 @@
   min-height: 400px;
 }
 
+/* 🔥 Default Groups Section */
+.default-groups-section {
+  margin-bottom: 40px;
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #2d3748;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.section-icon {
+  font-size: 24px;
+}
+
+/* 🔥 Groups Divider */
+.groups-divider {
+  display: flex;
+  align-items: center;
+  margin: 40px 0;
+  gap: 20px;
+}
+
+.divider-line {
+  flex: 1;
+  height: 2px;
+  background: linear-gradient(to right, transparent, #e2e8f0, transparent);
+}
+
+.divider-text {
+  color: #718096;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 20px;
+  background-color: #f5f7fa;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+/* User Groups Section */
+.user-groups-section {
+  margin-bottom: 30px;
+}
+
 .groups-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -261,6 +309,29 @@
 .group-card.selected {
   border-color: #667eea;
   background: linear-gradient(to bottom, rgba(102, 126, 234, 0.05), rgba(102, 126, 234, 0.02));
+}
+
+/* 🔥 Default Group Card */
+.group-card.default-group {
+  background: linear-gradient(135deg, #f6f9fc 0%, #fff 100%);
+  border: 3px solid #e6f3ff;
+}
+
+.group-card.default-group:hover {
+  border-color: #667eea;
+}
+
+.default-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
 
 /* Custom Checkbox */
@@ -321,32 +392,108 @@
   padding-right: 20px;
 }
 
-.group-stats {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-  margin-bottom: 16px;
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+/* 🔥 Group Description */
+.group-description {
+  text-align: center;
   color: #718096;
-  font-size: 14px;
+  font-size: 13px;
+  margin-bottom: 12px;
   padding-right: 20px;
-  
-  
 }
 
-.stat-icon {
-  font-size: 16px;
+/* 🔥 Schedule Info */
+.schedule-info {
+  text-align: center;
+  margin: 12px 0;
+  padding: 8px;
+  background: linear-gradient(135deg, rgba(72, 187, 120, 0.1), rgba(56, 161, 105, 0.1));
+  border-radius: 6px;
+  font-size: 12px;
+  color: #38a169;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.schedule-info:hover {
+  background: linear-gradient(135deg, rgba(72, 187, 120, 0.2), rgba(56, 161, 105, 0.2));
 }
 
 .group-date {
   text-align: center;
   color: #a0aec0;
   font-size: 12px;
+  margin-bottom: 16px;
+}
+
+/* 🔥 Group Actions */
+.group-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.action-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.edit-name-btn {
+  background-color: #f39c12;
+  color: white;
+}
+
+.edit-name-btn:hover {
+  background-color: #e67e22;
+  transform: translateY(-1px);
+}
+
+.edit-message-btn {
+  background-color: #667eea;
+  color: white;
+}
+
+.edit-message-btn:hover {
+  background-color: #5a67d8;
+  transform: translateY(-1px);
+}
+
+/* 🔥 Edit Save/Cancel Buttons */
+.edit-save-btn,
+.edit-cancel-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.edit-save-btn {
+  background-color: #48bb78;
+  color: white;
+}
+
+.edit-save-btn:hover {
+  background-color: #38a169;
+}
+
+.edit-cancel-btn {
+  background-color: #e2e8f0;
+  color: #4a5568;
+}
+
+.edit-cancel-btn:hover {
+  background-color: #cbd5e0;
 }
 
 .delete-btn {
@@ -516,5 +663,14 @@
 
   .breadcrumb {
     flex-wrap: wrap;
+  }
+
+  .groups-divider {
+    margin: 30px 0;
+  }
+
+  .divider-text {
+    font-size: 12px;
+    padding: 6px 16px;
   }
 }
