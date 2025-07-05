@@ -768,6 +768,7 @@ const loadConversations = async (pageId) => {
     setLoading(false);
   }
 };
+
 //////////////////////////////////////////////////////////////////////////////
 
 // Auto refresh ข้อมูลทุก 5 วินาที (ดึงจาก database ที่ sync แล้ว)
@@ -775,11 +776,13 @@ useEffect(() => {
   if (selectedPage) {
     const interval = setInterval(() => {
       loadConversations(selectedPage);
-    }, 15000); // refresh ทุก    50 วินาที
+    }, 15000); // refresh ทุก  15 วินาที
 
     return () => clearInterval(interval);
   }
 }, [selectedPage]);
+
+///////////////////////////////////////////////////////////////////////////////
 
   const applyFilters = () => {
     let filtered = [...allConversations];
