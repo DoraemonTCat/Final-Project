@@ -54,11 +54,30 @@ function GroupSchedule() {
     setIsDropdownOpen(!isDropdownOpen);
   };
 
-  // 🔥 ฟังก์ชันดึงกลุ่มลูกค้าตาม page ID
+  // 🔥 ฟังก์ชันดึงกลุ่มลูกค้าตาม page ID (รองรับ default groups)
   const getGroupsForPage = (pageId) => {
     if (!pageId) return [];
     const key = `customerGroups_${pageId}`;
-    return JSON.parse(localStorage.getItem(key) || '[]');
+    const userGroups = JSON.parse(localStorage.getItem(key) || '[]');
+    
+    // 🔥 ดึงข้อมูล default groups
+    const DEFAULT_GROUPS = [
+      { id: 'default_1', name: 'กลุ่มคนหาย', isDefault: true },
+      { id: 'default_2', name: 'กลุ่มคนหายนาน', isDefault: true },
+      { id: 'default_3', name: 'กลุ่มคนหายนานมาก', isDefault: true }
+    ];
+    
+    const defaultGroupsWithCustomNames = DEFAULT_GROUPS.map(group => {
+      const customNamesKey = `defaultGroupCustomNames_${pageId}`;
+      const customNames = JSON.parse(localStorage.getItem(customNamesKey) || '{}');
+      
+      return {
+        ...group,
+        name: customNames[group.id] || group.name
+      };
+    });
+    
+    return [...defaultGroupsWithCustomNames, ...userGroups];
   };
 
   // 🔥 ฟังก์ชันบันทึกตารางการส่งตาม page ID
@@ -88,7 +107,7 @@ function GroupSchedule() {
 
     // โหลดกลุ่มที่เลือก
     const groups = JSON.parse(localStorage.getItem("selectedCustomerGroups") || '[]');
-    const allGroups = getGroupsForPage(savedPage); // 🔥 ใช้ฟังก์ชันใหม่
+    const allGroups = getGroupsForPage(savedPage);
     const selectedGroupsData = allGroups.filter(g => groups.includes(g.id));
     setSelectedGroups(selectedGroupsData);
 
@@ -245,7 +264,8 @@ function GroupSchedule() {
             groupNames: selectedGroups.map(g => g.name),
             messages: messages,
             createdAt: schedule.createdAt, // คงวันที่สร้างเดิม
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
+            isForDefaultGroup: selectedGroups.some(g => g.isDefault) // 🔥 เพิ่ม flag
           };
         }
         return schedule;
@@ -272,7 +292,8 @@ function GroupSchedule() {
         groups: selectedGroups.map(g => g.id),
         groupNames: selectedGroups.map(g => g.name),
         messages: messages,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        isForDefaultGroup: selectedGroups.some(g => g.isDefault) // 🔥 เพิ่ม flag
       };
 
       schedules.push(scheduleData);
@@ -347,6 +368,7 @@ function GroupSchedule() {
   };
 
   const selectedPageInfo = pages.find(p => p.id === selectedPage);
+  const isForDefaultGroup = selectedGroups.some(g => g.isDefault); // 🔥 ตรวจสอบว่าเป็น default group
 
   return (
     <div className="app-container">
@@ -356,7 +378,9 @@ function GroupSchedule() {
         <div className="schedule-header">
           <h1 className="schedule-title">
             <span className="title-icon">⏰</span>
-            {editingScheduleId ? 'แก้ไขการตั้งเวลา' : 'ตั้งเวลาและความถี่การส่ง'}
+            {editingScheduleId ? 'แก้ไขการตั้งเวลา' : 
+             isForDefaultGroup ? 'ตั้งเวลาและความถี่การส่ง - กลุ่มพื้นฐาน' :
+             'ตั้งเวลาและความถี่การส่ง'}
             {selectedPageInfo && (
               <span style={{ fontSize: '18px', color: '#718096', marginLeft: '10px' }}>
                 - {selectedPageInfo.name}
@@ -381,7 +405,14 @@ function GroupSchedule() {
             </div>
             <div className="summary-item">
               <span className="summary-label">กลุ่มที่เลือก:</span>
-              <span className="summary-value">{selectedGroups.map(g => g.name).join(', ')}</span>
+              <span className="summary-value">
+                {selectedGroups.map(g => (
+                  <span key={g.id}>
+                    {g.isDefault && '⭐ '}
+                    {g.name}
+                  </span>
+                )).reduce((prev, curr, i) => [prev, i > 0 && ', ', curr], [])}
+              </span>
             </div>
             <div className="summary-item">
               <span className="summary-label">จำนวนข้อความ:</span>
@@ -479,7 +510,6 @@ function GroupSchedule() {
                     onChange={(e) => setInactivityUnit(e.target.value)}
                     className="form-input inactivity-select"
                   >
-                  
                     <option value="minutes">นาที</option>
                     <option value="hours">ชั่วโมง</option>
                     <option value="days">วัน</option>

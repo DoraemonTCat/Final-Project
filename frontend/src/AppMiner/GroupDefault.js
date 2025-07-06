@@ -7,7 +7,6 @@ import Sidebar from "./Sidebar";
 function GroupDefault() {
   const [pages, setPages] = useState([]);
   const [selectedPage, setSelectedPage] = useState("");
-  const [loading, setLoading] = useState(false);
   const [messageSequence, setMessageSequence] = useState([]);
   const [selectedGroups, setSelectedGroups] = useState([]);
   const [currentInput, setCurrentInput] = useState({
@@ -19,49 +18,62 @@ function GroupDefault() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingScheduleId, setEditingScheduleId] = useState(null);
+  const [isDefaultGroupSetup, setIsDefaultGroupSetup] = useState(false); // 🔥 เพิ่ม state
   const navigate = useNavigate();
 
   const toggleDropdown = () => {
     setIsDropdownOpen(!isDropdownOpen);
   };
 
-  // Listen for page changes from Sidebar
-  useEffect(() => {
-    const handlePageChange = (event) => {
-      const pageId = event.detail.pageId;
-      setSelectedPage(pageId);
-    };
-
-    window.addEventListener('pageChanged', handlePageChange);
-    
-    const savedPage = localStorage.getItem("selectedPage");
-    if (savedPage) {
-      setSelectedPage(savedPage);
-    }
-
-    return () => {
-      window.removeEventListener('pageChanged', handlePageChange);
-    };
-  }, []);
-
   // 🔥 ฟังก์ชันดึงกลุ่มลูกค้าตาม page ID
   const getGroupsForPage = (pageId) => {
     if (!pageId) return [];
     const key = `customerGroups_${pageId}`;
-    return JSON.parse(localStorage.getItem(key) || '[]');
+    const userGroups = JSON.parse(localStorage.getItem(key) || '[]');
+    
+    // 🔥 ดึงข้อมูล default groups พร้อมข้อความ
+    const DEFAULT_GROUPS = [
+      { id: 'default_1', name: 'กลุ่มคนหาย', isDefault: true },
+      { id: 'default_2', name: 'กลุ่มคนหายนาน', isDefault: true },
+      { id: 'default_3', name: 'กลุ่มคนหายนานมาก', isDefault: true }
+    ];
+    
+    const defaultGroupsWithMessages = DEFAULT_GROUPS.map(group => {
+      const messageKey = `defaultGroupMessages_${pageId}_${group.id}`;
+      const savedMessages = JSON.parse(localStorage.getItem(messageKey) || '[]');
+      
+      // 🔥 ตรวจสอบชื่อที่ custom
+      const customNamesKey = `defaultGroupCustomNames_${pageId}`;
+      const customNames = JSON.parse(localStorage.getItem(customNamesKey) || '{}');
+      
+      return {
+        ...group,
+        name: customNames[group.id] || group.name,
+        messages: savedMessages
+      };
+    });
+    
+    return [...defaultGroupsWithMessages, ...userGroups];
   };
 
   // 🔥 ฟังก์ชันบันทึกกลุ่มลูกค้าตาม page ID
   const saveGroupsForPage = (pageId, groups) => {
     if (!pageId) return;
     const key = `customerGroups_${pageId}`;
-    localStorage.setItem(key, JSON.stringify(groups));
+    const userGroups = groups.filter(g => !g.isDefault);
+    localStorage.setItem(key, JSON.stringify(userGroups));
   };
 
   useEffect(() => {
     // 🔥 ตรวจสอบว่าเป็นโหมดแก้ไขหรือไม่
     const editMode = localStorage.getItem("editingMode");
     const scheduleId = localStorage.getItem("editingScheduleId");
+    const isFromDefaultGroup = localStorage.getItem("isDefaultGroupSetup");
+    
+    if (isFromDefaultGroup === "true") {
+      setIsDefaultGroupSetup(true);
+      localStorage.removeItem("isDefaultGroupSetup"); // ลบหลังใช้
+    }
     
     if (editMode === "true" || scheduleId) {
       setIsEditMode(true);
@@ -83,7 +95,7 @@ function GroupDefault() {
 
     // โหลดกลุ่มที่เลือกจากหน้าก่อน
     const groups = JSON.parse(localStorage.getItem("selectedCustomerGroups") || '[]');
-    const allGroups = getGroupsForPage(savedPage); // 🔥 ใช้ฟังก์ชันใหม่
+    const allGroups = getGroupsForPage(savedPage);
     const selectedGroupsData = allGroups.filter(g => groups.includes(g.id));
     setSelectedGroups(selectedGroupsData);
 
@@ -206,7 +218,7 @@ function GroupDefault() {
     setMessageSequence(newSequence);
   };
 
-  // 🔥 ฟังก์ชันบันทึกเฉพาะข้อความ (ไม่ไปหน้าถัดไป)
+  // 🔥 ฟังก์ชันบันทึกเฉพาะข้อความ (รองรับ default groups)
   const saveMessages = () => {
     if (messageSequence.length === 0) {
       alert("กรุณาเพิ่มข้อความอย่างน้อย 1 ข้อความ");
@@ -217,12 +229,22 @@ function GroupDefault() {
     const messageKey = `groupMessages_${selectedPage}`;
     localStorage.setItem(messageKey, JSON.stringify(messageSequence));
 
-    // อัพเดทข้อความในแต่ละกลุ่ม (แยกตามเพจ)
+    // อัพเดทข้อความในแต่ละกลุ่ม
     const allGroups = getGroupsForPage(selectedPage);
     const selectedGroupIds = JSON.parse(localStorage.getItem("selectedCustomerGroups") || '[]');
     
+    // 🔥 บันทึกข้อความสำหรับ default groups แยก
+    selectedGroupIds.forEach(groupId => {
+      const group = allGroups.find(g => g.id === groupId);
+      if (group && group.isDefault) {
+        const defaultMessageKey = `defaultGroupMessages_${selectedPage}_${groupId}`;
+        localStorage.setItem(defaultMessageKey, JSON.stringify(messageSequence));
+      }
+    });
+    
+    // อัพเดทข้อความสำหรับ user groups
     const updatedGroups = allGroups.map(group => {
-      if (selectedGroupIds.includes(group.id)) {
+      if (selectedGroupIds.includes(group.id) && !group.isDefault) {
         return { ...group, messages: messageSequence };
       }
       return group;
@@ -248,8 +270,18 @@ function GroupDefault() {
     const allGroups = getGroupsForPage(selectedPage);
     const selectedGroupIds = JSON.parse(localStorage.getItem("selectedCustomerGroups") || '[]');
     
+    // 🔥 บันทึกข้อความสำหรับ default groups แยก
+    selectedGroupIds.forEach(groupId => {
+      const group = allGroups.find(g => g.id === groupId);
+      if (group && group.isDefault) {
+        const defaultMessageKey = `defaultGroupMessages_${selectedPage}_${groupId}`;
+        localStorage.setItem(defaultMessageKey, JSON.stringify(messageSequence));
+      }
+    });
+    
+    // อัพเดทข้อความสำหรับ user groups
     const updatedGroups = allGroups.map(group => {
-      if (selectedGroupIds.includes(group.id)) {
+      if (selectedGroupIds.includes(group.id) && !group.isDefault) {
         return { ...group, messages: messageSequence };
       }
       return group;
@@ -284,6 +316,9 @@ function GroupDefault() {
 
   const selectedPageInfo = pages.find(p => p.id === selectedPage);
 
+  // 🔥 ตรวจสอบว่ากำลังตั้งค่าสำหรับ default group หรือไม่
+  const isSettingDefaultGroup = selectedGroups.some(g => g.isDefault);
+
   return (
     <div className="app-container">
       <Sidebar />
@@ -292,7 +327,9 @@ function GroupDefault() {
         <div className="group-default-header">
           <h1 className="group-default-title">
             <span className="title-icon">💬</span>
-            {isEditMode ? 'แก้ไขข้อความของกลุ่ม' : 'ตั้งค่าข้อความสำหรับกลุ่มที่เลือก'}
+            {isEditMode ? 'แก้ไขข้อความของกลุ่ม' : 
+             isSettingDefaultGroup ? 'ตั้งค่าข้อความสำหรับกลุ่มพื้นฐาน' : 
+             'ตั้งค่าข้อความสำหรับกลุ่มที่เลือก'}
             {selectedPageInfo && (
               <span style={{ fontSize: '18px', color: '#718096', marginLeft: '10px' }}>
                 - {selectedPageInfo.name}
@@ -313,10 +350,16 @@ function GroupDefault() {
         </div>
 
         <div className="selected-groups-info">
-          <h3>{isEditMode ? 'กำลังแก้ไขกลุ่ม' : 'กลุ่มที่เลือก'} ({selectedPageInfo?.name}):</h3>
+          <h3>
+            {isEditMode ? 'กำลังแก้ไขกลุ่ม' : 
+             isSettingDefaultGroup ? '🌟 กลุ่มพื้นฐานที่เลือก' : 
+             'กลุ่มที่เลือก'} 
+            ({selectedPageInfo?.name}):
+          </h3>
           <div className="selected-groups-list">
             {selectedGroups.map(group => (
-              <span key={group.id} className="group-badge">
+              <span key={group.id} className={`group-badge ${group.isDefault ? 'default-badge' : ''}`}>
+                {group.isDefault && '⭐ '}
                 {group.name}
               </span>
             ))}
@@ -408,11 +451,7 @@ function GroupDefault() {
               💡 ลากและวางเพื่อจัดลำดับใหม่
             </div>
 
-            {loading ? (
-              <div className="loading-state">
-                🔄 กำลังโหลด...
-              </div>
-            ) : messageSequence.length === 0 ? (
+            {messageSequence.length === 0 ? (
               <div className="empty-state">
                 ยังไม่มีข้อความในลำดับ เพิ่มข้อความหรือสื่อเข้ามาได้เลย!
               </div>

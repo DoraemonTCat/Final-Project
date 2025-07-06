@@ -671,3 +671,185 @@
     padding: 6px 16px;
   }
 }
+/* CSS สำหรับ Default Groups ใน MinerGroup.css */
+
+/* Default Groups Styles */
+.default-groups-section {
+  margin-bottom: 30px;
+}
+
+.group-card.default-group {
+  background: linear-gradient(135deg, #f6f9fc 0%, #e9f3ff 100%);
+  border: 2px solid #3182ce;
+  position: relative;
+}
+
+.group-card.default-group:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 30px rgba(49, 130, 206, 0.15);
+}
+
+.default-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: #3182ce;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.group-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.group-description {
+  font-size: 13px;
+  color: #718096;
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+.message-count-info {
+  background: #e6f3ff;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #3182ce;
+  margin-bottom: 8px;
+  display: inline-block;
+}
+
+.create-message-btn {
+  background: #48bb78 !important;
+  color: white !important;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.create-message-btn:hover {
+  background: #38a169 !important;
+  transform: translateY(-1px);
+}
+
+.groups-divider {
+  display: flex;
+  align-items: center;
+  margin: 40px 0 30px;
+  gap: 20px;
+}
+
+.divider-line {
+  flex: 1;
+  height: 1px;
+  background: #e2e8f0;
+}
+
+.divider-text {
+  color: #a0aec0;
+  font-size: 14px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Default Badge in GroupDefault */
+.group-badge.default-badge {
+  background: linear-gradient(135deg, #3182ce 0%, #2c5282 100%);
+  color: white;
+  border: 1px solid #2c5282;
+  font-weight: 600;
+}
+
+/* Schedule Dashboard - Default Schedule Row */
+.default-schedule-row {
+  background: #f0f7ff !important;
+}
+
+.default-schedule-row:hover {
+  background: #e6f3ff !important;
+}
+
+.default-badge-small {
+  background: #3182ce;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-left: 8px;
+  display: inline-block;
+}
+
+.group-names-cell {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* Animations */
+@keyframes pulse-badge {
+  0% {
+    box-shadow: 0 0 0 0 rgba(49, 130, 206, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(49, 130, 206, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(49, 130, 206, 0);
+  }
+}
+
+.default-badge {
+  animation: pulse-badge 2s infinite;
+}
+
+/* Edit Actions for Default Groups */
+.default-group .group-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.default-group .action-btn {
+  flex: 1;
+  font-size: 11px;
+  padding: 6px 12px;
+}
+
+/* Modal Styles for Default Groups */
+.modal-content h3 .default-badge-small {
+  vertical-align: middle;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .default-badge {
+    font-size: 10px;
+    padding: 3px 8px;
+  }
+  
+  .group-icon {
+    font-size: 36px;
+  }
+  
+  .divider-text {
+    font-size: 12px;
+  }
+}
