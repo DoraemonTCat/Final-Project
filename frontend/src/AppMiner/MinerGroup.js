@@ -9,16 +9,20 @@ function SetMiner() {
   const [selectedPage, setSelectedPage] = useState("");
   const [customerGroups, setCustomerGroups] = useState([]);
   const [newGroupName, setNewGroupName] = useState("");
-  const [newGroupDescription, setNewGroupDescription] = useState(""); // เพิ่ม state
-  const [newGroupKeywords, setNewGroupKeywords] = useState(""); // เพิ่ม state
+  const [newGroupRuleDescription, setNewGroupRuleDescription] = useState("");
+  const [newGroupKeywords, setNewGroupKeywords] = useState("");
+  const [newGroupExamples, setNewGroupExamples] = useState("");
   const [showAddGroupForm, setShowAddGroupForm] = useState(false);
   const [selectedGroups, setSelectedGroups] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [showScheduleSelectModal, setShowScheduleSelectModal] = useState(false);
-  const [schedulesToSelect, setSchedulesToSelect] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [editingGroupId, setEditingGroupId] = useState(null);
-  const [editingGroupName, setEditingGroupName] = useState("");
+  const [editingGroupData, setEditingGroupData] = useState({
+    type_name: "",
+    rule_description: "",
+    keywords: "",
+    examples: ""
+  });
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [viewingGroupSchedules, setViewingGroupSchedules] = useState([]);
   const [viewingGroupName, setViewingGroupName] = useState('');
@@ -28,68 +32,66 @@ function SetMiner() {
   const DEFAULT_GROUPS = [
     {
       id: 'default_1',
-      name: 'กลุ่มคนหาย',
+      type_name: 'กลุ่มคนหาย',
       isDefault: true,
-      description: 'สำหรับลูกค้าที่หายไปไม่นาน',
+      rule_description: 'สำหรับลูกค้าที่หายไปไม่นาน',
       icon: '🕐',
-      createdAt: new Date('2024-01-01').toISOString()
+      created_at: new Date('2024-01-01').toISOString()
     },
     {
       id: 'default_2', 
-      name: 'กลุ่มคนหายนาน',
+      type_name: 'กลุ่มคนหายนาน',
       isDefault: true,
-      description: 'สำหรับลูกค้าที่หายไปนาน',
+      rule_description: 'สำหรับลูกค้าที่หายไปนาน',
       icon: '⏰',
-      createdAt: new Date('2024-01-01').toISOString()
+      created_at: new Date('2024-01-01').toISOString()
     },
     {
       id: 'default_3',
-      name: 'กลุ่มคนหายนานมาก',
+      type_name: 'กลุ่มคนหายนานมาก',
       isDefault: true,
-      description: 'สำหรับลูกค้าที่หายไปนานมาก',
+      rule_description: 'สำหรับลูกค้าที่หายไปนานมาก',
       icon: '📅',
-      createdAt: new Date('2024-01-01').toISOString()
+      created_at: new Date('2024-01-01').toISOString()
     }
   ];
 
-  const toggleDropdown = () => {
-    setIsDropdownOpen(!isDropdownOpen);
+  // ฟังก์ชันดึงกลุ่มลูกค้าจาก Database
+  const fetchCustomerGroups = async (pageId) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`http://localhost:8000/customer-groups/${pageId}`);
+      if (!response.ok) throw new Error('Failed to fetch customer groups');
+      
+      const data = await response.json();
+      
+      // รวมกลุ่ม default กับกลุ่มจาก database
+      const allGroups = [...DEFAULT_GROUPS, ...data];
+      setCustomerGroups(allGroups);
+    } catch (error) {
+      console.error('Error fetching customer groups:', error);
+      // ถ้าดึงไม่ได้ให้แสดงแค่ default groups
+      setCustomerGroups(DEFAULT_GROUPS);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // 🔥 ฟังก์ชันดึงกลุ่มลูกค้าตาม page ID (รวม default groups)
-  const getGroupsForPage = (pageId) => {
-    if (!pageId) return [];
-    const key = `customerGroups_${pageId}`;
-    const userGroups = JSON.parse(localStorage.getItem(key) || '[]');
-    
-    // รวมกลุ่ม default กับกลุ่มที่ user สร้าง
-    return [...DEFAULT_GROUPS, ...userGroups];
-  };
-
-  // 🔥 ฟังก์ชันบันทึกกลุ่มลูกค้าตาม page ID (บันทึกเฉพาะ user groups)
-  const saveGroupsForPage = (pageId, groups) => {
-    if (!pageId) return;
-    const key = `customerGroups_${pageId}`;
-    // กรองเอาเฉพาะกลุ่มที่ไม่ใช่ default ก่อนบันทึก
-    const userGroups = groups.filter(g => !g.isDefault);
-    localStorage.setItem(key, JSON.stringify(userGroups));
-  };
-
-  // 🔥 ฟังก์ชันดึงตารางการส่งตาม page ID
+  // ฟังก์ชันดึงตารางการส่งตาม page ID
   const getSchedulesForPage = (pageId) => {
     if (!pageId) return [];
     const key = `miningSchedules_${pageId}`;
     return JSON.parse(localStorage.getItem(key) || '[]');
   };
 
-  // 🔥 ฟังก์ชันบันทึกตารางการส่งตาม page ID
+  // ฟังก์ชันบันทึกตารางการส่งตาม page ID
   const saveSchedulesForPage = (pageId, schedules) => {
     if (!pageId) return;
     const key = `miningSchedules_${pageId}`;
     localStorage.setItem(key, JSON.stringify(schedules));
   };
 
-  // 🔥 ฟังก์ชันตรวจสอบว่ากลุ่มมีการตั้งเวลาไว้หรือไม่
+  // ฟังก์ชันตรวจสอบว่ากลุ่มมีการตั้งเวลาไว้หรือไม่
   const getGroupSchedules = (groupId) => {
     const schedules = getSchedulesForPage(selectedPage);
     return schedules.filter(schedule => schedule.groups.includes(groupId));
@@ -107,12 +109,10 @@ function SetMiner() {
       .catch(err => console.error("ไม่สามารถโหลดเพจได้:", err));
   }, []);
 
-  // 🔥 โหลดกลุ่มลูกค้าเมื่อเปลี่ยนเพจ
+  // โหลดกลุ่มลูกค้าเมื่อเปลี่ยนเพจ
   useEffect(() => {
     if (selectedPage) {
-      const pageGroups = getGroupsForPage(selectedPage);
-      setCustomerGroups(pageGroups);
-      // รีเซ็ตการเลือกเมื่อเปลี่ยนเพจ
+      fetchCustomerGroups(selectedPage);
       setSelectedGroups([]);
     } else {
       setCustomerGroups([]);
@@ -145,46 +145,88 @@ function SetMiner() {
     localStorage.setItem("selectedPage", pageId);
   };
 
-  // ปรับฟังก์ชันเพิ่มกลุ่มลูกค้า
-  const addCustomerGroup = () => {
-    if (newGroupName.trim() && selectedPage) {
-      const newGroup = {
-        id: Date.now(),
-        name: newGroupName,
-        description: newGroupDescription.trim(),
-        keywords: newGroupKeywords.trim().split(',').map(k => k.trim()).filter(k => k),
-        pageId: selectedPage,
-        customers: [],
-        messages: [],
-        createdAt: new Date().toISOString(),
-        isDefault: false
-      };
-      const updatedGroups = [...customerGroups, newGroup];
-      setCustomerGroups(updatedGroups);
-      saveGroupsForPage(selectedPage, updatedGroups);
+  // ฟังก์ชันเพิ่มกลุ่มลูกค้าไปยัง Database
+  const addCustomerGroup = async () => {
+    if (!newGroupName.trim() || !selectedPage) {
+      if (!selectedPage) alert("กรุณาเลือกเพจก่อนสร้างกลุ่ม");
+      else alert("กรุณากรอกชื่อกลุ่ม");
+      return;
+    }
+
+    // ดึง page จาก database เพื่อเอา ID
+    const pagesData = await fetchPages();
+    const currentPage = pagesData.find(p => p.id === selectedPage);
+    if (!currentPage) {
+      alert("ไม่พบข้อมูลเพจ");
+      return;
+    }
+
+    try {
+      const response = await fetch('http://localhost:8000/customer-groups', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          page_id: currentPage.ID, // ใช้ ID จาก database
+          type_name: newGroupName.trim(),
+          rule_description: newGroupRuleDescription.trim(),
+          keywords: newGroupKeywords.trim().split(',').map(k => k.trim()).filter(k => k),
+          examples: newGroupExamples.trim()
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to create customer group');
+      
+      const newGroup = await response.json();
+      
+      // Refresh กลุ่มลูกค้า
+      await fetchCustomerGroups(selectedPage);
+      
+      // Reset form
       setNewGroupName("");
-      setNewGroupDescription("");
+      setNewGroupRuleDescription("");
       setNewGroupKeywords("");
+      setNewGroupExamples("");
       setShowAddGroupForm(false);
-    } else if (!selectedPage) {
-      alert("กรุณาเลือกเพจก่อนสร้างกลุ่ม");
+      
+      alert("สร้างกลุ่มลูกค้าสำเร็จ!");
+    } catch (error) {
+      console.error('Error creating customer group:', error);
+      alert("เกิดข้อผิดพลาดในการสร้างกลุ่ม");
     }
   };
 
-  const removeCustomerGroup = (groupId) => {
+  // ฟังก์ชันลบกลุ่มลูกค้า
+  const removeCustomerGroup = async (groupId) => {
     const group = customerGroups.find(g => g.id === groupId);
     
-    // 🔥 ตรวจสอบว่าเป็นกลุ่ม default หรือไม่
     if (group && group.isDefault) {
       alert("ไม่สามารถลบกลุ่มพื้นฐานได้");
       return;
     }
     
-    if (window.confirm("คุณต้องการลบกลุ่มนี้หรือไม่?")) {
-      const updatedGroups = customerGroups.filter(group => group.id !== groupId);
-      setCustomerGroups(updatedGroups);
-      saveGroupsForPage(selectedPage, updatedGroups);
-      setSelectedGroups(selectedGroups.filter(id => id !== groupId));
+    if (!window.confirm("คุณต้องการลบกลุ่มนี้หรือไม่?")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8000/customer-groups/${groupId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) throw new Error('Failed to delete customer group');
+      
+      // Refresh กลุ่มลูกค้า
+      await fetchCustomerGroups(selectedPage);
+      
+      // ลบออกจากการเลือก
+      setSelectedGroups(prev => prev.filter(id => id !== groupId));
+      
+      alert("ลบกลุ่มสำเร็จ!");
+    } catch (error) {
+      console.error('Error deleting customer group:', error);
+      alert("เกิดข้อผิดพลาดในการลบกลุ่ม");
     }
   };
 
@@ -214,39 +256,87 @@ function SetMiner() {
     navigate('/GroupDefault');
   };
 
-  // 🔥 ฟังก์ชันเริ่มการแก้ไขชื่อกลุ่ม
+  // ฟังก์ชันเริ่มการแก้ไขกลุ่ม
   const startEditGroup = (group) => {
     setEditingGroupId(group.id);
-    setEditingGroupName(group.name);
+    setEditingGroupData({
+      type_name: group.type_name || group.name,
+      rule_description: group.rule_description || '',
+      keywords: Array.isArray(group.keywords) ? group.keywords.join(', ') : group.keywords || '',
+      examples: group.examples || ''
+    });
   };
 
-  // 🔥 ฟังก์ชันบันทึกการแก้ไขชื่อกลุ่ม
-  const saveEditGroup = () => {
-    if (!editingGroupName.trim()) {
+  // ฟังก์ชันบันทึกการแก้ไขกลุ่ม
+  const saveEditGroup = async () => {
+    if (!editingGroupData.type_name.trim()) {
       alert("กรุณากรอกชื่อกลุ่ม");
       return;
     }
 
-    const updatedGroups = customerGroups.map(group => {
-      if (group.id === editingGroupId) {
-        return { ...group, name: editingGroupName };
-      }
-      return group;
-    });
+    try {
+      // ถ้าเป็น default group ให้บันทึกใน localStorage
+      if (editingGroupId.startsWith('default_')) {
+        const customNamesKey = `defaultGroupCustomNames_${selectedPage}`;
+        const customNames = JSON.parse(localStorage.getItem(customNamesKey) || '{}');
+        customNames[editingGroupId] = editingGroupData.type_name;
+        localStorage.setItem(customNamesKey, JSON.stringify(customNames));
+        
+        // อัพเดทใน state
+        setCustomerGroups(prev => prev.map(group => {
+          if (group.id === editingGroupId) {
+            return { ...group, type_name: editingGroupData.type_name };
+          }
+          return group;
+        }));
+      } else {
+        // ถ้าเป็นกลุ่มจาก database
+        const response = await fetch(`http://localhost:8000/customer-groups/${editingGroupId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            type_name: editingGroupData.type_name.trim(),
+            rule_description: editingGroupData.rule_description.trim(),
+            keywords: editingGroupData.keywords.split(',').map(k => k.trim()).filter(k => k),
+            examples: editingGroupData.examples.trim()
+          })
+        });
 
-    setCustomerGroups(updatedGroups);
-    saveGroupsForPage(selectedPage, updatedGroups);
-    setEditingGroupId(null);
-    setEditingGroupName("");
+        if (!response.ok) throw new Error('Failed to update customer group');
+        
+        // Refresh กลุ่มลูกค้า
+        await fetchCustomerGroups(selectedPage);
+        
+        alert("แก้ไขกลุ่มสำเร็จ!");
+      }
+      
+      setEditingGroupId(null);
+      setEditingGroupData({
+        type_name: "",
+        rule_description: "",
+        keywords: "",
+        examples: ""
+      });
+    } catch (error) {
+      console.error('Error updating customer group:', error);
+      alert("เกิดข้อผิดพลาดในการแก้ไขกลุ่ม");
+    }
   };
 
-  // 🔥 ฟังก์ชันยกเลิกการแก้ไข
+  // ฟังก์ชันยกเลิกการแก้ไข
   const cancelEdit = () => {
     setEditingGroupId(null);
-    setEditingGroupName("");
+    setEditingGroupData({
+      type_name: "",
+      rule_description: "",
+      keywords: "",
+      examples: ""
+    });
   };
 
-  // 🔥 ฟังก์ชันแก้ไขข้อความในกลุ่ม
+  // ฟังก์ชันแก้ไขข้อความในกลุ่ม
   const editGroupMessages = (groupId) => {
     const schedules = getGroupSchedules(groupId);
     const group = customerGroups.find(g => g.id === groupId);
@@ -255,10 +345,9 @@ function SetMiner() {
     localStorage.setItem("selectedCustomerGroupsPageId", selectedPage);
     
     if (schedules.length > 1) {
-      setSchedulesToSelect(schedules);
-      setEditingGroupId(groupId);
-      setEditingGroupName(group?.name || '');
-      setShowScheduleSelectModal(true);
+      // ถ้ามีหลาย schedule ให้เลือก
+      alert("กลุ่มนี้มีการตั้งเวลาหลายรายการ กรุณาแก้ไขผ่านหน้า Dashboard");
+      return;
     } else if (schedules.length === 1) {
       const schedule = schedules[0];
       localStorage.setItem("editingScheduleId", schedule.id.toString());
@@ -279,26 +368,15 @@ function SetMiner() {
     }
   };
 
-  // 🔥 ฟังก์ชันเลือก schedule ที่จะแก้ไข
-  const selectScheduleToEdit = (schedule) => {
-    localStorage.setItem("editingScheduleId", schedule.id.toString());
-    
-    const messageKey = `groupMessages_${selectedPage}`;
-    localStorage.setItem(messageKey, JSON.stringify(schedule.messages || []));
-    
-    setShowScheduleSelectModal(false);
-    navigate('/GroupDefault');
-  };
-
-  // 🔥 ฟังก์ชันแสดงตารางเวลาของกลุ่ม
+  // ฟังก์ชันแสดงตารางเวลาของกลุ่ม
   const viewGroupSchedules = (group) => {
     const schedules = getGroupSchedules(group.id);
     setViewingGroupSchedules(schedules);
-    setViewingGroupName(group.name);
+    setViewingGroupName(group.type_name || group.name);
     setShowScheduleModal(true);
   };
 
-  // 🔥 ฟังก์ชันลบตารางเวลา
+  // ฟังก์ชันลบตารางเวลา
   const deleteSchedule = (scheduleId) => {
     if (window.confirm("คุณต้องการลบตารางเวลานี้หรือไม่?")) {
       const schedules = getSchedulesForPage(selectedPage);
@@ -314,44 +392,17 @@ function SetMiner() {
     }
   };
 
-  // 🔥 ฟังก์ชันแก้ไขตารางเวลา
-  const editSchedule = (schedule) => {
-    localStorage.setItem("selectedCustomerGroups", JSON.stringify(schedule.groups));
-    localStorage.setItem("selectedCustomerGroupsPageId", selectedPage);
-    localStorage.setItem("editingScheduleId", schedule.id.toString());
-    
-    const messageKey = `groupMessages_${selectedPage}`;
-    localStorage.setItem(messageKey, JSON.stringify(schedule.messages || []));
-    
-    const scheduleSettings = {
-      scheduleType: schedule.type,
-      scheduleDate: schedule.date,
-      scheduleTime: schedule.time,
-      inactivityPeriod: schedule.inactivityPeriod || '1',
-      inactivityUnit: schedule.inactivityUnit || 'days',
-      repeatType: schedule.repeat.type,
-      repeatCount: schedule.repeat.count || 1,
-      repeatDays: schedule.repeat.days || [],
-      endDate: schedule.repeat.endDate || ''
-    };
-    
-    const savedScheduleKey = `lastScheduleSettings_${selectedPage}`;
-    localStorage.setItem(savedScheduleKey, JSON.stringify(scheduleSettings));
-    
-    navigate('/GroupSchedule');
-  };
-
-  // 🔥 แยกกลุ่ม default และ user groups สำหรับการแสดงผล
+  // แยกกลุ่ม default และ user groups สำหรับการแสดงผล
   const defaultGroups = customerGroups.filter(g => g.isDefault);
   const userGroups = customerGroups.filter(g => !g.isDefault);
 
   // Filter สำหรับการค้นหา
   const filteredDefaultGroups = defaultGroups.filter(group =>
-    group.name.toLowerCase().includes(searchTerm.toLowerCase())
+    (group.type_name || group.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
   
   const filteredUserGroups = userGroups.filter(group =>
-    group.name.toLowerCase().includes(searchTerm.toLowerCase())
+    (group.type_name || group.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const selectedPageInfo = selectedPage ? pages.find(p => p.id === selectedPage) : null;
@@ -424,7 +475,7 @@ function SetMiner() {
 
         {showAddGroupForm && (
           <div className="add-group-modal">
-            <div className="modal-content" style={{ maxWidth: '500px' }}>
+            <div className="modal-content" style={{ maxWidth: '600px' }}>
               <h3>สร้างกลุ่มลูกค้าใหม่{selectedPageInfo && ` - ${selectedPageInfo.name}`}</h3>
               
               <div style={{ marginBottom: '20px' }}>
@@ -441,14 +492,14 @@ function SetMiner() {
                 />
               </div>
 
-              <div style={{ marginBottom: '20px' }}>
+              <div style={{ marginBottom: '1px', marginTop: '-24px' }}>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#4a5568' }}>
-                  คำอธิบายกลุ่ม
+                  คำอธิบายกฎการจัดกลุ่ม
                 </label>
                 <textarea
-                  placeholder="อธิบายลักษณะของลูกค้ากลุ่มนี้..."
-                  value={newGroupDescription}
-                  onChange={(e) => setNewGroupDescription(e.target.value)}
+                  placeholder="อธิบายกฎที่ใช้ในการจำแนกลูกค้ากลุ่มนี้..."
+                  value={newGroupRuleDescription}
+                  onChange={(e) => setNewGroupRuleDescription(e.target.value)}
                   style={{
                     width: '100%',
                     padding: '12px',
@@ -467,14 +518,32 @@ function SetMiner() {
                 </label>
                 <input
                   type="text"
-                  placeholder="เช่น สวัสดี, สนใจ, ราคา (คั่นด้วยเครื่องหมาย ,)"
+                  placeholder="เช่น สวัสดี, สนใจ, ราคา เมื่อลูกค้าพิมพ์คำเหล่านี้ ระบบจะจัดกลุ่มอัตโนมัติ"
                   value={newGroupKeywords}
                   onChange={(e) => setNewGroupKeywords(e.target.value)}
                   className="group-name-input"
                 />
-                <small style={{ color: '#718096', fontSize: '12px', marginTop: '4px', display: 'block' }}>
-                  💡 เมื่อลูกค้าพิมพ์คำเหล่านี้ ระบบจะจัดกลุ่มอัตโนมัติ
-                </small>
+                
+              </div>
+
+              <div style={{ marginBottom: '20px' ,marginTop: '-24px'}}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#4a5568' }}>
+                  ตัวอย่างการจำแนกประเภท
+                </label>
+                <textarea
+                  placeholder="เช่น ลูกค้าที่พิมพ์ว่า 'สนใจ' หรือ 'ราคาเท่าไหร่' จะถูกจัดเข้ากลุ่มนี้"
+                  value={newGroupExamples}
+                  onChange={(e) => setNewGroupExamples(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: '8px',
+                    fontSize: '16px',
+                    minHeight: '60px',
+                    resize: 'vertical'
+                  }}
+                />
               </div>
 
               <div className="modal-actions">
@@ -489,8 +558,9 @@ function SetMiner() {
                   onClick={() => {
                     setShowAddGroupForm(false);
                     setNewGroupName("");
-                    setNewGroupDescription("");
+                    setNewGroupRuleDescription("");
                     setNewGroupKeywords("");
+                    setNewGroupExamples("");
                   }}
                   className="cancel-btn"
                 >
@@ -502,7 +572,12 @@ function SetMiner() {
         )}
 
         <div className="groups-container">
-          {!selectedPage ? (
+          {loading ? (
+            <div className="loading-state">
+              <div className="loading-spinner"></div>
+              <p>กำลังโหลดข้อมูล...</p>
+            </div>
+          ) : !selectedPage ? (
             <div className="empty-state">
               <div className="empty-icon">🏢</div>
               <h3>เลือกเพจเพื่อจัดการกลุ่มลูกค้า</h3>
@@ -515,7 +590,7 @@ function SetMiner() {
             </div>
           ) : (
             <>
-              {/* 🔥 แสดงกลุ่ม Default */}
+              {/* แสดงกลุ่ม Default */}
               {filteredDefaultGroups.length > 0 && (
                 <div className="default-groups-section">
                   <h3 className="section-title">
@@ -543,11 +618,11 @@ function SetMiner() {
                         <div className="group-content">
                           <div className="group-icon">{group.icon || '👥'}</div>
                           {editingGroupId === group.id ? (
-                            <div style={{ marginBottom: '12px' }}>
+                            <div style={{ marginBottom: '12px', width: '100%' }}>
                               <input
                                 type="text"
-                                value={editingGroupName}
-                                onChange={(e) => setEditingGroupName(e.target.value)}
+                                value={editingGroupData.type_name}
+                                onChange={(e) => setEditingGroupData({...editingGroupData, type_name: e.target.value})}
                                 onKeyPress={(e) => e.key === 'Enter' && saveEditGroup()}
                                 style={{
                                   width: '100%',
@@ -571,11 +646,11 @@ function SetMiner() {
                               </div>
                             </div>
                           ) : (
-                            <h3 className="group-name">{group.name}</h3>
+                            <h3 className="group-name">{group.type_name || group.name}</h3>
                           )}
                           
-                          {group.description && (
-                            <p className="group-description">{group.description}</p>
+                          {group.rule_description && (
+                            <p className="group-description">{group.rule_description}</p>
                           )}
                           
                           {getGroupSchedules(group.id).length > 0 && (
@@ -612,7 +687,7 @@ function SetMiner() {
                 </div>
               )}
 
-              {/* 🔥 เส้นแบ่งระหว่างกลุ่ม */}
+              {/* เส้นแบ่งระหว่างกลุ่ม */}
               {filteredDefaultGroups.length > 0 && filteredUserGroups.length > 0 && (
                 <div className="groups-divider">
                   <div className="divider-line"></div>
@@ -621,7 +696,7 @@ function SetMiner() {
                 </div>
               )}
 
-              {/* 🔥 แสดงกลุ่มที่ User สร้าง */}
+              {/* แสดงกลุ่มที่ User สร้าง */}
               {filteredUserGroups.length > 0 && (
                 <div className="user-groups-section">
                   <div className="groups-grid">
@@ -643,36 +718,85 @@ function SetMiner() {
                         <div className="group-content">
                           <div className="group-icon">👥</div>
                           {editingGroupId === group.id ? (
-                              <div style={{ marginBottom: '12px' }}>
-                                <input
-                                  type="text"
-                                  value={editingGroupName}
-                                  onChange={(e) => setEditingGroupName(e.target.value)}
-                                  onKeyPress={(e) => e.key === 'Enter' && saveEditGroup()}
-                                  style={{
-                                    width: '100%',
-                                    padding: '8px 12px',
-                                    fontSize: '18px',
-                                    fontWeight: '600',
-                                    textAlign: 'center',
-                                    border: '2px solid #667eea',
-                                    borderRadius: '6px',
-                                    outline: 'none'
-                                  }}
-                                  autoFocus
-                                />
-                                <div style={{ marginTop: '8px', display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                                  <button onClick={saveEditGroup} className="edit-save-btn">
-                                    บันทึก
-                                  </button>
-                                  <button onClick={cancelEdit} className="edit-cancel-btn">
-                                    ยกเลิก
-                                  </button>
-                                </div>
+                            <div style={{ marginBottom: '12px', width: '100%' }}>
+                              <input
+                                type="text"
+                                value={editingGroupData.type_name}
+                                onChange={(e) => setEditingGroupData({...editingGroupData, type_name: e.target.value})}
+                                style={{
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  fontSize: '18px',
+                                  fontWeight: '600',
+                                  textAlign: 'center',
+                                  border: '2px solid #667eea',
+                                  borderRadius: '6px',
+                                  outline: 'none',
+                                  marginBottom: '8px'
+                                }}
+                                placeholder="ชื่อกลุ่ม"
+                              />
+                              
+                              <textarea
+                                value={editingGroupData.rule_description}
+                                onChange={(e) => setEditingGroupData({...editingGroupData, rule_description: e.target.value})}
+                                style={{
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  fontSize: '14px',
+                                  border: '2px solid #e2e8f0',
+                                  borderRadius: '6px',
+                                  outline: 'none',
+                                  minHeight: '60px',
+                                  marginBottom: '8px',
+                                  resize: 'vertical'
+                                }}
+                                placeholder="คำอธิบายกฎ"
+                              />
+                              
+                              <input
+                                type="text"
+                                value={editingGroupData.keywords}
+                                onChange={(e) => setEditingGroupData({...editingGroupData, keywords: e.target.value})}
+                                style={{
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  fontSize: '14px',
+                                  border: '2px solid #e2e8f0',
+                                  borderRadius: '6px',
+                                  outline: 'none',
+                                  marginBottom: '8px'
+                                }}
+                                placeholder="Keywords (คั่นด้วย ,)"
+                              />
+                              
+                              <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                <button onClick={saveEditGroup} className="edit-save-btn">
+                                  บันทึก
+                                </button>
+                                <button onClick={cancelEdit} className="edit-cancel-btn">
+                                  ยกเลิก
+                                </button>
                               </div>
-                            ) : (
-                              <h3 className="group-name">{group.name}</h3>
-                            )}
+                            </div>
+                          ) : (
+                            <>
+                              <h3 className="group-name">{group.type_name || group.name}</h3>
+                              {group.rule_description && (
+                                <p className="group-description">{group.rule_description}</p>
+                              )}
+                              {group.keywords && group.keywords.length > 0 && (
+                                <div className="group-keywords">
+                                  {(Array.isArray(group.keywords) ? group.keywords : []).slice(0, 3).map((keyword, idx) => (
+                                    <span key={idx} className="keyword-tag">{keyword}</span>
+                                  ))}
+                                  {(Array.isArray(group.keywords) ? group.keywords : []).length > 3 && (
+                                    <span className="more-keywords">+{group.keywords.length - 3}</span>
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          )}
                           
                           {getGroupSchedules(group.id).length > 0 && (
                             <div className="schedule-info" onClick={(e) => {
@@ -683,8 +807,16 @@ function SetMiner() {
                             </div>
                           )}
                           
-                          <div className="group-date">
-                            สร้างเมื่อ {new Date(group.createdAt).toLocaleDateString('th-TH')}
+                          <div className="group-meta">
+                            <div className="group-date">
+                              สร้างเมื่อ {new Date(group.created_at).toLocaleDateString('th-TH')}
+                            </div>
+                            {group.customer_count !== undefined && (
+                              <div className="customer-count">
+                                <span className="count-icon">👤</span>
+                                <span>{group.customer_count} คน</span>
+                              </div>
+                            )}
                           </div>
                           
                           <div className="group-actions">
@@ -692,13 +824,13 @@ function SetMiner() {
                               e.stopPropagation();
                               startEditGroup(group);
                             }} className="action-btn edit-name-btn">
-                              ✏️ แก้ไขชื่อ
+                              ✏️ แก้ไข
                             </button>
                             <button onClick={(e) => {
                               e.stopPropagation();
                               editGroupMessages(group.id);
                             }} className="action-btn edit-message-btn">
-                              💬 แก้ไขข้อความ
+                              💬 ข้อความ
                             </button>
                           </div>
                         </div>
@@ -776,63 +908,21 @@ function SetMiner() {
                             {schedule.repeat.endDate && ` จนถึง ${new Date(schedule.repeat.endDate).toLocaleDateString('th-TH')}`}
                           </p>
                         )}
-                        <p style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#a0aec0' }}>
-                          สร้างเมื่อ: {new Date(schedule.createdAt).toLocaleString('th-TH')}
-                        </p>
-                        {schedule.updatedAt && (
-                          <p style={{ margin: '0', fontSize: '12px', color: '#e53e3e' }}>
-                            แก้ไขล่าสุด: {new Date(schedule.updatedAt).toLocaleString('th-TH')}
-                          </p>
-                        )}
                       </div>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                          onClick={() => editSchedule(schedule)}
-                          style={{
-                            background: '#e6f3ff',
-                            color: '#3182ce',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '8px 12px',
-                            fontSize: '13px',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = '#3182ce';
-                            e.currentTarget.style.color = 'white';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = '#e6f3ff';
-                            e.currentTarget.style.color = '#3182ce';
-                          }}
-                        >
-                          ✏️ แก้ไข
-                        </button>
-                        <button
-                          onClick={() => deleteSchedule(schedule.id)}
-                          style={{
-                            background: '#fee',
-                            color: '#e53e3e',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '8px 12px',
-                            fontSize: '13px',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = '#e53e3e';
-                            e.currentTarget.style.color = 'white';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = '#fee';
-                            e.currentTarget.style.color = '#e53e3e';
-                          }}
-                        >
-                          🗑️ ลบ
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => deleteSchedule(schedule.id)}
+                        style={{
+                          background: '#fee',
+                          color: '#e53e3e',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '8px 12px',
+                          fontSize: '13px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🗑️ ลบ
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -844,67 +934,6 @@ function SetMiner() {
                   style={{ width: '100%' }}
                 >
                   ปิด
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Modal เลือก Schedule ที่จะแก้ไข */}
-        {showScheduleSelectModal && (
-          <div className="add-group-modal">
-            <div className="modal-content" style={{ maxWidth: '600px' }}>
-              <h3>📋 เลือกตารางเวลาที่ต้องการแก้ไขข้อความ</h3>
-              <p style={{ color: '#718096', fontSize: '14px', marginBottom: '20px' }}>
-                กลุ่ม "{editingGroupName}" มีการตั้งเวลาหลายรายการ กรุณาเลือกรายการที่ต้องการแก้ไข
-              </p>
-              <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                {schedulesToSelect.map((schedule, index) => (
-                  <div 
-                    key={schedule.id} 
-                    onClick={() => selectScheduleToEdit(schedule)}
-                    style={{
-                      background: '#f8f9fa',
-                      padding: '15px',
-                      borderRadius: '8px',
-                      marginBottom: '10px',
-                      border: '2px solid transparent',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = '#3182ce';
-                      e.currentTarget.style.background = '#e6f3ff';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'transparent';
-                      e.currentTarget.style.background = '#f8f9fa';
-                    }}
-                  >
-                    <p style={{ margin: '0 0 8px 0', fontWeight: '600', color: '#2d3748' }}>
-                      #{index + 1} - {
-                        schedule.type === 'immediate' ? 'ส่งทันที' :
-                        schedule.type === 'scheduled' ? `ส่งตามเวลา: ${new Date(schedule.date).toLocaleDateString('th-TH')} ${schedule.time} น.` :
-                        `ส่งเมื่อหายไป ${schedule.inactivityPeriod} ${
-                          schedule.inactivityUnit === 'hours' ? 'ชั่วโมง' :
-                          schedule.inactivityUnit === 'days' ? 'วัน' :
-                          schedule.inactivityUnit === 'weeks' ? 'สัปดาห์' : 'เดือน'
-                        }`
-                      }
-                    </p>
-                    <p style={{ margin: '0', fontSize: '12px', color: '#718096' }}>
-                      จำนวนข้อความ: {schedule.messages?.length || 0} ข้อความ
-                    </p>
-                  </div>
-                ))}
-              </div>
-              <div className="modal-actions" style={{ marginTop: '20px' }}>
-                <button
-                  onClick={() => setShowScheduleSelectModal(false)}
-                  className="cancel-btn"
-                  style={{ width: '100%' }}
-                >
-                  ยกเลิก
                 </button>
               </div>
             </div>

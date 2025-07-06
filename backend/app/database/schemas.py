@@ -71,3 +71,89 @@ class SyncResponse(BaseModel):
     synced: int
     errors: int
     message: str
+    
+# ========== CustomerTypeCustom Schemas ==========
+
+class CustomerTypeCustomBase(BaseModel):
+    type_name: str
+    keywords: Optional[str] = ""
+    rule_description: Optional[str] = ""
+    examples: Optional[str] = ""
+
+class CustomerTypeCustomCreate(CustomerTypeCustomBase):
+    pass
+
+class CustomerTypeCustomUpdate(BaseModel):
+    type_name: Optional[str] = None
+    keywords: Optional[str] = None
+    rule_description: Optional[str] = None
+    examples: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class CustomerTypeCustomInDB(CustomerTypeCustomBase):
+    id: int
+    page_id: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        orm_mode = True
+
+class CustomerTypeCustomResponse(BaseModel):
+    id: int
+    page_id: int
+    type_name: str
+    keywords: List[str]
+    rule_description: str
+    examples: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    customer_count: Optional[int] = 0
+
+    class Config:
+        orm_mode = True
+    rule_description: Optional[str] = ""
+
+class CustomerTypeCustomCreate(CustomerTypeCustomBase):
+    pass
+
+class CustomerTypeCustomUpdate(BaseModel):
+    type_name: Optional[str] = None
+    description: Optional[str] = None
+    keywords: Optional[str] = None
+    examples: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class CustomerTypeCustomInDB(CustomerTypeCustomBase):
+    id: int
+    page_id: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        orm_mode = True
+
+class CustomerTypeCustomResponse(BaseModel):
+    id: int
+    page_id: int
+    type_name: str
+    description: str
+    keywords: List[str]
+    examples: str
+    rule_description: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    customer_count: Optional[int] = 0
+
+    class Config:
+        orm_mode = True
+
+class CustomerTypeStatistics(BaseModel):
+    type_id: Optional[int]
+    type_name: str
+    customer_count: int
+    is_active: bool

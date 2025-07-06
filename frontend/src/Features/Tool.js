@@ -143,3 +143,59 @@ export async function deleteMessageSet(setId) {
   if (!res.ok) throw new Error("ไม่สามารถลบชุดข้อความได้");
   return res.json();
 }
+
+/////////////// ฟังก์ชันสำหรับจัดการกลุ่มลูกค้า ///////////////////////////////
+
+export async function createCustomerGroup(groupData) {
+  const res = await fetch("http://localhost:8000/customer-groups", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(groupData),
+  });
+  if (!res.ok) throw new Error("ไม่สามารถสร้างกลุ่มลูกค้าได้");
+  return res.json();
+}
+
+export async function getCustomerGroups(pageId, includeInactive = false) {
+  const res = await fetch(`http://localhost:8000/customer-groups/${pageId}?include_inactive=${includeInactive}`);
+  if (!res.ok) throw new Error("ไม่สามารถโหลดกลุ่มลูกค้าได้");
+  return res.json();
+}
+
+export async function getCustomerGroup(groupId) {
+  const res = await fetch(`http://localhost:8000/customer-group/${groupId}`);
+  if (!res.ok) throw new Error("ไม่สามารถโหลดข้อมูลกลุ่มได้");
+  return res.json();
+}
+
+export async function updateCustomerGroup(groupId, groupData) {
+  const res = await fetch(`http://localhost:8000/customer-groups/${groupId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(groupData),
+  });
+  if (!res.ok) throw new Error("ไม่สามารถแก้ไขกลุ่มลูกค้าได้");
+  return res.json();
+}
+
+export async function deleteCustomerGroup(groupId, hardDelete = false) {
+  const res = await fetch(`http://localhost:8000/customer-groups/${groupId}?hard_delete=${hardDelete}`, {
+    method: "DELETE"
+  });
+  if (!res.ok) throw new Error("ไม่สามารถลบกลุ่มลูกค้าได้");
+  return res.json();
+}
+
+export async function autoGroupCustomer(pageId, customerPsid, messageText) {
+  const res = await fetch("http://localhost:8000/auto-group-customer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      page_id: pageId,
+      customer_psid: customerPsid,
+      message_text: messageText
+    }),
+  });
+  if (!res.ok) throw new Error("ไม่สามารถจัดกลุ่มอัตโนมัติได้");
+  return res.json();
+}

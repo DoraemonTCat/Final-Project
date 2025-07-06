@@ -267,3 +267,136 @@ def get_customer_statistics(db: Session, page_id: int):
         "new_7days": new_7days,
         "inactive_customers": total_customers - active_30days
     }
+    
+# ========== CustomerTypeCustom CRUD Operations ==========
+
+def create_customer_type_custom(db: Session, page_id: int, type_data: dict):
+    """สร้างประเภทลูกค้าใหม่"""
+    db_type = models.CustomerTypeCustom(
+        page_id=page_id,
+        type_name=type_data.get('type_name'),
+        keywords=type_data.get('keywords', ''),
+        rule_description=type_data.get('rule_description', ''),
+        examples=type_data.get('examples', ''),
+        is_active=type_data.get('is_active', True)
+    )
+    db.add(db_type)
+    db.commit()
+    db.refresh(db_type)
+    return db_type
+
+def get_customer_type_custom_by_id(db: Session, type_id: int):
+    """ดึงประเภทลูกค้าตาม ID"""
+    return db.query(models.CustomerTypeCustom).filter(
+        models.CustomerTypeCustom.id == type_id
+    ).first()
+
+def get_customer_types_by_page(db: Session, page_id: int, include_inactive: bool = False):
+    """ดึงประเภทลูกค้าทั้งหมดของเพจ"""
+    query = db.query(models.CustomerTypeCustom).filter(
+        models.CustomerTypeCustom.page_id == page_id
+    )
+    
+    if not include_inactive:
+        query = query.filter(models.CustomerTypeCustom.is_active == True)
+    
+    return query.order_by(models.CustomerTypeCustom.created_at.desc()).all()
+
+def update_customer_type_custom(db: Session, type_id: int, update_data: dict):
+    """อัพเดทประเภทลูกค้า"""
+    db_type = get_customer_type_custom_by_id(db, type_id)
+    if not db_type:
+        return None
+    
+    # อัพเดทเฉพาะฟิลด์ที่มีค่า
+    if 'type_name' in update_data:
+        db_type.type_name = update_data['type_name']
+    if 'rule_description' in update_data:
+        db_type.rule_description = update_data['rule_description']
+    if 'keywords' in update_data:
+        db_type.keywords = update_data['keywords']
+    if 'examples' in update_data:
+        db_type.examples = update_data['examples']
+    if 'is_active' in update_data:
+        db_type.is_active = update_data['is_active']
+    
+    db_type.updated_at = datetime.now()
+    db.commit()
+    db.refresh(db_type)
+    return db_type
+
+def delete_customer_type_custom(db: Session, type_id: int, hard_delete: bool = False):
+    """ลบประเภทลูกค้า"""
+    db_type = get_customer_type_custom_by_id(db, type_id)
+    if not db_type:
+        return None
+    
+    if hard_delete:
+        # ลบจริงจาก database
+        db.delete(db_type)
+    else:
+        # Soft delete
+        db_type.is_active = False
+        db_type.updated_at = datetime.now()
+    
+    db.commit()
+    return db_type
+
+def auto_assign_customer_type(db: Session, page_id: int, customer_psid: str, message_text: str):
+    """จัดประเภทลูกค้าอัตโนมัติตาม keywords"""
+    # ดึงประเภททั้งหมดของเพจ
+    types = get_customer_types_by_page(db, page_id, include_inactive=False)
+    
+    if not types:
+        return None
+    
+    message_lower = message_text.lower()
+    
+    for type_obj in types:
+        if type_obj.keywords:
+            keywords = [k.strip().lower() for k in type_obj.keywords.split(",")]
+            for keyword in keywords:
+                if keyword and keyword in message_lower:
+                    # พบ keyword ที่ตรงกัน
+                    customer = get_customer_by_psid(db, page_id, customer_psid)
+                    if customer:
+                        customer.customer_type_custom_id = type_obj.id
+                        customer.updated_at = datetime.now()
+                        db.commit()
+                        return type_obj
+    
+    return None
+
+def get_customer_type_statistics(db: Session, page_id: int):
+    """ดึงสถิติประเภทลูกค้า"""
+    # ดึงจำนวนลูกค้าในแต่ละประเภท
+    types = get_customer_types_by_page(db, page_id)
+    
+    statistics = []
+    for type_obj in types:
+        customer_count = db.query(func.count(models.FbCustomer.id)).filter(
+            models.FbCustomer.page_id == page_id,
+            models.FbCustomer.customer_type_custom_id == type_obj.id
+        ).scalar()
+        
+        statistics.append({
+            "type_id": type_obj.id,
+            "type_name": type_obj.type_name,
+            "customer_count": customer_count,
+            "is_active": type_obj.is_active
+        })
+    
+    # เพิ่มลูกค้าที่ยังไม่ได้จัดประเภท
+    unassigned_count = db.query(func.count(models.FbCustomer.id)).filter(
+        models.FbCustomer.page_id == page_id,
+        models.FbCustomer.customer_type_custom_id == None
+    ).scalar()
+    
+    statistics.append({
+        "type_id": None,
+        "type_name": "ยังไม่ได้จัดประเภท",
+        "customer_count": unassigned_count,
+        "is_active": True
+    })
+    
+    return statistics
