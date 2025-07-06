@@ -8,11 +8,12 @@ from app.database import crud, schemas, database, models
 from app.database.database import get_db
 from app import config  # ✅ ใช้ config แทน app.app
 from pydantic import BaseModel
-from typing import Optional
 from app.config import image_dir,vid_dir
 from app.service.message_scheduler import message_scheduler
 from datetime import datetime, timedelta
 from fastapi import Query
+from fastapi import APIRouter, Depends, HTTPException
+from typing import List, Optional
 
 
 router = APIRouter()
@@ -27,6 +28,18 @@ page_names = {}   # key = page_id, value = page_name
 class SendMessageRequest(BaseModel):
     message: str
     type: Optional[str] = "text"  # "text", "image", or "video"
+
+class CustomerGroupCreate(BaseModel):
+    page_id: int
+    type_name: str
+    description: str = ""
+    keywords: List[str] = []
+    
+class CustomerGroupUpdate(BaseModel):
+    type_name: Optional[str] = None
+    description: Optional[str] = None
+    keywords: Optional[List[str]] = None
+    is_active: Optional[bool] = None
 
 @router.get("/connect", response_class=HTMLResponse)
 async def connect_facebook_page():
@@ -1026,4 +1039,166 @@ async def get_customer_statistics(
         "page_name": page.page_name,
         "statistics": stats,
         "generated_at": datetime.now().isoformat()
+    }
+
+# สร้างกลุ่มลูกค้าใหม่
+@router.post("/customer-groups")
+async def create_customer_group(
+    group_data: CustomerGroupCreate,
+    db: Session = Depends(get_db)
+):
+    """สร้างกลุ่มลูกค้าใหม่"""
+    # แปลง keywords list เป็น string
+    keywords_str = ",".join(group_data.keywords) if group_data.keywords else ""
+    
+    # สร้างกลุ่มใน database
+    new_group = models.CustomerTypeCustom(
+        page_id=group_data.page_id,
+        type_name=group_data.type_name,
+        description=group_data.description,
+        keywords=keywords_str,
+        rule_description=f"กลุ่มลูกค้า: {group_data.type_name}",
+        is_active=True
+    )
+    
+    db.add(new_group)
+    db.commit()
+    db.refresh(new_group)
+    
+    return {
+        "id": new_group.id,
+        "type_name": new_group.type_name,
+        "description": new_group.description,
+        "keywords": new_group.keywords.split(",") if new_group.keywords else [],
+        "created_at": new_group.created_at
+    }
+
+# ดึงกลุ่มลูกค้าทั้งหมดของเพจ
+@router.get("/customer-groups/{page_id}")
+async def get_customer_groups(
+    page_id: str,
+    db: Session = Depends(get_db)
+):
+    """ดึงกลุ่มลูกค้าทั้งหมดของเพจ"""
+    page = crud.get_page_by_page_id(db, page_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    
+    groups = db.query(models.CustomerTypeCustom).filter(
+        models.CustomerTypeCustom.page_id == page.ID,
+        models.CustomerTypeCustom.is_active == True
+    ).all()
+    
+    result = []
+    for group in groups:
+        result.append({
+            "id": group.id,
+            "type_name": group.type_name,
+            "description": group.description,
+            "keywords": group.keywords.split(",") if group.keywords else [],
+            "created_at": group.created_at,
+            "customer_count": len(group.customers)
+        })
+    
+    return result
+
+# อัพเดทกลุ่มลูกค้า
+@router.put("/customer-groups/{group_id}")
+async def update_customer_group(
+    group_id: int,
+    group_update: CustomerGroupUpdate,
+    db: Session = Depends(get_db)
+):
+    """อัพเดทข้อมูลกลุ่มลูกค้า"""
+    group = db.query(models.CustomerTypeCustom).filter(
+        models.CustomerTypeCustom.id == group_id
+    ).first()
+    
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    if group_update.type_name is not None:
+        group.type_name = group_update.type_name
+    if group_update.description is not None:
+        group.description = group_update.description
+    if group_update.keywords is not None:
+        group.keywords = ",".join(group_update.keywords)
+    if group_update.is_active is not None:
+        group.is_active = group_update.is_active
+    
+    group.updated_at = datetime.now()
+    db.commit()
+    db.refresh(group)
+    
+    return {"status": "success", "message": "Group updated successfully"}
+
+# ลบกลุ่มลูกค้า
+@router.delete("/customer-groups/{group_id}")
+async def delete_customer_group(
+    group_id: int,
+    db: Session = Depends(get_db)
+):
+    """ลบกลุ่มลูกค้า"""
+    group = db.query(models.CustomerTypeCustom).filter(
+        models.CustomerTypeCustom.id == group_id
+    ).first()
+    
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    # Soft delete - เปลี่ยน is_active เป็น False
+    group.is_active = False
+    db.commit()
+    
+    return {"status": "success", "message": "Group deleted successfully"}
+
+# ตรวจสอบและจัดกลุ่มลูกค้าอัตโนมัติ
+@router.post("/auto-group-customer")
+async def auto_group_customer(
+    page_id: str,
+    customer_psid: str,
+    message_text: str,
+    db: Session = Depends(get_db)
+):
+    """ตรวจสอบข้อความและจัดกลุ่มลูกค้าอัตโนมัติ"""
+    page = crud.get_page_by_page_id(db, page_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    
+    # ดึงกลุ่มทั้งหมดของเพจ
+    groups = db.query(models.CustomerTypeCustom).filter(
+        models.CustomerTypeCustom.page_id == page.ID,
+        models.CustomerTypeCustom.is_active == True
+    ).all()
+    
+    # ตรวจสอบ keywords
+    detected_group = None
+    message_lower = message_text.lower()
+    
+    for group in groups:
+        if group.keywords:
+            keywords = [k.strip().lower() for k in group.keywords.split(",")]
+            for keyword in keywords:
+                if keyword in message_lower:
+                    detected_group = group
+                    break
+        if detected_group:
+            break
+    
+    if detected_group:
+        # อัพเดทกลุ่มของลูกค้า
+        customer = crud.get_customer_by_psid(db, page.ID, customer_psid)
+        if customer:
+            customer.customer_type_custom_id = detected_group.id
+            db.commit()
+            
+            return {
+                "status": "success",
+                "group_detected": detected_group.type_name,
+                "keywords_matched": True
+            }
+    
+    return {
+        "status": "no_match",
+        "message": "No keywords matched"
     }

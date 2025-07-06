@@ -25,9 +25,10 @@ class CustomerTypeCustom(Base):
     id = Column(Integer, primary_key=True, index=True)
     page_id = Column(Integer, ForeignKey("facebook_pages.ID", ondelete="CASCADE"), nullable=False)
     type_name = Column(String(100), nullable=False)
+    description = Column(Text, server_default="")  # เพิ่มฟิลด์ description
+    keywords = Column(Text, server_default="")  # ใช้เก็บ keywords แบบ comma-separated
     rule_description = Column(Text, nullable=False)
     examples = Column(Text, server_default="")
-    keywords = Column(Text, server_default="")
     is_active = Column(Boolean, server_default="true")
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())

@@ -294,3 +294,64 @@ async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: 
     except Exception as e:
         logger.error(f"❌ Error syncing new user data: {e}")
         return None
+
+def detect_customer_group(message_text, page_id):
+    """ตรวจสอบข้อความเพื่อจัดกลุ่มลูกค้าอัตโนมัติ"""
+    if not message_text:
+        return None
+    
+    # ดึงข้อมูลกลุ่มทั้งหมดของเพจจาก localStorage (ผ่าน API)
+    # ในการใช้งานจริง ควรเก็บข้อมูลนี้ใน database
+    
+    # สำหรับตอนนี้ให้ return None ก่อน
+    # ในอนาคตจะต้องสร้าง API endpoint สำหรับเก็บและดึง keywords
+    return None
+
+# เพิ่มใน webhook_post function หลังจากตรวจสอบ user
+async def webhook_post(
+    request: Request, 
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks()
+):
+    body = await request.json()
+    
+    for entry in body.get("entry", []):
+        page_id = entry.get("id")
+        page = crud.get_page_by_page_id(db, page_id) if page_id else None
+        
+        for msg_event in entry.get("messaging", []):
+            sender_id = msg_event["sender"]["id"]
+            
+            if page and sender_id != page_id:
+                try:
+                    # ตรวจสอบข้อความสำหรับการจัดกลุ่ม
+                    message = msg_event.get("message", {})
+                    message_text = message.get("text", "")
+                    
+                    existing_customer = crud.get_customer_by_psid(db, page.ID, sender_id)
+                    
+                    if not existing_customer:
+                        # User ใหม่
+                        logger.info(f"🆕 พบ User ใหม่: {sender_id} ในเพจ {page.page_name}")
+                        background_tasks.add_task(
+                            sync_new_user_data_enhanced,
+                            page_id,
+                            sender_id,
+                            page.ID,
+                            db
+                        )
+                    else:
+                        # User เก่า - อัพเดท interaction และตรวจสอบ keywords
+                        crud.update_customer_interaction(db, page.ID, sender_id)
+                        
+                        # ตรวจสอบ keywords สำหรับจัดกลุ่ม
+                        detected_group = detect_customer_group(message_text, page_id)
+                        if detected_group:
+                            # อัพเดทกลุ่มของลูกค้า
+                            logger.info(f"🏷️ จัดกลุ่มลูกค้า {sender_id} ไปยังกลุ่ม {detected_group}")
+                            # TODO: อัพเดทกลุ่มใน database
+                    
+                except Exception as e:
+                    logger.error(f"❌ Error processing webhook: {e}")
+    
+    return PlainTextResponse("EVENT_RECEIVED", status_code=200)

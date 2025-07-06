@@ -9,6 +9,8 @@ function SetMiner() {
   const [selectedPage, setSelectedPage] = useState("");
   const [customerGroups, setCustomerGroups] = useState([]);
   const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupDescription, setNewGroupDescription] = useState(""); // เพิ่ม state
+  const [newGroupKeywords, setNewGroupKeywords] = useState(""); // เพิ่ม state
   const [showAddGroupForm, setShowAddGroupForm] = useState(false);
   const [selectedGroups, setSelectedGroups] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -143,21 +145,26 @@ function SetMiner() {
     localStorage.setItem("selectedPage", pageId);
   };
 
+  // ปรับฟังก์ชันเพิ่มกลุ่มลูกค้า
   const addCustomerGroup = () => {
     if (newGroupName.trim() && selectedPage) {
       const newGroup = {
         id: Date.now(),
         name: newGroupName,
+        description: newGroupDescription.trim(),
+        keywords: newGroupKeywords.trim().split(',').map(k => k.trim()).filter(k => k),
         pageId: selectedPage,
         customers: [],
         messages: [],
         createdAt: new Date().toISOString(),
-        isDefault: false // 🔥 กลุ่มที่ user สร้างจะเป็น false
+        isDefault: false
       };
       const updatedGroups = [...customerGroups, newGroup];
       setCustomerGroups(updatedGroups);
       saveGroupsForPage(selectedPage, updatedGroups);
       setNewGroupName("");
+      setNewGroupDescription("");
+      setNewGroupKeywords("");
       setShowAddGroupForm(false);
     } else if (!selectedPage) {
       alert("กรุณาเลือกเพจก่อนสร้างกลุ่ม");
@@ -417,16 +424,59 @@ function SetMiner() {
 
         {showAddGroupForm && (
           <div className="add-group-modal">
-            <div className="modal-content">
+            <div className="modal-content" style={{ maxWidth: '500px' }}>
               <h3>สร้างกลุ่มลูกค้าใหม่{selectedPageInfo && ` - ${selectedPageInfo.name}`}</h3>
-              <input
-                type="text"
-                placeholder="ชื่อกลุ่มลูกค้า"
-                value={newGroupName}
-                onChange={(e) => setNewGroupName(e.target.value)}
-                className="group-name-input"
-                autoFocus
-              />
+              
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#4a5568' }}>
+                  ชื่อกลุ่มลูกค้า <span style={{ color: '#e53e3e' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="เช่น ลูกค้าสนใจสินค้า"
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  className="group-name-input"
+                  autoFocus
+                />
+              </div>
+
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#4a5568' }}>
+                  คำอธิบายกลุ่ม
+                </label>
+                <textarea
+                  placeholder="อธิบายลักษณะของลูกค้ากลุ่มนี้..."
+                  value={newGroupDescription}
+                  onChange={(e) => setNewGroupDescription(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: '8px',
+                    fontSize: '16px',
+                    minHeight: '80px',
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#4a5568' }}>
+                  คีย์เวิร์ดสำหรับจัดกลุ่มอัตโนมัติ
+                </label>
+                <input
+                  type="text"
+                  placeholder="เช่น สวัสดี, สนใจ, ราคา (คั่นด้วยเครื่องหมาย ,)"
+                  value={newGroupKeywords}
+                  onChange={(e) => setNewGroupKeywords(e.target.value)}
+                  className="group-name-input"
+                />
+                <small style={{ color: '#718096', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                  💡 เมื่อลูกค้าพิมพ์คำเหล่านี้ ระบบจะจัดกลุ่มอัตโนมัติ
+                </small>
+              </div>
+
               <div className="modal-actions">
                 <button
                   onClick={addCustomerGroup}
@@ -439,6 +489,8 @@ function SetMiner() {
                   onClick={() => {
                     setShowAddGroupForm(false);
                     setNewGroupName("");
+                    setNewGroupDescription("");
+                    setNewGroupKeywords("");
                   }}
                   className="cancel-btn"
                 >
@@ -591,36 +643,36 @@ function SetMiner() {
                         <div className="group-content">
                           <div className="group-icon">👥</div>
                           {editingGroupId === group.id ? (
-                            <div style={{ marginBottom: '12px' }}>
-                              <input
-                                type="text"
-                                value={editingGroupName}
-                                onChange={(e) => setEditingGroupName(e.target.value)}
-                                onKeyPress={(e) => e.key === 'Enter' && saveEditGroup()}
-                                style={{
-                                  width: '100%',
-                                  padding: '8px 12px',
-                                  fontSize: '18px',
-                                  fontWeight: '600',
-                                  textAlign: 'center',
-                                  border: '2px solid #667eea',
-                                  borderRadius: '6px',
-                                  outline: 'none'
-                                }}
-                                autoFocus
-                              />
-                              <div style={{ marginTop: '8px', display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                                <button onClick={saveEditGroup} className="edit-save-btn">
-                                  บันทึก
-                                </button>
-                                <button onClick={cancelEdit} className="edit-cancel-btn">
-                                  ยกเลิก
-                                </button>
+                              <div style={{ marginBottom: '12px' }}>
+                                <input
+                                  type="text"
+                                  value={editingGroupName}
+                                  onChange={(e) => setEditingGroupName(e.target.value)}
+                                  onKeyPress={(e) => e.key === 'Enter' && saveEditGroup()}
+                                  style={{
+                                    width: '100%',
+                                    padding: '8px 12px',
+                                    fontSize: '18px',
+                                    fontWeight: '600',
+                                    textAlign: 'center',
+                                    border: '2px solid #667eea',
+                                    borderRadius: '6px',
+                                    outline: 'none'
+                                  }}
+                                  autoFocus
+                                />
+                                <div style={{ marginTop: '8px', display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                  <button onClick={saveEditGroup} className="edit-save-btn">
+                                    บันทึก
+                                  </button>
+                                  <button onClick={cancelEdit} className="edit-cancel-btn">
+                                    ยกเลิก
+                                  </button>
+                                </div>
                               </div>
-                            </div>
-                          ) : (
-                            <h3 className="group-name">{group.name}</h3>
-                          )}
+                            ) : (
+                              <h3 className="group-name">{group.name}</h3>
+                            )}
                           
                           {getGroupSchedules(group.id).length > 0 && (
                             <div className="schedule-info" onClick={(e) => {
