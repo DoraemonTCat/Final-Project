@@ -106,7 +106,7 @@ class CustomerTypeCustomResponse(BaseModel):
     type_name: str
     keywords: List[str]
     rule_description: str
-    examples: str
+    examples: List[str]
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -140,9 +140,8 @@ class CustomerTypeCustomResponse(BaseModel):
     id: int
     page_id: int
     type_name: str
-    description: str
     keywords: List[str]
-    examples: str
+    examples: List[str]
     rule_description: str
     is_active: bool
     created_at: datetime

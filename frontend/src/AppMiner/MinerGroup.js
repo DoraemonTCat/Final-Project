@@ -65,22 +65,48 @@ function SetMiner() {
       if (!pagesResponse.ok) throw new Error('Failed to fetch pages');
       
       const pagesData = await pagesResponse.json();
-      const currentPage = pagesData.find(p => p.page_id === pageId);
+      console.log('Pages data:', pagesData);
+      
+      // หา page ที่ตรงกับ pageId (string page_id จาก Facebook)
+      const currentPage = pagesData.find(p => p.page_id === pageId || p.id === pageId);
       
       if (!currentPage) {
-        console.error('Cannot find page for fetchCustomerGroups');
+        console.error('Cannot find page for pageId:', pageId);
+        console.error('Available pages:', pagesData);
         setCustomerGroups(DEFAULT_GROUPS);
         return;
       }
 
+      console.log('Found page:', currentPage);
+      console.log('Using page ID (integer):', currentPage.ID);
+
       // ใช้ ID (integer) ในการดึงข้อมูล customer groups
       const response = await fetch(`http://localhost:8000/customer-groups/${currentPage.ID}`);
-      if (!response.ok) throw new Error('Failed to fetch customer groups');
+      if (!response.ok) {
+        console.error('Failed to fetch customer groups:', response.status);
+        throw new Error('Failed to fetch customer groups');
+      }
       
       const data = await response.json();
+      console.log('Customer groups from database:', data);
+      
+      // แปลงข้อมูลให้มีโครงสร้างเดียวกับ DEFAULT_GROUPS
+      const formattedGroups = data.map(group => ({
+        id: group.id,
+        type_name: group.type_name,
+        isDefault: false,
+        rule_description: group.rule_description || '',
+        keywords: Array.isArray(group.keywords) ? group.keywords.join(', ') : group.keywords || '',
+        examples: Array.isArray(group.examples) ? group.examples.join('\n') : group.examples || '',
+        created_at: group.created_at,
+        customer_count: group.customer_count || 0,
+        is_active: group.is_active !== false // default true if not specified
+      }));
       
       // รวมกลุ่ม default กับกลุ่มจาก database
-      const allGroups = [...DEFAULT_GROUPS, ...data];
+      const allGroups = [...DEFAULT_GROUPS, ...formattedGroups];
+      console.log('All groups (default + user):', allGroups);
+      
       setCustomerGroups(allGroups);
     } catch (error) {
       console.error('Error fetching customer groups:', error);
@@ -198,7 +224,7 @@ function SetMiner() {
         type_name: newGroupName.trim(),
         rule_description: newGroupRuleDescription.trim() || "",
         keywords: newGroupKeywords.trim().split(',').map(k => k.trim()).filter(k => k),
-        examples: newGroupExamples.trim() || ""
+        examples: newGroupExamples.trim().split('\n').map(e => e.trim()).filter(e => e)
       };
 
       console.log('Request body:', requestBody);
@@ -265,7 +291,7 @@ function SetMiner() {
       // ลบออกจากการเลือก
       setSelectedGroups(prev => prev.filter(id => id !== groupId));
       
-      alert("ลบกลุ่มสำเร็จ!");
+    
     } catch (error) {
       console.error('Error deleting customer group:', error);
       alert(`เกิดข้อผิดพลาดในการลบกลุ่ม: ${error.message}`);
@@ -303,7 +329,7 @@ function SetMiner() {
   const startEditGroup = (group) => {
     setEditingGroupId(group.id);
     setEditingGroupData({
-      type_name: group.type_name || group.name,
+      type_name: setNewGroupName || setNewGroupName,
       rule_description: group.rule_description || '',
       keywords: Array.isArray(group.keywords) ? group.keywords.join(', ') : group.keywords || '',
       examples: Array.isArray(group.examples) ? group.examples.join('\n') : group.examples || ''
@@ -748,170 +774,177 @@ function SetMiner() {
               {filteredUserGroups.length > 0 && (
                 <div className="user-groups-section">
                   <div className="groups-grid">
-                    {filteredUserGroups.map((group) => (
-                      <div
-                        key={group.id}
-                        className={`group-card ${selectedGroups.includes(group.id) ? 'selected' : ''}`}
-                      >
-                        <div className="group-checkbox">
-                          <input
-                            type="checkbox"
-                            id={`group-${group.id}`}
-                            checked={selectedGroups.includes(group.id)}
-                            onChange={() => toggleGroupSelection(group.id)}
-                          />
-                          <label htmlFor={`group-${group.id}`}></label>
-                        </div>
-                        
-                        <div className="group-content">
-                          <div className="group-icon">👥</div>
-                          {editingGroupId === group.id ? (
-                            <div style={{ marginBottom: '12px', width: '100%' }}>
-                              <input
-                                type="text"
-                                value={editingGroupData.type_name}
-                                onChange={(e) => setEditingGroupData({...editingGroupData, type_name: e.target.value})}
-                                style={{
-                                  width: '100%',
-                                  padding: '8px 12px',
-                                  fontSize: '18px',
-                                  fontWeight: '600',
-                                  textAlign: 'center',
-                                  border: '2px solid #667eea',
-                                  borderRadius: '6px',
-                                  outline: 'none',
-                                  marginBottom: '8px'
-                                }}
-                                placeholder="ชื่อกลุ่ม"
-                              />
-                              
-                              <textarea
-                                value={editingGroupData.rule_description}
-                                onChange={(e) => setEditingGroupData({...editingGroupData, rule_description: e.target.value})}
-                                style={{
-                                  width: '100%',
-                                  padding: '8px 12px',
-                                  fontSize: '14px',
-                                  border: '2px solid #e2e8f0',
-                                  borderRadius: '6px',
-                                  outline: 'none',
-                                  minHeight: '60px',
-                                  marginBottom: '8px',
-                                  resize: 'vertical'
-                                }}
-                                placeholder="คำอธิบายกฎ"
-                              />
-                              
-                              <input
-                                type="text"
-                                value={editingGroupData.keywords}
-                                onChange={(e) => setEditingGroupData({...editingGroupData, keywords: e.target.value})}
-                                style={{
-                                  width: '100%',
-                                  padding: '8px 12px',
-                                  fontSize: '14px',
-                                  border: '2px solid #e2e8f0',
-                                  borderRadius: '6px',
-                                  outline: 'none',
-                                  marginBottom: '8px'
-                                }}
-                                placeholder="Keywords (คั่นด้วย ,)"
-                              />
-                              
-                              <textarea
-                                value={editingGroupData.examples}
-                                onChange={(e) => setEditingGroupData({...editingGroupData, examples: e.target.value})}
-                                style={{
-                                  width: '100%',
-                                  padding: '8px 12px',
-                                  fontSize: '14px',
-                                  border: '2px solid #e2e8f0',
-                                  borderRadius: '6px',
-                                  outline: 'none',
-                                  minHeight: '80px',
-                                  marginBottom: '8px',
-                                  resize: 'vertical'
-                                }}
-                                placeholder="ตัวอย่าง (แต่ละบรรทัดคือ 1 ตัวอย่าง)"
-                              />
-                              
-                              <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                                <button onClick={saveEditGroup} className="edit-save-btn">
-                                  บันทึก
-                                </button>
-                                <button onClick={cancelEdit} className="edit-cancel-btn">
-                                  ยกเลิก
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <h3 className="group-name">{group.type_name || group.name}</h3>
-                              {group.rule_description && (
-                                <p className="group-description">{group.rule_description}</p>
-                              )}
-                              {group.keywords && group.keywords.length > 0 && (
-                                <div className="group-keywords">
-                                  {(Array.isArray(group.keywords) ? group.keywords : []).slice(0, 3).map((keyword, idx) => (
-                                    <span key={idx} className="keyword-tag">{keyword}</span>
-                                  ))}
-                                  {(Array.isArray(group.keywords) ? group.keywords : []).length > 3 && (
-                                    <span className="more-keywords">+{group.keywords.length - 3}</span>
-                                  )}
+                    {filteredUserGroups.map((group) => {
+                      console.log('Rendering user group:', group);
+                      return (
+                        <div
+                          key={group.id}
+                          className={`group-card ${selectedGroups.includes(group.id) ? 'selected' : ''}`}
+                        >
+                          <div className="group-checkbox">
+                            <input
+                              type="checkbox"
+                              id={`group-${group.id}`}
+                              checked={selectedGroups.includes(group.id)}
+                              onChange={() => toggleGroupSelection(group.id)}
+                            />
+                            <label htmlFor={`group-${group.id}`}></label>
+                          </div>
+                          
+                          <div className="group-content">
+                            <div className="group-icon">👥</div>
+                            {editingGroupId === group.id ? (
+                              <div style={{ marginBottom: '12px', width: '100%' }}>
+                                <input
+                                  type="text"
+                                  value={editingGroupData.type_name}
+                                  onChange={(e) => setEditingGroupData({...editingGroupData, type_name: e.target.value})}
+                                  style={{
+                                    width: '100%',
+                                    padding: '8px 12px',
+                                    fontSize: '18px',
+                                    fontWeight: '600',
+                                    textAlign: 'center',
+                                    border: '2px solid #667eea',
+                                    borderRadius: '6px',
+                                    outline: 'none',
+                                    marginBottom: '8px'
+                                  }}
+                                  placeholder="ชื่อกลุ่ม"
+                                />
+                                
+                                <textarea
+                                  value={editingGroupData.rule_description}
+                                  onChange={(e) => setEditingGroupData({...editingGroupData, rule_description: e.target.value})}
+                                  style={{
+                                    width: '100%',
+                                    padding: '8px 12px',
+                                    fontSize: '14px',
+                                    border: '2px solid #e2e8f0',
+                                    borderRadius: '6px',
+                                    outline: 'none',
+                                    minHeight: '60px',
+                                    marginBottom: '8px',
+                                    resize: 'vertical'
+                                  }}
+                                  placeholder="คำอธิบายกฎ"
+                                />
+                                
+                                <input
+                                  type="text"
+                                  value={editingGroupData.keywords}
+                                  onChange={(e) => setEditingGroupData({...editingGroupData, keywords: e.target.value})}
+                                  style={{
+                                    width: '100%',
+                                    padding: '8px 12px',
+                                    fontSize: '14px',
+                                    border: '2px solid #e2e8f0',
+                                    borderRadius: '6px',
+                                    outline: 'none',
+                                    marginBottom: '8px'
+                                  }}
+                                  placeholder="Keywords (คั่นด้วย ,)"
+                                />
+                                
+                                <textarea
+                                  value={editingGroupData.examples}
+                                  onChange={(e) => setEditingGroupData({...editingGroupData, examples: e.target.value})}
+                                  style={{
+                                    width: '100%',
+                                    padding: '8px 12px',
+                                    fontSize: '14px',
+                                    border: '2px solid #e2e8f0',
+                                    borderRadius: '6px',
+                                    outline: 'none',
+                                    minHeight: '80px',
+                                    marginBottom: '8px',
+                                    resize: 'vertical'
+                                  }}
+                                  placeholder="ตัวอย่าง (แต่ละบรรทัดคือ 1 ตัวอย่าง)"
+                                />
+                                
+                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                  <button onClick={saveEditGroup} className="edit-save-btn">
+                                    บันทึก
+                                  </button>
+                                  <button onClick={cancelEdit} className="edit-cancel-btn">
+                                    ยกเลิก
+                                  </button>
                                 </div>
-                              )}
-                            </>
-                          )}
-                          
-                          {getGroupSchedules(group.id).length > 0 && (
-                            <div className="schedule-info" onClick={(e) => {
-                              e.stopPropagation();
-                              viewGroupSchedules(group);
-                            }}>
-                              <span>⏰ มีการตั้งเวลา {getGroupSchedules(group.id).length} รายการ</span>
-                            </div>
-                          )}
-                          
-                          <div className="group-meta">
-                            <div className="group-date">
-                              สร้างเมื่อ {new Date(group.created_at).toLocaleDateString('th-TH')}
-                            </div>
-                            {group.customer_count !== undefined && (
-                              <div className="customer-count">
-                                <span className="count-icon">👤</span>
-                                <span>{group.customer_count} คน</span>
+                              </div>
+                            ) : (
+                              <>
+                                <h3 className="group-name">{group.type_name || group.name || 'ไม่มีชื่อ'}</h3>
+                                {group.rule_description && (
+                                  <p className="group-description">{group.rule_description}</p>
+                                )}
+                                {group.keywords && (
+                                  <div className="group-keywords">
+                                    {(() => {
+                                      const keywordsList = typeof group.keywords === 'string' 
+                                        ? group.keywords.split(',').map(k => k.trim()).filter(k => k)
+                                        : Array.isArray(group.keywords) 
+                                        ? group.keywords 
+                                        : [];
+                                      
+                                      return keywordsList.slice(0, 3).map((keyword, idx) => (
+                                        <span key={idx} className="keyword-tag">{keyword}</span>
+                                      )).concat(
+                                        keywordsList.length > 3 
+                                          ? [<span key="more" className="more-keywords">+{keywordsList.length - 3}</span>]
+                                          : []
+                                      );
+                                    })()}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                            
+                            {getGroupSchedules(group.id).length > 0 && (
+                              <div className="schedule-info" onClick={(e) => {
+                                e.stopPropagation();
+                                viewGroupSchedules(group);
+                              }}>
+                                <span>⏰ มีการตั้งเวลา {getGroupSchedules(group.id).length} รายการ</span>
                               </div>
                             )}
+                            
+                            <div className="group-meta">
+                              <div className="group-date">
+                                สร้างเมื่อ {group.created_at ? new Date(group.created_at).toLocaleDateString('th-TH') : 'ไม่ทราบ'}
+                              </div>
+                             
+                            </div>
+                            
+                            <div className="group-actions">
+                              <button onClick={(e) => {
+                                e.stopPropagation();
+                                startEditGroup(group);
+                              }} className="action-btn edit-name-btn">
+                                ✏️ แก้ไข
+                              </button>
+                              <button onClick={(e) => {
+                                e.stopPropagation();
+                                editGroupMessages(group.id);
+                              }} className="action-btn edit-message-btn">
+                                💬 ข้อความ
+                              </button>
+                            </div>
                           </div>
                           
-                          <div className="group-actions">
-                            <button onClick={(e) => {
+                          <button
+                            onClick={(e) => {
                               e.stopPropagation();
-                              startEditGroup(group);
-                            }} className="action-btn edit-name-btn">
-                              ✏️ แก้ไข
-                            </button>
-                            <button onClick={(e) => {
-                              e.stopPropagation();
-                              editGroupMessages(group.id);
-                            }} className="action-btn edit-message-btn">
-                              💬 ข้อความ
-                            </button>
-                          </div>
+                              removeCustomerGroup(group.id);
+                            }}
+                            className="delete-btn"
+                            title="ลบกลุ่ม"
+                          >
+                            🗑️
+                          </button>
                         </div>
-                        
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeCustomerGroup(group.id);
-                          }}
-                          className="delete-btn"
-                          title="ลบกลุ่ม"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

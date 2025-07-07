@@ -35,13 +35,13 @@ class CustomerGroupCreate(BaseModel):
     type_name: str
     keywords: List[str] = []
     rule_description: str = ""
-    examples: str = ""
+    examples: List[str] = []
     
 class CustomerGroupUpdate(BaseModel):
     type_name: Optional[str] = None
     keywords: Optional[List[str]] = None
     rule_description: Optional[str] = None
-    examples: Optional[str] = None
+    examples: Optional[List[str]] = None
     is_active: Optional[bool] = None
 
 @router.get("/connect", response_class=HTMLResponse)
@@ -1049,7 +1049,7 @@ async def create_customer_group(
                 'type_name': group_data.type_name,
                 'keywords': group_data.keywords,  # ส่งเป็น list
                 'rule_description': group_data.rule_description,
-                'examples': group_data.examples,
+                'examples': group_data.examples, #  ส่งเป็น list
                 'is_active': True
             }
         )
@@ -1060,7 +1060,7 @@ async def create_customer_group(
             "type_name": new_group.type_name,
             "keywords": new_group.keywords if isinstance(new_group.keywords, list) else [],
             "rule_description": new_group.rule_description,
-            "examples": new_group.examples,
+            "examples": new_group.examples if isinstance(new_group.examples, list) else [],
             "created_at": new_group.created_at,
             "updated_at": new_group.updated_at
         }
@@ -1093,8 +1093,8 @@ async def get_customer_groups(
             "id": group.id,
             "page_id": group.page_id,
             "type_name": group.type_name,
-            "keywords": group.keywords.split(",") if group.keywords else [],
-            "examples": group.examples,
+            "keywords": group.keywords or [],
+            "examples": group.examples or [],
             "rule_description": group.rule_description,
             "is_active": group.is_active,
             "created_at": group.created_at,
@@ -1123,7 +1123,7 @@ async def get_customer_group(
         "page_id": group.page_id,
         "type_name": group.type_name,
         "keywords": group.keywords.split(",") if group.keywords else [],
-        "examples": group.examples,
+        "examples": group.examples.split("\n") if group.examples else [],
         "rule_description": group.rule_description,
         "is_active": group.is_active,
         "created_at": group.created_at,
