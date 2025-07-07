@@ -60,7 +60,21 @@ function SetMiner() {
   const fetchCustomerGroups = async (pageId) => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:8000/customer-groups/${pageId}`);
+      // ดึงข้อมูล pages ก่อนเพื่อหา ID ที่ถูกต้อง
+      const pagesResponse = await fetch('http://localhost:8000/pages/');
+      if (!pagesResponse.ok) throw new Error('Failed to fetch pages');
+      
+      const pagesData = await pagesResponse.json();
+      const currentPage = pagesData.find(p => p.page_id === pageId);
+      
+      if (!currentPage) {
+        console.error('Cannot find page for fetchCustomerGroups');
+        setCustomerGroups(DEFAULT_GROUPS);
+        return;
+      }
+
+      // ใช้ ID (integer) ในการดึงข้อมูล customer groups
+      const response = await fetch(`http://localhost:8000/customer-groups/${currentPage.ID}`);
       if (!response.ok) throw new Error('Failed to fetch customer groups');
       
       const data = await response.json();
@@ -153,32 +167,57 @@ function SetMiner() {
       return;
     }
 
-    // ดึง page จาก database เพื่อเอา ID
-    const pagesData = await fetchPages();
-    const currentPage = pagesData.find(p => p.id === selectedPage);
-    if (!currentPage) {
-      alert("ไม่พบข้อมูลเพจ");
-      return;
-    }
-
     try {
+      // ดึงข้อมูล pages จาก backend เพื่อหา page_id ที่ถูกต้อง
+      const pagesResponse = await fetch('http://localhost:8000/pages/', {
+        method: 'GET'
+      });
+      
+      if (!pagesResponse.ok) {
+        throw new Error('Failed to fetch pages');
+      }
+      
+      const pagesData = await pagesResponse.json();
+      console.log('Pages data:', pagesData);
+      
+      // หา page ที่ตรงกับ selectedPage (ซึ่งเป็น string page_id)
+      const currentPage = pagesData.find(p => p.page_id === selectedPage);
+      
+      if (!currentPage) {
+        console.error('Cannot find page with page_id:', selectedPage);
+        console.error('Available pages:', pagesData);
+        alert("ไม่พบข้อมูลเพจในระบบ กรุณาเชื่อมต่อเพจใหม่");
+        return;
+      }
+
+      console.log('Found page:', currentPage);
+      console.log('Using page ID (integer):', currentPage.ID);
+
+      const requestBody = {
+        page_id: currentPage.ID, // ใช้ ID (integer) จาก database
+        type_name: newGroupName.trim(),
+        rule_description: newGroupRuleDescription.trim() || "",
+        keywords: newGroupKeywords.trim().split(',').map(k => k.trim()).filter(k => k),
+        examples: newGroupExamples.trim() || ""
+      };
+
+      console.log('Request body:', requestBody);
+
       const response = await fetch('http://localhost:8000/customer-groups', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          page_id: currentPage.ID, // ใช้ ID จาก database
-          type_name: newGroupName.trim(),
-          rule_description: newGroupRuleDescription.trim(),
-          keywords: newGroupKeywords.trim().split(',').map(k => k.trim()).filter(k => k),
-          examples: newGroupExamples.trim()
-        })
+        body: JSON.stringify(requestBody)
       });
 
-      if (!response.ok) throw new Error('Failed to create customer group');
-      
-      const newGroup = await response.json();
+      const responseData = await response.json();
+      console.log('Response:', response.status, responseData);
+
+      if (!response.ok) {
+        console.error('Failed to create customer group:', responseData);
+        throw new Error(responseData.detail || 'Failed to create customer group');
+      }
       
       // Refresh กลุ่มลูกค้า
       await fetchCustomerGroups(selectedPage);
@@ -193,11 +232,11 @@ function SetMiner() {
       alert("สร้างกลุ่มลูกค้าสำเร็จ!");
     } catch (error) {
       console.error('Error creating customer group:', error);
-      alert("เกิดข้อผิดพลาดในการสร้างกลุ่ม");
+      alert(`เกิดข้อผิดพลาดในการสร้างกลุ่ม: ${error.message}`);
     }
   };
 
-  // ฟังก์ชันลบกลุ่มลูกค้า
+  /// ฟังก์ชันลบกลุ่มลูกค้า
   const removeCustomerGroup = async (groupId) => {
     const group = customerGroups.find(g => g.id === groupId);
     
@@ -215,7 +254,10 @@ function SetMiner() {
         method: 'DELETE'
       });
 
-      if (!response.ok) throw new Error('Failed to delete customer group');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to delete customer group');
+      }
       
       // Refresh กลุ่มลูกค้า
       await fetchCustomerGroups(selectedPage);
@@ -226,7 +268,7 @@ function SetMiner() {
       alert("ลบกลุ่มสำเร็จ!");
     } catch (error) {
       console.error('Error deleting customer group:', error);
-      alert("เกิดข้อผิดพลาดในการลบกลุ่ม");
+      alert(`เกิดข้อผิดพลาดในการลบกลุ่ม: ${error.message}`);
     }
   };
 
@@ -257,13 +299,14 @@ function SetMiner() {
   };
 
   // ฟังก์ชันเริ่มการแก้ไขกลุ่ม
+  
   const startEditGroup = (group) => {
     setEditingGroupId(group.id);
     setEditingGroupData({
       type_name: group.type_name || group.name,
       rule_description: group.rule_description || '',
       keywords: Array.isArray(group.keywords) ? group.keywords.join(', ') : group.keywords || '',
-      examples: group.examples || ''
+      examples: Array.isArray(group.examples) ? group.examples.join('\n') : group.examples || ''
     });
   };
 
@@ -289,6 +332,8 @@ function SetMiner() {
           }
           return group;
         }));
+        
+        alert("แก้ไขชื่อกลุ่มพื้นฐานสำเร็จ!");
       } else {
         // ถ้าเป็นกลุ่มจาก database
         const response = await fetch(`http://localhost:8000/customer-groups/${editingGroupId}`, {
@@ -300,11 +345,14 @@ function SetMiner() {
             type_name: editingGroupData.type_name.trim(),
             rule_description: editingGroupData.rule_description.trim(),
             keywords: editingGroupData.keywords.split(',').map(k => k.trim()).filter(k => k),
-            examples: editingGroupData.examples.trim()
+            examples: editingGroupData.examples.trim() ? editingGroupData.examples.trim().split('\n').map(e => e.trim()).filter(e => e) : []
           })
         });
 
-        if (!response.ok) throw new Error('Failed to update customer group');
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Failed to update customer group');
+        }
         
         // Refresh กลุ่มลูกค้า
         await fetchCustomerGroups(selectedPage);
@@ -321,7 +369,7 @@ function SetMiner() {
       });
     } catch (error) {
       console.error('Error updating customer group:', error);
-      alert("เกิดข้อผิดพลาดในการแก้ไขกลุ่ม");
+      alert(`เกิดข้อผิดพลาดในการแก้ไขกลุ่ม: ${error.message}`);
     }
   };
 
@@ -528,10 +576,10 @@ function SetMiner() {
 
               <div style={{ marginBottom: '20px' ,marginTop: '-24px'}}>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#4a5568' }}>
-                  ตัวอย่างการจำแนกประเภท
+                  ตัวอย่างการจำแนกประเภท (แต่ละบรรทัดคือ 1 ตัวอย่าง)
                 </label>
                 <textarea
-                  placeholder="เช่น ลูกค้าที่พิมพ์ว่า 'สนใจ' หรือ 'ราคาเท่าไหร่' จะถูกจัดเข้ากลุ่มนี้"
+                  placeholder="เช่น&#10;ลูกค้าที่พิมพ์ว่า 'สนใจ' หรือ 'ราคาเท่าไหร่' จะถูกจัดเข้ากลุ่มนี้&#10;ลูกค้าที่ถามเกี่ยวกับสินค้าโดยตรง"
                   value={newGroupExamples}
                   onChange={(e) => setNewGroupExamples(e.target.value)}
                   style={{
@@ -540,7 +588,7 @@ function SetMiner() {
                     border: '2px solid #e2e8f0',
                     borderRadius: '8px',
                     fontSize: '16px',
-                    minHeight: '60px',
+                    minHeight: '80px',
                     resize: 'vertical'
                   }}
                 />
@@ -768,6 +816,23 @@ function SetMiner() {
                                   marginBottom: '8px'
                                 }}
                                 placeholder="Keywords (คั่นด้วย ,)"
+                              />
+                              
+                              <textarea
+                                value={editingGroupData.examples}
+                                onChange={(e) => setEditingGroupData({...editingGroupData, examples: e.target.value})}
+                                style={{
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  fontSize: '14px',
+                                  border: '2px solid #e2e8f0',
+                                  borderRadius: '6px',
+                                  outline: 'none',
+                                  minHeight: '80px',
+                                  marginBottom: '8px',
+                                  resize: 'vertical'
+                                }}
+                                placeholder="ตัวอย่าง (แต่ละบรรทัดคือ 1 ตัวอย่าง)"
                               />
                               
                               <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>

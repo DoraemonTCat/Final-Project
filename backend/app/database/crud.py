@@ -272,12 +272,23 @@ def get_customer_statistics(db: Session, page_id: int):
 
 def create_customer_type_custom(db: Session, page_id: int, type_data: dict):
     """สร้างประเภทลูกค้าใหม่"""
+    # จัดการ keywords ให้เป็น PostgreSQL array format
+    keywords = type_data.get('keywords', '')
+    if isinstance(keywords, list):
+        # ถ้าเป็น list แล้ว ใช้ PostgreSQL array format
+        keywords_array = keywords
+    elif isinstance(keywords, str) and keywords:
+        # ถ้าเป็น string ให้แปลงเป็น list
+        keywords_array = [k.strip() for k in keywords.split(',') if k.strip()]
+    else:
+        keywords_array = []
+    
     db_type = models.CustomerTypeCustom(
         page_id=page_id,
         type_name=type_data.get('type_name'),
-        keywords=type_data.get('keywords', ''),
+        keywords=keywords_array,  # ส่งเป็น list สำหรับ PostgreSQL array
         rule_description=type_data.get('rule_description', ''),
-        examples=type_data.get('examples', ''),
+        examples=type_data.get('examples'), 
         is_active=type_data.get('is_active', True)
     )
     db.add(db_type)
@@ -314,9 +325,24 @@ def update_customer_type_custom(db: Session, type_id: int, update_data: dict):
     if 'rule_description' in update_data:
         db_type.rule_description = update_data['rule_description']
     if 'keywords' in update_data:
-        db_type.keywords = update_data['keywords']
+        # จัดการ keywords ให้เป็น array
+        keywords = update_data['keywords']
+        if isinstance(keywords, list):
+            db_type.keywords = keywords
+        elif isinstance(keywords, str):
+            db_type.keywords = [k.strip() for k in keywords.split(',') if k.strip()]
+        else:
+            db_type.keywords = []
     if 'examples' in update_data:
-        db_type.examples = update_data['examples']
+        # จัดการ examples ให้เป็น array
+        examples = update_data['examples']
+        if isinstance(examples, list):
+            db_type.examples = examples
+        elif isinstance(examples, str):
+            if '\n' in examples:
+                db_type.examples = [e.strip() for e in examples.split('\n') if e.strip()]
+        else:
+            db_type.examples = []
     if 'is_active' in update_data:
         db_type.is_active = update_data['is_active']
     

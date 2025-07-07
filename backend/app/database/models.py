@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, TIMESTAMP, ForeignKey, DateTime, func, Text, Boolean, Interval, JSON, CheckConstraint
+from sqlalchemy import Column, String, Integer, TIMESTAMP, ForeignKey, DateTime, func, Text, Boolean, Interval, JSON, CheckConstraint, ARRAY
 from sqlalchemy.orm import relationship
 from app.database.database import Base
 
@@ -25,9 +25,9 @@ class CustomerTypeCustom(Base):
     id = Column(Integer, primary_key=True, index=True)
     page_id = Column(Integer, ForeignKey("facebook_pages.ID", ondelete="CASCADE"), nullable=False)
     type_name = Column(String(100), nullable=False) # ชื่อประเภทลูกค้า
-    keywords = Column(Text, server_default="")  # ใช้เก็บ keywords แบบ comma-separated
+    keywords = Column(ARRAY(Text), server_default="{}") # ใช้ PostgreSQL ARRAY type
     rule_description = Column(Text, nullable=False) # คำอธิบายกฎที่ใช้ในการจำแนกประเภทลูกค้า
-    examples = Column(Text, server_default="") # ตัวอย่างการจำแนกประเภทลูกค้า
+    examples = Column(ARRAY(Text), server_default="{}") # ใช้ PostgreSQL ARRAY type
     is_active = Column(Boolean, server_default="true") # สถานะการใช้งานของประเภทลูกค้า
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now()) # วันที่สร้างประเภทลูกค้า
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now()) # วันที่แก้ไขประเภทลูกค้า

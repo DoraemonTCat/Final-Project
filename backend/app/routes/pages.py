@@ -12,9 +12,21 @@ def create_page(page: schemas.FacebookPageCreate, db: Session = Depends(get_db))
         raise HTTPException(status_code=400, detail="Page already exists")
     return result
 
-@router.get("/pages/", response_model=list[schemas.FacebookPageOut])
+@router.get("/pages/")
 def read_pages(db: Session = Depends(get_db)):
-    return crud.get_pages(db)
+    pages = crud.get_pages(db)
+    # แปลงให้อยู่ในรูปแบบที่ frontend ต้องการ
+    result = []
+    for page in pages:
+        result.append({
+            "ID": page.ID,  # Integer ID จาก database
+            "id": page.page_id,  # String page_id จาก Facebook
+            "page_id": page.page_id,  # String page_id จาก Facebook
+            "name": page.page_name,
+            "page_name": page.page_name,
+            "created_at": page.created_at.isoformat() if page.created_at else None
+        })
+    return result
 
 @router.get("/pages/{page_id}", response_model=schemas.FacebookPageOut)
 def read_page(page_id: str, db: Session = Depends(get_db)):

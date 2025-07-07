@@ -766,17 +766,6 @@ async def test_send_message(page_id: str, request: Request):
     result = send_message(psid, message, access_token)
     return {"result": result}
 
-# เพิ่ม endpoint สำหรับดู tracking data
-@router.get("/schedule/tracking/{schedule_id}")
-async def get_schedule_tracking(schedule_id: str):
-    """ดูข้อมูล tracking ของ schedule"""
-    sent_users = list(message_scheduler.sent_tracking.get(schedule_id, set()))
-    return {
-        "schedule_id": schedule_id,
-        "sent_users": sent_users,
-        "count": len(sent_users)
-    }
-
 # เพิ่ม endpoint สำหรับ reset tracking
 @router.post("/schedule/reset-tracking/{schedule_id}")
 async def reset_schedule_tracking(schedule_id: str):
@@ -1052,28 +1041,24 @@ async def create_customer_group(
 ):
     """สร้างกลุ่มลูกค้าใหม่"""
     try:
-        # แปลง keywords list เป็น string
-        keywords_str = ",".join(group_data.keywords) if group_data.keywords else ""
-        
-        # สร้างกลุ่มใน database
-        new_group = models.CustomerTypeCustom(
+        # ใช้ crud function ที่แก้ไขแล้ว
+        new_group = crud.create_customer_type_custom(
+            db, 
             page_id=group_data.page_id,
-            type_name=group_data.type_name,
-            keywords=keywords_str,
-            rule_description=group_data.rule_description,
-            examples=group_data.examples,
-            is_active=True
+            type_data={
+                'type_name': group_data.type_name,
+                'keywords': group_data.keywords,  # ส่งเป็น list
+                'rule_description': group_data.rule_description,
+                'examples': group_data.examples,
+                'is_active': True
+            }
         )
-        
-        db.add(new_group)
-        db.commit()
-        db.refresh(new_group)
         
         return {
             "id": new_group.id,
             "page_id": new_group.page_id,
             "type_name": new_group.type_name,
-            "keywords": new_group.keywords.split(",") if new_group.keywords else [],
+            "keywords": new_group.keywords if isinstance(new_group.keywords, list) else [],
             "rule_description": new_group.rule_description,
             "examples": new_group.examples,
             "created_at": new_group.created_at,
@@ -1086,17 +1071,15 @@ async def create_customer_group(
 # ดึงกลุ่มลูกค้าทั้งหมดของเพจ
 @router.get("/customer-groups/{page_id}")
 async def get_customer_groups(
-    page_id: str,
+    page_id: int,  # เปลี่ยนจาก str เป็น int
     include_inactive: bool = False,
     db: Session = Depends(get_db)
 ):
     """ดึงกลุ่มลูกค้าทั้งหมดของเพจ"""
-    page = crud.get_page_by_page_id(db, page_id)
-    if not page:
-        raise HTTPException(status_code=404, detail="Page not found")
+    # page_id ที่รับมาเป็น integer ID จาก database แล้ว
     
     query = db.query(models.CustomerTypeCustom).filter(
-        models.CustomerTypeCustom.page_id == page.ID
+        models.CustomerTypeCustom.page_id == page_id
     )
     
     if not include_inactive:
@@ -1164,28 +1147,28 @@ async def update_customer_group(
         raise HTTPException(status_code=404, detail="Group not found")
     
     try:
+        update_data = {}
         if group_update.type_name is not None:
-            group.type_name = group_update.type_name
+            update_data['type_name'] = group_update.type_name
         if group_update.keywords is not None:
-            group.keywords = ",".join(group_update.keywords)
+            update_data['keywords'] = group_update.keywords
         if group_update.rule_description is not None:
-            group.rule_description = group_update.rule_description
+            update_data['rule_description'] = group_update.rule_description
         if group_update.examples is not None:
-            group.examples = group_update.examples
+            update_data['examples'] = group_update.examples
         if group_update.is_active is not None:
-            group.is_active = group_update.is_active
-        
-        group.updated_at = datetime.now()
-        db.commit()
-        db.refresh(group)
+            update_data['is_active'] = group_update.is_active
+            
+        # ใช้ crud function ที่แก้ไขแล้ว
+        updated_group = crud.update_customer_type_custom(db, group_id, update_data)
         
         return {
-            "id": group.id,
-            "type_name": group.type_name,
-            "keywords": group.keywords.split(",") if group.keywords else [],
-            "rule_description": group.rule_description,
-            "examples": group.examples,
-            "updated_at": group.updated_at
+            "id": updated_group.id,
+            "type_name": updated_group.type_name,
+            "keywords": updated_group.keywords if isinstance(updated_group.keywords, list) else [],
+            "rule_description": updated_group.rule_description,
+            "examples": updated_group.examples if isinstance(updated_group.examples, list) else [],
+            "updated_at": updated_group.updated_at
         }
     except Exception as e:
         db.rollback()
