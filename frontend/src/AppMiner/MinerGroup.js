@@ -329,7 +329,7 @@ function SetMiner() {
   const startEditGroup = (group) => {
     setEditingGroupId(group.id);
     setEditingGroupData({
-      type_name: setNewGroupName || setNewGroupName,
+      type_name: group.type_name || group.name || '', // แก้ไขให้ดึงชื่อที่ถูกต้อง
       rule_description: group.rule_description || '',
       keywords: Array.isArray(group.keywords) ? group.keywords.join(', ') : group.keywords || '',
       examples: Array.isArray(group.examples) ? group.examples.join('\n') : group.examples || ''
