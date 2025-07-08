@@ -255,48 +255,64 @@ function SetMiner() {
       setNewGroupExamples("");
       setShowAddGroupForm(false);
       
-      alert("สร้างกลุ่มลูกค้าสำเร็จ!");
+     
     } catch (error) {
       console.error('Error creating customer group:', error);
       alert(`เกิดข้อผิดพลาดในการสร้างกลุ่ม: ${error.message}`);
     }
   };
 
-  /// ฟังก์ชันลบกลุ่มลูกค้า
-  const removeCustomerGroup = async (groupId) => {
-    const group = customerGroups.find(g => g.id === groupId);
-    
-    if (group && group.isDefault) {
-      alert("ไม่สามารถลบกลุ่มพื้นฐานได้");
-      return;
-    }
-    
-    if (!window.confirm("คุณต้องการลบกลุ่มนี้หรือไม่?")) {
-      return;
-    }
+  // แก้ไขฟังก์ชันลบกลุ่มลูกค้า
+const removeCustomerGroup = async (groupId) => {
+  const group = customerGroups.find(g => g.id === groupId);
+  
+  if (group && group.isDefault) {
+    alert("ไม่สามารถลบกลุ่มพื้นฐานได้");
+    return;
+  }
+  
+  const confirmMessage = "คุณต้องการลบกลุ่มนี้หรือไม่?\n\n⚠️ คำเตือน:\n- ข้อมูลกลุ่มจะถูกลบออกจากฐานข้อมูลถาวร\n- ข้อความที่ตั้งค่าไว้สำหรับกลุ่มนี้จะถูกลบ\n- การกระทำนี้ไม่สามารถย้อนกลับได้";
+  
+  if (!window.confirm(confirmMessage)) {
+    return;
+  }
 
-    try {
-      const response = await fetch(`http://localhost:8000/customer-groups/${groupId}`, {
-        method: 'DELETE'
-      });
+  try {
+    // ลบจาก database ด้วย hard_delete=true เพื่อลบจริงๆ
+    const response = await fetch(`http://localhost:8000/customer-groups/${groupId}?hard_delete=true`, {
+      method: 'DELETE'
+    });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to delete customer group');
-      }
-      
-      // Refresh กลุ่มลูกค้า
-      await fetchCustomerGroups(selectedPage);
-      
-      // ลบออกจากการเลือก
-      setSelectedGroups(prev => prev.filter(id => id !== groupId));
-      
-    
-    } catch (error) {
-      console.error('Error deleting customer group:', error);
-      alert(`เกิดข้อผิดพลาดในการลบกลุ่ม: ${error.message}`);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || 'Failed to delete customer group');
     }
-  };
+    
+    // ลบข้อมูลที่เกี่ยวข้องจาก localStorage
+    // 1. ลบ schedules ที่เกี่ยวข้อง
+    const schedules = getSchedulesForPage(selectedPage);
+    const updatedSchedules = schedules.filter(schedule => 
+      !schedule.groups.includes(groupId)
+    );
+    saveSchedulesForPage(selectedPage, updatedSchedules);
+    
+    // 2. ลบข้อความที่บันทึกไว้สำหรับกลุ่มนี้
+    const messageKey = `groupMessages_${selectedPage}_${groupId}`;
+    localStorage.removeItem(messageKey);
+    
+    // Refresh กลุ่มลูกค้า
+    await fetchCustomerGroups(selectedPage);
+    
+    // ลบออกจากการเลือก
+    setSelectedGroups(prev => prev.filter(id => id !== groupId));
+    
+   
+    
+  } catch (error) {
+    console.error('Error deleting customer group:', error);
+    alert(`เกิดข้อผิดพลาดในการลบกลุ่ม: ${error.message}`);
+  }
+};
 
   const toggleGroupSelection = (groupId) => {
     setSelectedGroups(prev => {
@@ -326,78 +342,95 @@ function SetMiner() {
 
   // ฟังก์ชันเริ่มการแก้ไขกลุ่ม
   
-  const startEditGroup = (group) => {
-    setEditingGroupId(group.id);
-    setEditingGroupData({
-      type_name: group.type_name || group.name || '', // แก้ไขให้ดึงชื่อที่ถูกต้อง
-      rule_description: group.rule_description || '',
-      keywords: Array.isArray(group.keywords) ? group.keywords.join(', ') : group.keywords || '',
-      examples: Array.isArray(group.examples) ? group.examples.join('\n') : group.examples || ''
-    });
-  };
+  // แก้ไขฟังก์ชันเริ่มการแก้ไขกลุ่ม
+const startEditGroup = (group) => {
+  setEditingGroupId(group.id);
+  
+  // ตรวจสอบว่า keywords และ examples เป็น string หรือ array
+  let keywords = '';
+  if (Array.isArray(group.keywords)) {
+    keywords = group.keywords.join(', ');
+  } else if (typeof group.keywords === 'string') {
+    keywords = group.keywords;
+  }
+  
+  let examples = '';
+  if (Array.isArray(group.examples)) {
+    examples = group.examples.join('\n');
+  } else if (typeof group.examples === 'string') {
+    examples = group.examples;
+  }
+  
+  setEditingGroupData({
+    type_name: group.type_name || group.name || '',
+    rule_description: group.rule_description || '',
+    keywords: keywords,
+    examples: examples
+  });
+};
 
-  // ฟังก์ชันบันทึกการแก้ไขกลุ่ม
-  const saveEditGroup = async () => {
-    if (!editingGroupData.type_name.trim()) {
-      alert("กรุณากรอกชื่อกลุ่ม");
-      return;
-    }
+  // แก้ไขฟังก์ชัน saveEditGroup
+const saveEditGroup = async () => {
+  if (!editingGroupData.type_name.trim()) {
+    alert("กรุณากรอกชื่อกลุ่ม");
+    return;
+  }
 
-    try {
-      // ถ้าเป็น default group ให้บันทึกใน localStorage
-      if (editingGroupId.startsWith('default_')) {
-        const customNamesKey = `defaultGroupCustomNames_${selectedPage}`;
-        const customNames = JSON.parse(localStorage.getItem(customNamesKey) || '{}');
-        customNames[editingGroupId] = editingGroupData.type_name;
-        localStorage.setItem(customNamesKey, JSON.stringify(customNames));
-        
-        // อัพเดทใน state
-        setCustomerGroups(prev => prev.map(group => {
-          if (group.id === editingGroupId) {
-            return { ...group, type_name: editingGroupData.type_name };
-          }
-          return group;
-        }));
-        
-        alert("แก้ไขชื่อกลุ่มพื้นฐานสำเร็จ!");
-      } else {
-        // ถ้าเป็นกลุ่มจาก database
-        const response = await fetch(`http://localhost:8000/customer-groups/${editingGroupId}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            type_name: editingGroupData.type_name.trim(),
-            rule_description: editingGroupData.rule_description.trim(),
-            keywords: editingGroupData.keywords.split(',').map(k => k.trim()).filter(k => k),
-            examples: editingGroupData.examples.trim() ? editingGroupData.examples.trim().split('\n').map(e => e.trim()).filter(e => e) : []
-          })
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.detail || 'Failed to update customer group');
+  try {
+    // ถ้าเป็น default group ให้บันทึกใน localStorage
+    if (editingGroupId.toString().startsWith('default_')) {
+      const customNamesKey = `defaultGroupCustomNames_${selectedPage}`;
+      const customNames = JSON.parse(localStorage.getItem(customNamesKey) || '{}');
+      customNames[editingGroupId] = editingGroupData.type_name;
+      localStorage.setItem(customNamesKey, JSON.stringify(customNames));
+      
+      // อัพเดทใน state
+      setCustomerGroups(prev => prev.map(group => {
+        if (group.id === editingGroupId) {
+          return { ...group, type_name: editingGroupData.type_name };
         }
-        
-        // Refresh กลุ่มลูกค้า
-        await fetchCustomerGroups(selectedPage);
-        
-        alert("แก้ไขกลุ่มสำเร็จ!");
+        return group;
+      }));
+      
+      alert("แก้ไขชื่อกลุ่มพื้นฐานสำเร็จ!");
+    } else {
+      // ถ้าเป็นกลุ่มจาก database
+      const response = await fetch(`http://localhost:8000/customer-groups/${editingGroupId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          type_name: editingGroupData.type_name.trim(),
+          rule_description: editingGroupData.rule_description.trim(),
+          keywords: editingGroupData.keywords.split(',').map(k => k.trim()).filter(k => k),
+          examples: editingGroupData.examples.split('\n').map(e => e.trim()).filter(e => e)
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to update customer group');
       }
       
-      setEditingGroupId(null);
-      setEditingGroupData({
-        type_name: "",
-        rule_description: "",
-        keywords: "",
-        examples: ""
-      });
-    } catch (error) {
-      console.error('Error updating customer group:', error);
-      alert(`เกิดข้อผิดพลาดในการแก้ไขกลุ่ม: ${error.message}`);
+      // Refresh กลุ่มลูกค้า
+      await fetchCustomerGroups(selectedPage);
+      
+    
     }
-  };
+    
+    setEditingGroupId(null);
+    setEditingGroupData({
+      type_name: "",
+      rule_description: "",
+      keywords: "",
+      examples: ""
+    });
+  } catch (error) {
+    console.error('Error updating customer group:', error);
+    alert(`เกิดข้อผิดพลาดในการแก้ไขกลุ่ม: ${error.message}`);
+  }
+};
 
   // ฟังก์ชันยกเลิกการแก้ไข
   const cancelEdit = () => {

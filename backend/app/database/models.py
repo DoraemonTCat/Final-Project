@@ -64,7 +64,7 @@ class CustomerTypeMessage(Base):
     page_customer_type_knowledge_id = Column(Integer, ForeignKey("page_customer_type_knowledge.id", ondelete="CASCADE"), nullable=True)
     message_type = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
-    ctm_character = Column(String(50), server_default="")
+    dir = Column(String(50), server_default="")
     display_order = Column(Integer, nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
