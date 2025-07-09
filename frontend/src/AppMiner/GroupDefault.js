@@ -1,12 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import '../CSS/GroupDefault.css';
-import { 
-  fetchPages, 
-  getCustomerGroups, 
-  saveGroupMessages, 
-  getGroupMessages 
-} from "../Features/Tool";
+import { fetchPages, connectFacebook } from "../Features/Tool";
 import Sidebar from "./Sidebar"; 
 
 function GroupDefault() {
@@ -20,62 +15,115 @@ function GroupDefault() {
     file: null,
     preview: null
   });
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingScheduleId, setEditingScheduleId] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [currentGroupId, setCurrentGroupId] = useState(null);
+  const [isDefaultGroupSetup, setIsDefaultGroupSetup] = useState(false); // 🔥 เพิ่ม state
   const navigate = useNavigate();
 
+  const toggleDropdown = () => {
+    setIsDropdownOpen(!isDropdownOpen);
+  };
+
+  // 🔥 ฟังก์ชันดึงกลุ่มลูกค้าตาม page ID
+  const getGroupsForPage = (pageId) => {
+    if (!pageId) return [];
+    const key = `customerGroups_${pageId}`;
+    const userGroups = JSON.parse(localStorage.getItem(key) || '[]');
+    
+    // 🔥 ดึงข้อมูล default groups พร้อมข้อความ
+    const DEFAULT_GROUPS = [
+      { id: 'default_1', name: 'กลุ่มคนหาย', isDefault: true },
+      { id: 'default_2', name: 'กลุ่มคนหายนาน', isDefault: true },
+      { id: 'default_3', name: 'กลุ่มคนหายนานมาก', isDefault: true }
+    ];
+    
+    const defaultGroupsWithMessages = DEFAULT_GROUPS.map(group => {
+      const messageKey = `defaultGroupMessages_${pageId}_${group.id}`;
+      const savedMessages = JSON.parse(localStorage.getItem(messageKey) || '[]');
+      
+      // 🔥 ตรวจสอบชื่อที่ custom
+      const customNamesKey = `defaultGroupCustomNames_${pageId}`;
+      const customNames = JSON.parse(localStorage.getItem(customNamesKey) || '{}');
+      
+      return {
+        ...group,
+        name: customNames[group.id] || group.name,
+        messages: savedMessages
+      };
+    });
+    
+    return [...defaultGroupsWithMessages, ...userGroups];
+  };
+
+  // 🔥 ฟังก์ชันบันทึกกลุ่มลูกค้าตาม page ID
+  const saveGroupsForPage = (pageId, groups) => {
+    if (!pageId) return;
+    const key = `customerGroups_${pageId}`;
+    const userGroups = groups.filter(g => !g.isDefault);
+    localStorage.setItem(key, JSON.stringify(userGroups));
+  };
+
   useEffect(() => {
-    const loadInitialData = async () => {
-      try {
-        const pagesData = await fetchPages();
-        setPages(pagesData);
-
-        // ตรวจสอบว่าเป็นโหมดแก้ไขหรือไม่
-        const editMode = localStorage.getItem("editingMode");
-        const scheduleId = localStorage.getItem("editingScheduleId");
-        
-        if (editMode === "true" || scheduleId) {
-          setIsEditMode(true);
-          if (scheduleId) {
-            setEditingScheduleId(parseInt(scheduleId));
-          }
-          localStorage.removeItem("editingMode");
-        }
-
-        // โหลดกลุ่มที่เลือก
-        const selectedGroupIds = JSON.parse(localStorage.getItem("selectedCustomerGroups") || '[]');
-        const savedPage = localStorage.getItem("selectedPage");
-        
-        if (savedPage) {
-          setSelectedPage(savedPage);
-          
-          // ดึงข้อมูลกลุ่มจาก database
-          const pagesResponse = await fetch('http://localhost:8000/pages/');
-          const pagesData = await pagesResponse.json();
-          const currentPage = pagesData.find(p => p.page_id === savedPage);
-          
-          if (currentPage) {
-            const groupsData = await getCustomerGroups(currentPage.ID);
-            const selectedGroupsData = groupsData.filter(g => selectedGroupIds.includes(g.id));
-            setSelectedGroups(selectedGroupsData);
-            
-            // ถ้ามีกลุ่มเดียว ให้โหลดข้อความของกลุ่มนั้น
-            if (selectedGroupsData.length === 1 && selectedGroupsData[0].messages) {
-              setCurrentGroupId(selectedGroupsData[0].id);
-              const messages = await getGroupMessages(selectedGroupsData[0].id);
-              setMessageSequence(messages);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error loading initial data:', error);
+    // 🔥 ตรวจสอบว่าเป็นโหมดแก้ไขหรือไม่
+    const editMode = localStorage.getItem("editingMode");
+    const scheduleId = localStorage.getItem("editingScheduleId");
+    const isFromDefaultGroup = localStorage.getItem("isDefaultGroupSetup");
+    
+    if (isFromDefaultGroup === "true") {
+      setIsDefaultGroupSetup(true);
+      localStorage.removeItem("isDefaultGroupSetup"); // ลบหลังใช้
+    }
+    
+    if (editMode === "true" || scheduleId) {
+      setIsEditMode(true);
+      if (scheduleId) {
+        setEditingScheduleId(parseInt(scheduleId));
       }
-    };
+      localStorage.removeItem("editingMode"); // ลบหลังใช้
+    }
 
-    loadInitialData();
-  }, []);
+    // 🔥 ตรวจสอบว่า page ID ตรงกันหรือไม่
+    const selectedPageId = localStorage.getItem("selectedCustomerGroupsPageId");
+    const savedPage = localStorage.getItem("selectedPage");
+    
+    if (selectedPageId && selectedPageId !== savedPage) {
+      alert("กลุ่มลูกค้าที่เลือกมาจากเพจอื่น กรุณากลับไปเลือกใหม่");
+      navigate('/MinerGroup');
+      return;
+    }
+
+    // โหลดกลุ่มที่เลือกจากหน้าก่อน
+    const groups = JSON.parse(localStorage.getItem("selectedCustomerGroups") || '[]');
+    const allGroups = getGroupsForPage(savedPage);
+    const selectedGroupsData = allGroups.filter(g => groups.includes(g.id));
+    setSelectedGroups(selectedGroupsData);
+
+    if (savedPage) {
+      setSelectedPage(savedPage);
+    }
+
+    fetchPages()
+      .then(setPages)
+      .catch(err => console.error("ไม่สามารถโหลดเพจได้:", err));
+
+    // 🔥 โหลดข้อความที่บันทึกไว้
+    const messageKey = `groupMessages_${savedPage}`;
+    const savedMessages = JSON.parse(localStorage.getItem(messageKey) || '[]');
+    
+    if (savedMessages.length > 0) {
+      setMessageSequence(savedMessages);
+    } else if (selectedGroupsData.length > 0 && selectedGroupsData[0].messages) {
+      // ถ้าไม่มีใน localStorage ให้โหลดจากกลุ่ม
+      setMessageSequence(selectedGroupsData[0].messages);
+    }
+  }, [navigate]);
+
+  const handlePageChange = (e) => {
+    const pageId = e.target.value;
+    setSelectedPage(pageId);
+    localStorage.setItem("selectedPage", pageId);
+  };
 
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
@@ -170,48 +218,84 @@ function GroupDefault() {
     setMessageSequence(newSequence);
   };
 
-  // บันทึกข้อความลง database
-  const saveMessages = async () => {
+  // 🔥 ฟังก์ชันบันทึกเฉพาะข้อความ (รองรับ default groups)
+  const saveMessages = () => {
     if (messageSequence.length === 0) {
       alert("กรุณาเพิ่มข้อความอย่างน้อย 1 ข้อความ");
       return;
     }
 
-    if (!currentGroupId && selectedGroups.length === 1) {
-      setCurrentGroupId(selectedGroups[0].id);
-    }
+    // บันทึกข้อความลง localStorage แยกตามเพจ
+    const messageKey = `groupMessages_${selectedPage}`;
+    localStorage.setItem(messageKey, JSON.stringify(messageSequence));
 
-    if (!currentGroupId) {
-      alert("กรุณาเลือกกลุ่มลูกค้า");
-      return;
-    }
+    // อัพเดทข้อความในแต่ละกลุ่ม
+    const allGroups = getGroupsForPage(selectedPage);
+    const selectedGroupIds = JSON.parse(localStorage.getItem("selectedCustomerGroups") || '[]');
+    
+    // 🔥 บันทึกข้อความสำหรับ default groups แยก
+    selectedGroupIds.forEach(groupId => {
+      const group = allGroups.find(g => g.id === groupId);
+      if (group && group.isDefault) {
+        const defaultMessageKey = `defaultGroupMessages_${selectedPage}_${groupId}`;
+        localStorage.setItem(defaultMessageKey, JSON.stringify(messageSequence));
+      }
+    });
+    
+    // อัพเดทข้อความสำหรับ user groups
+    const updatedGroups = allGroups.map(group => {
+      if (selectedGroupIds.includes(group.id) && !group.isDefault) {
+        return { ...group, messages: messageSequence };
+      }
+      return group;
+    });
 
-    setLoading(true);
-    try {
-      await saveGroupMessages(currentGroupId, messageSequence);
-     
-    } catch (error) {
-      console.error('Error saving messages:', error);
-      alert("เกิดข้อผิดพลาดในการบันทึกข้อความ");
-    } finally {
-      setLoading(false);
-    }
+    saveGroupsForPage(selectedPage, updatedGroups);
+  
+    console.log("ข้อความถูกบันทึกเรียบร้อยแล้ว:", messageSequence);
+    alert("บันทึกข้อความสำเร็จ!");
   };
 
-  const saveAndProceed = async () => {
+  const saveAndProceed = () => {
     if (messageSequence.length === 0) {
       alert("กรุณาเพิ่มข้อความอย่างน้อย 1 ข้อความ");
       return;
     }
 
-    await saveMessages();
+    // บันทึกข้อความลง localStorage แยกตามเพจ
+    const messageKey = `groupMessages_${selectedPage}`;
+    localStorage.setItem(messageKey, JSON.stringify(messageSequence));
 
-    // ถ้าเป็นโหมดแก้ไขและมี scheduleId ให้ไปหน้าตั้งเวลาเพื่อแก้ไขต่อ
+    // อัพเดทข้อความในแต่ละกลุ่ม
+    const allGroups = getGroupsForPage(selectedPage);
+    const selectedGroupIds = JSON.parse(localStorage.getItem("selectedCustomerGroups") || '[]');
+    
+    // 🔥 บันทึกข้อความสำหรับ default groups แยก
+    selectedGroupIds.forEach(groupId => {
+      const group = allGroups.find(g => g.id === groupId);
+      if (group && group.isDefault) {
+        const defaultMessageKey = `defaultGroupMessages_${selectedPage}_${groupId}`;
+        localStorage.setItem(defaultMessageKey, JSON.stringify(messageSequence));
+      }
+    });
+    
+    // อัพเดทข้อความสำหรับ user groups
+    const updatedGroups = allGroups.map(group => {
+      if (selectedGroupIds.includes(group.id) && !group.isDefault) {
+        return { ...group, messages: messageSequence };
+      }
+      return group;
+    });
+
+    saveGroupsForPage(selectedPage, updatedGroups);
+    
+    // 🔥 ถ้าเป็นโหมดแก้ไขและมี scheduleId ให้ไปหน้าตั้งเวลาเพื่อแก้ไขต่อ
     if (isEditMode && editingScheduleId) {
+      // ส่งต่อ scheduleId ไปหน้าตั้งเวลา
       localStorage.setItem("editingScheduleId", editingScheduleId.toString());
       navigate('/GroupSchedule');
     } else if (isEditMode && !editingScheduleId) {
-      // ถ้าเป็นการแก้ไขข้อความอย่างเดียว
+      // ถ้าเป็นการแก้ไขข้อความอย่างเดียว (ไม่มี schedule)
       localStorage.removeItem("selectedCustomerGroups");
       localStorage.removeItem("selectedCustomerGroupsPageId");
       navigate('/MinerGroup');
@@ -232,6 +316,9 @@ function GroupDefault() {
 
   const selectedPageInfo = pages.find(p => p.id === selectedPage);
 
+  // 🔥 ตรวจสอบว่ากำลังตั้งค่าสำหรับ default group หรือไม่
+  const isSettingDefaultGroup = selectedGroups.some(g => g.isDefault);
+
   return (
     <div className="app-container">
       <Sidebar />
@@ -240,7 +327,9 @@ function GroupDefault() {
         <div className="group-default-header">
           <h1 className="group-default-title">
             <span className="title-icon">💬</span>
-            {isEditMode ? 'แก้ไขข้อความของกลุ่ม' : 'ตั้งค่าข้อความสำหรับกลุ่มที่เลือก'}
+            {isEditMode ? 'แก้ไขข้อความของกลุ่ม' : 
+             isSettingDefaultGroup ? 'ตั้งค่าข้อความสำหรับกลุ่มพื้นฐาน' : 
+             'ตั้งค่าข้อความสำหรับกลุ่มที่เลือก'}
             {selectedPageInfo && (
               <span style={{ fontSize: '18px', color: '#718096', marginLeft: '10px' }}>
                 - {selectedPageInfo.name}
@@ -261,11 +350,17 @@ function GroupDefault() {
         </div>
 
         <div className="selected-groups-info">
-          <h3>{isEditMode ? 'กำลังแก้ไขกลุ่ม' : 'กลุ่มที่เลือก'} ({selectedPageInfo?.name}):</h3>
+          <h3>
+            {isEditMode ? 'กำลังแก้ไขกลุ่ม' : 
+             isSettingDefaultGroup ? '🌟 กลุ่มพื้นฐานที่เลือก' : 
+             'กลุ่มที่เลือก'} 
+            ({selectedPageInfo?.name}):
+          </h3>
           <div className="selected-groups-list">
             {selectedGroups.map(group => (
-              <span key={group.id} className="group-badge">
-                {group.type_name}
+              <span key={group.id} className={`group-badge ${group.isDefault ? 'default-badge' : ''}`}>
+                {group.isDefault && '⭐ '}
+                {group.name}
               </span>
             ))}
           </div>
@@ -336,7 +431,6 @@ function GroupDefault() {
             <button
               onClick={addToSequence}
               className="add-btn"
-              disabled={loading}
             >
               ➕ เพิ่มในลำดับ
             </button>
@@ -348,9 +442,8 @@ function GroupDefault() {
               <button
                 onClick={saveMessages}
                 className="save-messages-btn"
-                disabled={loading}
               >
-                {loading ? '⏳ กำลังบันทึก...' : '💾 บันทึกข้อความ'}
+                💾 บันทึกข้อความ
               </button>
             </div>
 
@@ -395,7 +488,6 @@ function GroupDefault() {
                       onClick={() => removeFromSequence(item.id)}
                       className="sequence-delete-btn"
                       title="ลบรายการนี้"
-                      disabled={loading}
                     >
                       🗑️
                     </button>
@@ -413,10 +505,9 @@ function GroupDefault() {
           <button
             onClick={saveAndProceed}
             className="proceed-btn"
-            disabled={messageSequence.length === 0 || loading}
+            disabled={messageSequence.length === 0}
           >
-            {loading ? '⏳ กำลังบันทึก...' : 
-             isEditMode ? 
+            {isEditMode ? 
               (editingScheduleId ? 'ถัดไป: แก้ไขการตั้งเวลา' : 'บันทึกและกลับ') 
               : 'ถัดไป: ตั้งเวลาส่ง'}
             <span className="arrow-icon">→</span>

@@ -14,9 +14,6 @@ from datetime import datetime, timedelta
 from fastapi import Query
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Optional
-from app.database.schemas import BulkMessagesCreate
-from app.database.schemas import CustomerTypeMessageUpdate
-from app.database.schemas import ScheduleWithMessagesCreate
 
 
 router = APIRouter()
@@ -635,7 +632,7 @@ async def get_conversations_from_facebook(page_id: str):
         )
 
 @router.post("/schedule/activate")
-async def activate_schedule(request: Request, db: Session = Depends(get_db)):
+async def activate_schedule(request: Request):
     """เปิดใช้งาน schedule"""
     data = await request.json()
     page_id = data.get('page_id')
@@ -644,24 +641,16 @@ async def activate_schedule(request: Request, db: Session = Depends(get_db)):
     if not page_id or not schedule:
         return {"status": "error", "message": "Missing required data"}
     
-    # ดึงข้อมูลจาก database แทน
-    if 'group_id' in schedule:
-        messages = crud.get_customer_type_messages(db, None, schedule['group_id'])
-        schedule['messages'] = [
-            {
-                'type': msg.message_type,
-                'content': msg.content,
-                'order': msg.display_order
-            }
-            for msg in messages
-        ]
-    
-    # อัพเดท page tokens ให้ scheduler
+    # อัพเดท page tokens ให้ scheduler ก่อนเพิ่ม schedule
     message_scheduler.set_page_tokens(page_tokens)
     
     # Reset sent tracking สำหรับ schedule นี้
     schedule_id = str(schedule['id'])
     message_scheduler.sent_tracking[schedule_id] = set()
+    
+    # ตรวจสอบและแก้ไขข้อมูล schedule
+    if 'pageId' not in schedule and page_id:
+        schedule['pageId'] = page_id
     
     # เพิ่ม schedule เข้าระบบ
     message_scheduler.add_schedule(page_id, schedule)
@@ -671,6 +660,7 @@ async def activate_schedule(request: Request, db: Session = Depends(get_db)):
         await message_scheduler.process_schedule(page_id, schedule)
         return {"status": "success", "message": "Immediate schedule processed"}
     
+    # สำหรับ scheduled และ user-inactive จะรอให้ scheduler ทำงานตามเวลา
     return {"status": "success", "message": "Schedule activated"}
 
 # เพิ่มฟังก์ชันใหม่สำหรับทดสอบการส่งข้อความ:
@@ -1081,11 +1071,13 @@ async def create_customer_group(
 # ดึงกลุ่มลูกค้าทั้งหมดของเพจ
 @router.get("/customer-groups/{page_id}")
 async def get_customer_groups(
-    page_id: int,
+    page_id: int,  # เปลี่ยนจาก str เป็น int
     include_inactive: bool = False,
     db: Session = Depends(get_db)
 ):
-    """ดึงกลุ่มลูกค้าทั้งหมดของเพจ พร้อมข้อความ"""
+    """ดึงกลุ่มลูกค้าทั้งหมดของเพจ"""
+    # page_id ที่รับมาเป็น integer ID จาก database แล้ว
+    
     query = db.query(models.CustomerTypeCustom).filter(
         models.CustomerTypeCustom.page_id == page_id
     )
@@ -1097,9 +1089,6 @@ async def get_customer_groups(
     
     result = []
     for group in groups:
-        # ดึงข้อความของกลุ่ม
-        messages = crud.get_customer_type_messages(db, page_id, group.id)
-        
         result.append({
             "id": group.id,
             "page_id": group.page_id,
@@ -1110,16 +1099,7 @@ async def get_customer_groups(
             "is_active": group.is_active,
             "created_at": group.created_at,
             "updated_at": group.updated_at,
-            "customer_count": len(group.customers),
-            "messages": [
-                {
-                    "id": msg.id,
-                    "type": msg.message_type,
-                    "content": msg.content,
-                    "order": msg.display_order
-                }
-                for msg in messages
-            ]
+            "customer_count": len(group.customers)
         })
     
     return result
@@ -1275,210 +1255,4 @@ async def auto_group_customer(
     return {
         "status": "no_match",
         "message": "No keywords matched"
-    }
-    
-# ========== Customer Type Messages API ==========
-
-@router.post("/customer-groups/{group_id}/messages")
-async def create_group_messages(
-    group_id: int,
-    messages_data: BulkMessagesCreate,
-    db: Session = Depends(get_db)
-):
-    """สร้างข้อความสำหรับกลุ่มลูกค้า"""
-    try:
-        # ตรวจสอบว่ากลุ่มมีอยู่จริง
-        group = crud.get_customer_type_custom_by_id(db, group_id)
-        if not group:
-            raise HTTPException(status_code=404, detail="Group not found")
-        
-        # สร้างข้อความ
-        result = crud.bulk_create_customer_type_messages(
-            db, 
-            group.page_id, 
-            group_id, 
-            messages_data.messages
-        )
-        
-        return {
-            "status": "success",
-            "group_id": group_id,
-            "messages_created": result["created"]
-        }
-        
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-    
-@router.get("/customer-groups/{group_id}/messages")
-async def get_group_messages(
-    group_id: int,
-    db: Session = Depends(get_db)
-):
-    """ดึงข้อความของกลุ่มลูกค้า"""
-    messages = crud.get_customer_type_messages(db, page_id=None, customer_type_custom_id=group_id)
-    
-    return [
-        {
-            "id": msg.id,
-            "type": msg.message_type,
-            "content": msg.content,
-            "dir": msg.dir,
-            "order": msg.display_order,
-            "created_at": msg.created_at,
-            "updated_at": msg.updated_at
-        }
-        for msg in messages
-    ]
-    
-@router.put("/customer-type-messages/{message_id}")
-async def update_group_message(
-    message_id: int,
-    update_data: CustomerTypeMessageUpdate,
-    db: Session = Depends(get_db)
-):
-    """แก้ไขข้อความของกลุ่มลูกค้า"""
-    updated = crud.update_customer_type_message(db, message_id, update_data.dict(exclude_unset=True))
-    
-    if not updated:
-        raise HTTPException(status_code=404, detail="Message not found")
-    
-    return {
-        "status": "success",
-        "message": "Message updated successfully"
-    }
-    
-@router.delete("/customer-type-messages/{message_id}")
-async def delete_group_message(
-    message_id: int,
-    db: Session = Depends(get_db)
-):
-    """ลบข้อความของกลุ่มลูกค้า"""
-    deleted = crud.delete_customer_type_message(db, message_id)
-    
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Message not found")
-    
-    return {
-        "status": "success",
-        "message": "Message deleted successfully"
-    }
-    
-# ========== Message Schedule API ==========
-
-@router.post("/schedules")
-async def create_schedule(
-    schedule_data: ScheduleWithMessagesCreate,
-    db: Session = Depends(get_db)
-):
-    """สร้างตารางเวลาส่งข้อความ"""
-    try:
-        # ตรวจสอบว่ามี page และ group อยู่จริง
-        if not schedule_data.groups:
-            raise HTTPException(status_code=400, detail="No groups selected")
-        
-        group_id = schedule_data.groups[0]  # ใช้กลุ่มแรก
-        group = crud.get_customer_type_custom_by_id(db, group_id)
-        if not group:
-            raise HTTPException(status_code=404, detail="Group not found")
-        
-        # สร้างตารางเวลาพร้อมข้อความ
-        result = crud.create_schedule_with_messages(
-            db,
-            group.page_id,
-            group_id,
-            schedule_data.dict()
-        )
-        
-        return {
-            "status": "success",
-            "message": "Schedule created successfully",
-            "data": result
-        }
-        
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error creating schedule: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-@router.get("/schedules/page/{page_id}")
-async def get_page_schedules(
-    page_id: str,
-    db: Session = Depends(get_db)
-):
-    """ดึงตารางเวลาทั้งหมดของเพจ"""
-    try:
-        # แปลง page_id (string) เป็น database ID (integer)
-        pages = await fetch('http://localhost:8000/pages/')
-        page_data = pages.json()
-        current_page = next((p for p in page_data if p['page_id'] == page_id), None)
-        
-        if not current_page:
-            raise HTTPException(status_code=404, detail="Page not found")
-        
-        schedules = crud.get_schedules_with_details(db, current_page['ID'])
-        
-        return {
-            "status": "success",
-            "schedules": schedules,
-            "total": len(schedules)
-        }
-        
-    except Exception as e:
-        logger.error(f"Error getting schedules: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-@router.put("/schedules/{schedule_id}")
-async def update_schedule(
-    schedule_id: str,
-    schedule_data: ScheduleWithMessagesCreate,
-    db: Session = Depends(get_db)
-):
-    """แก้ไขตารางเวลา"""
-    try:
-        # ลบตารางเวลาเดิม
-        # หมายเหตุ: ในระบบจริงควรทำการ update แทนการลบและสร้างใหม่
-        # แต่เนื่องจากโครงสร้างซับซ้อน จึงใช้วิธีนี้ไปก่อน
-        
-        group_id = schedule_data.groups[0]
-        group = crud.get_customer_type_custom_by_id(db, group_id)
-        if not group:
-            raise HTTPException(status_code=404, detail="Group not found")
-        
-        # ลบข้อความและตารางเวลาเดิม
-        crud.delete_customer_type_messages_by_group(db, group_id)
-        
-        # สร้างใหม่
-        result = crud.create_schedule_with_messages(
-            db,
-            group.page_id,
-            group_id,
-            schedule_data.dict()
-        )
-        
-        return {
-            "status": "success",
-            "message": "Schedule updated successfully",
-            "data": result
-        }
-        
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error updating schedule: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-@router.delete("/schedules/{schedule_id}")
-async def delete_schedule(
-    schedule_id: int,
-    db: Session = Depends(get_db)
-):
-    """ลบตารางเวลา"""
-    deleted = crud.delete_message_schedule(db, schedule_id)
-    
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Schedule not found")
-    
-    return {
-        "status": "success",
-        "message": "Schedule deleted successfully"
     }

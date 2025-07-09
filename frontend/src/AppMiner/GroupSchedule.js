@@ -1,30 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import '../CSS/GroupSchedule.css';
-import { 
-  fetchPages, 
-  getCustomerGroups,
-  getGroupMessages,
-  createSchedule,
-  updateSchedule
-} from "../Features/Tool";
+import { fetchPages, connectFacebook } from "../Features/Tool";
 import Sidebar from "./Sidebar"; 
 
 function GroupSchedule() {
   const [pages, setPages] = useState([]);
   const [selectedPage, setSelectedPage] = useState("");
   const [selectedGroups, setSelectedGroups] = useState([]);
-  const [scheduleType, setScheduleType] = useState('immediate');
+  const [scheduleType, setScheduleType] = useState('immediate'); // immediate, scheduled, user-inactive
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
-  const [inactivityPeriod, setInactivityPeriod] = useState('1');
-  const [inactivityUnit, setInactivityUnit] = useState('days');
-  const [repeatType, setRepeatType] = useState('once');
+  const [inactivityPeriod, setInactivityPeriod] = useState('1'); // จำนวนเวลาที่หายไป
+  const [inactivityUnit, setInactivityUnit] = useState('days'); // หน่วยเวลา (hours, days, weeks, months)
+  const [repeatType, setRepeatType] = useState('once'); // once, daily, weekly, monthly
   const [repeatCount, setRepeatCount] = useState(1);
   const [repeatDays, setRepeatDays] = useState([]);
   const [endDate, setEndDate] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [editingScheduleId, setEditingScheduleId] = useState(null);
-  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const weekDays = [
@@ -37,50 +31,151 @@ function GroupSchedule() {
     { id: 6, name: 'เสาร์', short: 'ส' }
   ];
 
+  // Listen for page changes from Sidebar
   useEffect(() => {
-    const loadInitialData = async () => {
-      try {
-        const pagesData = await fetchPages();
-        setPages(pagesData);
-
-        const savedPage = localStorage.getItem("selectedPage");
-        if (savedPage) {
-          setSelectedPage(savedPage);
-          
-          // โหลดกลุ่มที่เลือก
-          const selectedGroupIds = JSON.parse(localStorage.getItem("selectedCustomerGroups") || '[]');
-          
-          // ดึงข้อมูลกลุ่มจาก database
-          const pagesResponse = await fetch('http://localhost:8000/pages/');
-          const pagesData = await pagesResponse.json();
-          const currentPage = pagesData.find(p => p.page_id === savedPage);
-          
-          if (currentPage) {
-            const groupsData = await getCustomerGroups(currentPage.ID);
-            const selectedGroupsData = groupsData.filter(g => selectedGroupIds.includes(g.id));
-            setSelectedGroups(selectedGroupsData);
-          }
-        }
-
-        // ตรวจสอบว่าเป็นการแก้ไขหรือไม่
-        const editingId = localStorage.getItem("editingScheduleId");
-        if (editingId) {
-          setEditingScheduleId(editingId);
-          // TODO: โหลดข้อมูล schedule จาก database
-        }
-
-        // ตั้งค่า default
-        const today = new Date();
-        setScheduleDate(today.toISOString().split('T')[0]);
-        setScheduleTime(today.toTimeString().slice(0, 5));
-
-      } catch (error) {
-        console.error('Error loading initial data:', error);
-      }
+    const handlePageChange = (event) => {
+      const pageId = event.detail.pageId;
+      setSelectedPage(pageId);
     };
 
-    loadInitialData();
+    window.addEventListener('pageChanged', handlePageChange);
+    
+    const savedPage = localStorage.getItem("selectedPage");
+    if (savedPage) {
+      setSelectedPage(savedPage);
+    }
+
+    return () => {
+      window.removeEventListener('pageChanged', handlePageChange);
+    };
   }, []);
+
+  const toggleDropdown = () => {
+    setIsDropdownOpen(!isDropdownOpen);
+  };
+
+  // 🔥 ฟังก์ชันดึงกลุ่มลูกค้าตาม page ID (รองรับ default groups)
+  const getGroupsForPage = (pageId) => {
+    if (!pageId) return [];
+    const key = `customerGroups_${pageId}`;
+    const userGroups = JSON.parse(localStorage.getItem(key) || '[]');
+    
+    // 🔥 ดึงข้อมูล default groups
+    const DEFAULT_GROUPS = [
+      { id: 'default_1', name: 'กลุ่มคนหาย', isDefault: true },
+      { id: 'default_2', name: 'กลุ่มคนหายนาน', isDefault: true },
+      { id: 'default_3', name: 'กลุ่มคนหายนานมาก', isDefault: true }
+    ];
+    
+    const defaultGroupsWithCustomNames = DEFAULT_GROUPS.map(group => {
+      const customNamesKey = `defaultGroupCustomNames_${pageId}`;
+      const customNames = JSON.parse(localStorage.getItem(customNamesKey) || '{}');
+      
+      return {
+        ...group,
+        name: customNames[group.id] || group.name
+      };
+    });
+    
+    return [...defaultGroupsWithCustomNames, ...userGroups];
+  };
+
+  // 🔥 ฟังก์ชันบันทึกตารางการส่งตาม page ID
+  const saveSchedulesForPage = (pageId, schedules) => {
+    if (!pageId) return;
+    const key = `miningSchedules_${pageId}`;
+    localStorage.setItem(key, JSON.stringify(schedules));
+  };
+
+  // 🔥 ฟังก์ชันดึงตารางการส่งตาม page ID
+  const getSchedulesForPage = (pageId) => {
+    if (!pageId) return [];
+    const key = `miningSchedules_${pageId}`;
+    return JSON.parse(localStorage.getItem(key) || '[]');
+  };
+
+  useEffect(() => {
+    // 🔥 ตรวจสอบว่า page ID ตรงกันหรือไม่
+    const selectedPageId = localStorage.getItem("selectedCustomerGroupsPageId");
+    const savedPage = localStorage.getItem("selectedPage");
+    
+    if (selectedPageId && selectedPageId !== savedPage) {
+      alert("กลุ่มลูกค้าที่เลือกมาจากเพจอื่น กรุณากลับไปเลือกใหม่");
+      navigate('/MinerGroup');
+      return;
+    }
+
+    // โหลดกลุ่มที่เลือก
+    const groups = JSON.parse(localStorage.getItem("selectedCustomerGroups") || '[]');
+    const allGroups = getGroupsForPage(savedPage);
+    const selectedGroupsData = allGroups.filter(g => groups.includes(g.id));
+    setSelectedGroups(selectedGroupsData);
+
+    if (savedPage) {
+      setSelectedPage(savedPage);
+    }
+
+    // 🔥 ตรวจสอบว่าเป็นการแก้ไขหรือไม่
+    const editingId = localStorage.getItem("editingScheduleId");
+    if (editingId) {
+      setEditingScheduleId(parseInt(editingId));
+    }
+
+    fetchPages()
+      .then(setPages)
+      .catch(err => console.error("ไม่สามารถโหลดเพจได้:", err));
+
+    // 🔥 โหลดการตั้งค่าที่บันทึกไว้ล่าสุด (ถ้ามี)
+    const savedScheduleKey = `lastScheduleSettings_${savedPage}`;
+    const savedSettings = localStorage.getItem(savedScheduleKey);
+    
+    if (savedSettings) {
+      try {
+        const settings = JSON.parse(savedSettings);
+        // โหลดค่าที่บันทึกไว้
+        setScheduleType(settings.scheduleType || 'immediate');
+        setScheduleDate(settings.scheduleDate || new Date().toISOString().split('T')[0]);
+        setScheduleTime(settings.scheduleTime || new Date().toTimeString().slice(0, 5));
+        setInactivityPeriod(settings.inactivityPeriod || '1');
+        setInactivityUnit(settings.inactivityUnit || 'days');
+        setRepeatType(settings.repeatType || 'once');
+        setRepeatCount(settings.repeatCount || 1);
+        setRepeatDays(settings.repeatDays || []);
+        setEndDate(settings.endDate || '');
+      } catch (error) {
+        console.error('Error loading saved settings:', error);
+        // ถ้าโหลดไม่สำเร็จ ใช้ค่า default
+        setDefaultScheduleValues();
+      }
+    } else {
+      // ถ้าไม่มีการบันทึกไว้ ใช้ค่า default
+      setDefaultScheduleValues();
+    }
+  }, [navigate]);
+
+  // 🔥 ฟังก์ชันตั้งค่า default
+  const setDefaultScheduleValues = () => {
+    const today = new Date();
+    const dateStr = today.toISOString().split('T')[0];
+    const timeStr = today.toTimeString().slice(0, 5);
+    setScheduleDate(dateStr);
+    setScheduleTime(timeStr);
+  };
+
+  const handlePageChange = (e) => {
+    const pageId = e.target.value;
+    setSelectedPage(pageId);
+    localStorage.setItem("selectedPage", pageId);
+  };
+
+  const toggleWeekDay = (dayId) => {
+    setRepeatDays(prev => {
+      if (prev.includes(dayId)) {
+        return prev.filter(id => id !== dayId);
+      }
+      return [...prev, dayId];
+    });
+  };
 
   const validateSchedule = () => {
     if (scheduleType === 'scheduled') {
@@ -120,22 +215,69 @@ function GroupSchedule() {
     return true;
   };
 
-  const saveSchedule = async () => {
+  const saveSchedule = () => {
     if (!validateSchedule()) return;
 
-    setLoading(true);
-    try {
-      // ดึงข้อความของแต่ละกลุ่มจาก database
-      const allMessages = [];
-      const selectedGroupIds = selectedGroups.map(g => g.id);
-      
-      for (const group of selectedGroups) {
-        const messages = await getGroupMessages(group.id);
-        allMessages.push(...messages);
-      }
+    // 🔥 บันทึกการตั้งค่าปัจจุบันสำหรับใช้ครั้งต่อไป
+    const currentSettings = {
+      scheduleType,
+      scheduleDate,
+      scheduleTime,
+      inactivityPeriod,
+      inactivityUnit,
+      repeatType,
+      repeatCount,
+      repeatDays,
+      endDate
+    };
+    
+    const savedScheduleKey = `lastScheduleSettings_${selectedPage}`;
+    localStorage.setItem(savedScheduleKey, JSON.stringify(currentSettings));
 
-      // เตรียมข้อมูลสำหรับบันทึก
+    // 🔥 ดึงข้อความที่บันทึกไว้แยกตามเพจ
+    const messageKey = `groupMessages_${selectedPage}`;
+    const messages = JSON.parse(localStorage.getItem(messageKey) || '[]');
+
+    // 🔥 ตรวจสอบว่าเป็นการแก้ไขหรือการสร้างใหม่
+    const schedules = getSchedulesForPage(selectedPage);
+    
+    if (editingScheduleId) {
+      // แก้ไขตารางเวลาที่มีอยู่ - ทับของเดิมเลย
+      const updatedSchedules = schedules.map(schedule => {
+        if (schedule.id === editingScheduleId) {
+          // ทับข้อมูลเดิมทั้งหมด
+          return {
+            id: schedule.id, // คง ID เดิมไว้
+            pageId: selectedPage,
+            type: scheduleType,
+            date: scheduleDate,
+            time: scheduleTime,
+            inactivityPeriod: scheduleType === 'user-inactive' ? inactivityPeriod : null,
+            inactivityUnit: scheduleType === 'user-inactive' ? inactivityUnit : null,
+            repeat: {
+              type: repeatType,
+              count: repeatCount,
+              days: repeatDays,
+              endDate: endDate
+            },
+            groups: selectedGroups.map(g => g.id),
+            groupNames: selectedGroups.map(g => g.name),
+            messages: messages,
+            createdAt: schedule.createdAt, // คงวันที่สร้างเดิม
+            updatedAt: new Date().toISOString(),
+            isForDefaultGroup: selectedGroups.some(g => g.isDefault) // 🔥 เพิ่ม flag
+          };
+        }
+        return schedule;
+      });
+      
+      saveSchedulesForPage(selectedPage, updatedSchedules);
+      alert("แก้ไขการตั้งเวลาสำเร็จ!");
+    } else {
+      // สร้างตารางเวลาใหม่
       const scheduleData = {
+        id: Date.now(),
+        pageId: selectedPage,
         type: scheduleType,
         date: scheduleDate,
         time: scheduleTime,
@@ -147,42 +289,25 @@ function GroupSchedule() {
           days: repeatDays,
           endDate: endDate
         },
-        groups: selectedGroupIds,
-        messages: allMessages
+        groups: selectedGroups.map(g => g.id),
+        groupNames: selectedGroups.map(g => g.name),
+        messages: messages,
+        createdAt: new Date().toISOString(),
+        isForDefaultGroup: selectedGroups.some(g => g.isDefault) // 🔥 เพิ่ม flag
       };
 
-      if (editingScheduleId) {
-        // แก้ไข schedule ที่มีอยู่
-        await updateSchedule(editingScheduleId, scheduleData);
-        alert("แก้ไขการตั้งเวลาสำเร็จ!");
-      } else {
-        // สร้าง schedule ใหม่
-        await createSchedule(scheduleData);
-        alert("บันทึกการตั้งเวลาสำเร็จ!");
-      }
-
-      // เคลียร์ข้อมูลที่เลือกไว้
-      localStorage.removeItem("selectedCustomerGroups");
-      localStorage.removeItem("selectedCustomerGroupsPageId");
-      localStorage.removeItem("editingScheduleId");
-
-      navigate('/MinerGroup');
-
-    } catch (error) {
-      console.error('Error saving schedule:', error);
-      alert("เกิดข้อผิดพลาดในการบันทึก: " + error.message);
-    } finally {
-      setLoading(false);
+      schedules.push(scheduleData);
+      saveSchedulesForPage(selectedPage, schedules);
+      alert("บันทึกการตั้งเวลาสำเร็จ!");
     }
-  };
 
-  const toggleWeekDay = (dayId) => {
-    setRepeatDays(prev => {
-      if (prev.includes(dayId)) {
-        return prev.filter(id => id !== dayId);
-      }
-      return [...prev, dayId];
-    });
+    // 🔥 เคลียร์ข้อมูลที่เลือกไว้
+    localStorage.removeItem("selectedCustomerGroups");
+    localStorage.removeItem("selectedCustomerGroupsPageId");
+    localStorage.removeItem(messageKey);
+    localStorage.removeItem("editingScheduleId");
+
+    navigate('/MinerGroup'); // กลับไปยังหน้ากลุ่มลูกค้า
   };
 
   const getScheduleSummary = () => {
@@ -243,16 +368,19 @@ function GroupSchedule() {
   };
 
   const selectedPageInfo = pages.find(p => p.id === selectedPage);
+  const isForDefaultGroup = selectedGroups.some(g => g.isDefault); // 🔥 ตรวจสอบว่าเป็น default group
 
   return (
     <div className="app-container">
-      <Sidebar />
+       <Sidebar />
 
       <div className="schedule-container">
         <div className="schedule-header">
           <h1 className="schedule-title">
             <span className="title-icon">⏰</span>
-            {editingScheduleId ? 'แก้ไขการตั้งเวลา' : 'ตั้งเวลาและความถี่การส่ง'}
+            {editingScheduleId ? 'แก้ไขการตั้งเวลา' : 
+             isForDefaultGroup ? 'ตั้งเวลาและความถี่การส่ง - กลุ่มพื้นฐาน' :
+             'ตั้งเวลาและความถี่การส่ง'}
             {selectedPageInfo && (
               <span style={{ fontSize: '18px', color: '#718096', marginLeft: '10px' }}>
                 - {selectedPageInfo.name}
@@ -278,8 +406,17 @@ function GroupSchedule() {
             <div className="summary-item">
               <span className="summary-label">กลุ่มที่เลือก:</span>
               <span className="summary-value">
-                {selectedGroups.map(g => g.type_name).join(', ') || '-'}
+                {selectedGroups.map(g => (
+                  <span key={g.id}>
+                    {g.isDefault && '⭐ '}
+                    {g.name}
+                  </span>
+                )).reduce((prev, curr, i) => [prev, i > 0 && ', ', curr], [])}
               </span>
+            </div>
+            <div className="summary-item">
+              <span className="summary-label">จำนวนข้อความ:</span>
+              <span className="summary-value">{JSON.parse(localStorage.getItem(`groupMessages_${selectedPage}`) || '[]').length} ข้อความ</span>
             </div>
           </div>
         </div>
@@ -322,187 +459,177 @@ function GroupSchedule() {
                   type="radio"
                   name="scheduleType"
                   value="user-inactive"
-                 checked={scheduleType === 'user-inactive'}
-                 onChange={(e) => setScheduleType(e.target.value)}
-               />
-               <span className="radio-label">
-                 <span className="radio-icon">🕰️</span>
-                 ตามระยะเวลาที่หาย
-               </span>
-             </label>
-           </div>
+                  checked={scheduleType === 'user-inactive'}
+                  onChange={(e) => setScheduleType(e.target.value)}
+                />
+                <span className="radio-label">
+                  <span className="radio-icon">🕰️</span>
+                  ตามระยะเวลาที่หาย
+                </span>
+              </label>
+            </div>
 
-           {scheduleType === 'scheduled' && (
-             <div className="datetime-inputs">
-               <div className="form-group">
-                 <label className="form-label">วันที่:</label>
-                 <input
-                   type="date"
-                   value={scheduleDate}
-                   onChange={(e) => setScheduleDate(e.target.value)}
-                   min={new Date().toISOString().split('T')[0]}
-                   className="form-input"
-                 />
-               </div>
-               
-               <div className="form-group">
-                 <label className="form-label">เวลา:</label>
-                 <input
-                   type="time"
-                   value={scheduleTime}
-                   onChange={(e) => setScheduleTime(e.target.value)}
-                   className="form-input"
-                 />
-               </div>
-             </div>
-           )}
+            {scheduleType === 'scheduled' && (
+              <div className="datetime-inputs">
+                <div className="form-group">
+                  <label className="form-label">วันที่:</label>
+                  <input
+                    type="date"
+                    value={scheduleDate}
+                    onChange={(e) => setScheduleDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="form-input"
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label className="form-label">เวลา:</label>
+                  <input
+                    type="time"
+                    value={scheduleTime}
+                    onChange={(e) => setScheduleTime(e.target.value)}
+                    className="form-input"
+                  />
+                </div>
+              </div>
+            )}
 
-           {scheduleType === 'user-inactive' && (
-             <div className="inactivity-settings">
-               <label className="form-label">ส่งข้อความเมื่อ User หายไปเกิน:</label>
-               <div className="inactivity-inputs">
-                 <input
-                   type="number"
-                   value={inactivityPeriod}
-                   onChange={(e) => setInactivityPeriod(e.target.value)}
-                   min="1"
-                   className="form-input inactivity-number"
-                 />
-                 <select
-                   value={inactivityUnit}
-                   onChange={(e) => setInactivityUnit(e.target.value)}
-                   className="form-input inactivity-select"
-                 >
-                   <option value="minutes">นาที</option>
-                   <option value="hours">ชั่วโมง</option>
-                   <option value="days">วัน</option>
-                   <option value="weeks">สัปดาห์</option>
-                   <option value="months">เดือน</option>
-                 </select>
-               </div>
-               <p className="inactivity-hint">
-                 💡 ระบบจะตรวจสอบทุกๆ ชั่วโมง และส่งข้อความไปยัง User ที่ไม่มีการตอบกลับตามระยะเวลาที่กำหนด
-               </p>
-             </div>
-           )}
-         </div>
+            {scheduleType === 'user-inactive' && (
+              <div className="inactivity-settings">
+                <label className="form-label">ส่งข้อความเมื่อ User หายไปเกิน:</label>
+                <div className="inactivity-inputs">
+                  <input
+                    type="number"
+                    value={inactivityPeriod}
+                    onChange={(e) => setInactivityPeriod(e.target.value)}
+                    min="1"
+                    className="form-input inactivity-number"
+                  />
+                  <select
+                    value={inactivityUnit}
+                    onChange={(e) => setInactivityUnit(e.target.value)}
+                    className="form-input inactivity-select"
+                  >
+                    <option value="minutes">นาที</option>
+                    <option value="hours">ชั่วโมง</option>
+                    <option value="days">วัน</option>
+                    <option value="weeks">สัปดาห์</option>
+                    <option value="months">เดือน</option>
+                  </select>
+                </div>
+                <p className="inactivity-hint">
+                  💡 ระบบจะตรวจสอบทุกๆ ชั่วโมง และส่งข้อความไปยัง User ที่ไม่มีการตอบกลับตามระยะเวลาที่กำหนด
+                </p>
+              </div>
+            )}
+          </div>
 
-         <div className="form-section">
-           <h3 className="section-title">🔄 ความถี่ในการส่ง</h3>
-           
-           <div className="repeat-type-selector">
-             <label className="radio-option">
-               <input
-                 type="radio"
-                 name="repeatType"
-                 value="once"
-                 checked={repeatType === 'once'}
-                 onChange={(e) => setRepeatType(e.target.value)}
-               />
-               <span className="radio-label">ครั้งเดียว</span>
-             </label>
-             
-             <label className="radio-option">
-               <input
-                 type="radio"
-                 name="repeatType"
-                 value="daily"
-                 checked={repeatType === 'daily'}
-                 onChange={(e) => setRepeatType(e.target.value)}
-               />
-               <span className="radio-label">ทุกวัน</span>
-             </label>
-             
-             <label className="radio-option">
-               <input
-                 type="radio"
-                 name="repeatType"
-                 value="weekly"
-                 checked={repeatType === 'weekly'}
-                 onChange={(e) => setRepeatType(e.target.value)}
-               />
-               <span className="radio-label">ทุกสัปดาห์</span>
-             </label>
-             
-             <label className="radio-option">
-               <input
-                 type="radio"
-                 name="repeatType"
-                 value="monthly"
-                 checked={repeatType === 'monthly'}
-                 onChange={(e) => setRepeatType(e.target.value)}
-               />
-               <span className="radio-label">ทุกเดือน</span>
-             </label>
-           </div>
+          <div className="form-section">
+            <h3 className="section-title">🔄 ความถี่ในการส่ง</h3>
+            
+            <div className="repeat-type-selector">
+              <label className="radio-option">
+                <input
+                  type="radio"
+                  name="repeatType"
+                  value="once"
+                  checked={repeatType === 'once'}
+                  onChange={(e) => setRepeatType(e.target.value)}
+                />
+                <span className="radio-label">ครั้งเดียว</span>
+              </label>
+              
+              <label className="radio-option">
+                <input
+                  type="radio"
+                  name="repeatType"
+                  value="daily"
+                  checked={repeatType === 'daily'}
+                  onChange={(e) => setRepeatType(e.target.value)}
+                />
+                <span className="radio-label">ทุกวัน</span>
+              </label>
+              
+              <label className="radio-option">
+                <input
+                  type="radio"
+                  name="repeatType"
+                  value="weekly"
+                  checked={repeatType === 'weekly'}
+                  onChange={(e) => setRepeatType(e.target.value)}
+                />
+                <span className="radio-label">ทุกสัปดาห์</span>
+              </label>
+              
+              <label className="radio-option">
+                <input
+                  type="radio"
+                  name="repeatType"
+                  value="monthly"
+                  checked={repeatType === 'monthly'}
+                  onChange={(e) => setRepeatType(e.target.value)}
+                />
+                <span className="radio-label">ทุกเดือน</span>
+              </label>
+            </div>
 
-           {repeatType === 'weekly' && (
-             <div className="weekdays-selector">
-               <label className="form-label">เลือกวันที่ต้องการส่ง:</label>
-               <div className="weekdays-grid">
-                 {weekDays.map(day => (
-                   <button
-                     key={day.id}
-                     type="button"
-                     className={`weekday-btn ${repeatDays.includes(day.id) ? 'active' : ''}`}
-                     onClick={() => toggleWeekDay(day.id)}
-                   >
-                     {day.short}
-                   </button>
-                 ))}
-               </div>
-             </div>
-           )}
+            {repeatType === 'weekly' && (
+              <div className="weekdays-selector">
+                <label className="form-label">เลือกวันที่ต้องการส่ง:</label>
+                <div className="weekdays-grid">
+                  {weekDays.map(day => (
+                    <button
+                      key={day.id}
+                      type="button"
+                      className={`weekday-btn ${repeatDays.includes(day.id) ? 'active' : ''}`}
+                      onClick={() => toggleWeekDay(day.id)}
+                    >
+                      {day.short}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
-           {repeatType !== 'once' && (
-             <div className="repeat-options">
-               <div className="form-group">
-                 <label className="form-label">สิ้นสุดวันที่ (ไม่บังคับ):</label>
-                 <input
-                   type="date"
-                   value={endDate}
-                   onChange={(e) => setEndDate(e.target.value)}
-                   min={scheduleDate || new Date().toISOString().split('T')[0]}
-                   className="form-input"
-                 />
-               </div>
-             </div>
-           )}
-         </div>
+            {repeatType !== 'once' && (
+              <div className="repeat-options">
+                <div className="form-group">
+                  <label className="form-label">สิ้นสุดวันที่ (ไม่บังคับ):</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    min={scheduleDate || new Date().toISOString().split('T')[0]}
+                    className="form-input"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
 
-         <div className="schedule-preview">
-           <h3 className="preview-title">📋 สรุปการตั้งเวลา</h3>
-           <div className="preview-content">
-             {getScheduleSummary()}
-           </div>
-         </div>
+          <div className="schedule-preview">
+            <h3 className="preview-title">📋 สรุปการตั้งเวลา</h3>
+            <div className="preview-content">
+              {getScheduleSummary()}
+            </div>
+          </div>
 
-         <div className="action-buttons">
-           <Link to="/GroupDefault" className="back-btn">
-             ← กลับ
-           </Link>
-           <button
-             onClick={saveSchedule}
-             className="save-schedule-btn"
-             disabled={loading}
-           >
-             {loading ? (
-               <>
-                 <span className="btn-icon">⏳</span>
-                 กำลังบันทึก...
-               </>
-             ) : (
-               <>
-                 <span className="btn-icon">💾</span>
-                 {editingScheduleId ? 'บันทึกการแก้ไข' : 'บันทึกการตั้งค่า'}
-               </>
-             )}
-           </button>
-         </div>
-       </div>
-     </div>
-   </div>
- );
+          <div className="action-buttons">
+            <Link to="/GroupDefault" className="back-btn">
+              ← กลับ
+            </Link>
+            <button
+              onClick={saveSchedule}
+              className="save-schedule-btn"
+            >
+              <span className="btn-icon">💾</span>
+              {editingScheduleId ? 'บันทึกการแก้ไข' : 'บันทึกการตั้งค่า'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default GroupSchedule;

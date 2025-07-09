@@ -1,8 +1,7 @@
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, List
-from typing import List, Dict, Any
-from datetime import datetime, timedelta
+
 
 class FacebookPageBase(BaseModel):
     page_id: str
@@ -157,97 +156,3 @@ class CustomerTypeStatistics(BaseModel):
     type_name: str
     customer_count: int
     is_active: bool
-    
-# ========== CustomerTypeMessage Schemas ==========
-
-class CustomerTypeMessageBase(BaseModel):
-    message_type: str
-    content: str
-    dir: Optional[str] = ""
-    display_order: int
-
-class CustomerTypeMessageCreate(CustomerTypeMessageBase):
-    customer_type_custom_id: Optional[int] = None
-    page_customer_type_knowledge_id: Optional[int] = None
-
-class CustomerTypeMessageUpdate(BaseModel):
-    message_type: Optional[str] = None
-    content: Optional[str] = None
-    dir: Optional[str] = None
-    display_order: Optional[int] = None
-
-class CustomerTypeMessageInDB(CustomerTypeMessageBase):
-    id: int
-    page_id: int
-    customer_type_custom_id: Optional[int]
-    page_customer_type_knowledge_id: Optional[int]
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        orm_mode = True
-
-class CustomerTypeMessageResponse(BaseModel):
-    id: int
-    page_id: int
-    customer_type_custom_id: Optional[int]
-    message_type: str
-    content: str
-    dir: str
-    display_order: int
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        orm_mode = True
-
-class BulkMessagesCreate(BaseModel):
-    messages: List[Dict[str, Any]]
-    
-# ========== MessageSchedule Schemas ==========
-
-class MessageScheduleBase(BaseModel):
-    send_type: str  # immediate, scheduled, after_inactive
-    scheduled_at: Optional[datetime] = None
-    send_after_inactive: Optional[timedelta] = None
-    frequency: Optional[str] = "once"
-
-class MessageScheduleCreate(MessageScheduleBase):
-    customer_type_message_id: int
-
-class MessageScheduleUpdate(BaseModel):
-    send_type: Optional[str] = None
-    scheduled_at: Optional[datetime] = None
-    send_after_inactive: Optional[timedelta] = None
-    frequency: Optional[str] = None
-
-class MessageScheduleInDB(MessageScheduleBase):
-    id: int
-    customer_type_message_id: int
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        orm_mode = True
-
-class ScheduleWithMessagesCreate(BaseModel):
-    type: str  # immediate, scheduled, user-inactive
-    date: Optional[str] = None
-    time: Optional[str] = None
-    inactivityPeriod: Optional[str] = None
-    inactivityUnit: Optional[str] = None
-    repeat: Optional[Dict[str, Any]] = {"type": "once"}
-    groups: List[int]
-    messages: List[Dict[str, Any]]
-
-class ScheduleDetailResponse(BaseModel):
-    id: int
-    group_id: int
-    group_name: str
-    type: str
-    scheduled_at: Optional[str]
-    send_after_inactive: Optional[str]
-    frequency: str
-    messages: List[Dict[str, Any]]
-    created_at: datetime
-    updated_at: datetime
