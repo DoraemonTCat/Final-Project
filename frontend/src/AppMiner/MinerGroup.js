@@ -444,36 +444,17 @@ const saveEditGroup = async () => {
   };
 
   // ฟังก์ชันแก้ไขข้อความในกลุ่ม
-  const editGroupMessages = (groupId) => {
-    const schedules = getGroupSchedules(groupId);
-    const group = customerGroups.find(g => g.id === groupId);
-    
-    localStorage.setItem("selectedCustomerGroups", JSON.stringify([groupId]));
-    localStorage.setItem("selectedCustomerGroupsPageId", selectedPage);
-    
-    if (schedules.length > 1) {
-      // ถ้ามีหลาย schedule ให้เลือก
-      alert("กลุ่มนี้มีการตั้งเวลาหลายรายการ กรุณาแก้ไขผ่านหน้า Dashboard");
-      return;
-    } else if (schedules.length === 1) {
-      const schedule = schedules[0];
-      localStorage.setItem("editingScheduleId", schedule.id.toString());
-      
-      const messageKey = `groupMessages_${selectedPage}`;
-      localStorage.setItem(messageKey, JSON.stringify(schedule.messages || []));
-      
-      navigate('/GroupDefault');
-    } else {
-      localStorage.setItem("editingMode", "true");
-      
-      if (group && group.messages) {
-        const messageKey = `groupMessages_${selectedPage}`;
-        localStorage.setItem(messageKey, JSON.stringify(group.messages));
-      }
-      
-      navigate('/GroupDefault');
-    }
-  };
+  const editGroupMessages = async (groupId) => {
+  const group = customerGroups.find(g => g.id === groupId);
+  
+  localStorage.setItem("selectedCustomerGroups", JSON.stringify([groupId]));
+  localStorage.setItem("selectedCustomerGroupsPageId", selectedPage);
+  
+  // ไม่ต้องบันทึกข้อความใน localStorage แล้ว
+  // ให้ GroupDefault ไปดึงจาก database เอง
+  
+  navigate('/GroupDefault');
+};
 
   // ฟังก์ชันแสดงตารางเวลาของกลุ่ม
   const viewGroupSchedules = (group) => {

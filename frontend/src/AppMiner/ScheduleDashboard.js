@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import '../CSS/ScheduleDashboard.css';
 import Sidebar from "./Sidebar";
+import { getPageSchedules, deleteSchedule } from "../Features/Tool";
 
 function ScheduleDashboard() {
   const [selectedPage, setSelectedPage] = useState('');
@@ -9,9 +10,7 @@ function ScheduleDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
-
-  // 🔥 กลุ่ม Default IDs
-  const DEFAULT_GROUP_IDS = ['default_1', 'default_2', 'default_3'];
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const savedPage = localStorage.getItem("selectedPage");
@@ -34,49 +33,23 @@ function ScheduleDashboard() {
     }
   };
 
-  const loadSchedules = (pageId) => {
-    const key = `miningSchedules_${pageId}`;
-    const savedSchedules = JSON.parse(localStorage.getItem(key) || '[]');
-
-    // 🔥 ดึงกลุ่มทั้งหมดของเพจนี้ (รวม default groups)
-    const groupKey = `customerGroups_${pageId}`;
-    const userGroups = JSON.parse(localStorage.getItem(groupKey) || '[]');
-    
-    // 🔥 สร้าง array ของ group IDs ทั้งหมด (รวม default)
-    const userGroupIds = userGroups.map(g => g.id);
-    const allGroupIds = [...DEFAULT_GROUP_IDS, ...userGroupIds];
-
-    // 🔥 filter schedule ที่กลุ่มยังอยู่ (รวม default groups)
-    const filteredSchedules = savedSchedules.filter(sch =>
-      sch.groups?.some(gid => allGroupIds.includes(gid))
-    );
-
-    // 🔥 เพิ่มชื่อกลุ่มให้กับ schedule (รวม default groups)
-    const schedulesWithNames = filteredSchedules.map(schedule => {
-      const groupNames = schedule.groups.map(groupId => {
-        // ตรวจสอบว่าเป็น default group หรือไม่
-        if (groupId === 'default_1') return 'กลุ่มคนหาย';
-        if (groupId === 'default_2') return 'กลุ่มคนหายนาน';
-        if (groupId === 'default_3') return 'กลุ่มคนหายนานมาก';
-        
-        // ถ้าไม่ใช่ default ให้หาจาก user groups
-        const userGroup = userGroups.find(g => g.id === groupId);
-        return userGroup?.name || 'ไม่ระบุ';
-      });
-
-      return {
-        ...schedule,
-        groupNames
-      };
-    });
-
-    setSchedules(schedulesWithNames);
+  const loadSchedules = async (pageId) => {
+    setLoading(true);
+    try {
+      const data = await getPageSchedules(pageId);
+      setSchedules(data.schedules || []);
+    } catch (error) {
+      console.error('Error loading schedules:', error);
+      setSchedules([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const refreshStatus = async () => {
     setRefreshing(true);
     try {
-      loadSchedules(selectedPage);
+      await loadSchedules(selectedPage);
       await loadActiveSchedules(selectedPage);
       alert("รีเฟรชสถานะสำเร็จ!");
     } catch (error) {
@@ -93,8 +66,10 @@ function ScheduleDashboard() {
     if (schedule.type === 'immediate') return 'ส่งข้อความแล้ว';
     if (schedule.type === 'user-inactive') return isActive ? 'กำลังทำงาน' : 'หยุดชั่วคราว';
     if (schedule.type === 'scheduled') {
-      const scheduleTime = new Date(`${schedule.date}T${schedule.time}`);
-      if (scheduleTime > new Date()) return isActive ? 'กำลังทำงาน' : 'หยุดชั่วคราว';
+      if (schedule.scheduled_at) {
+        const scheduleTime = new Date(schedule.scheduled_at);
+        if (scheduleTime > new Date()) return isActive ? 'กำลังทำงาน' : 'หยุดชั่วคราว';
+      }
       return 'ส่งข้อความแล้ว';
     }
     return 'ไม่ทราบสถานะ';
@@ -155,6 +130,21 @@ function ScheduleDashboard() {
     }
   };
 
+  const handleDeleteSchedule = async (scheduleId) => {
+    if (!window.confirm("คุณต้องการลบตารางเวลานี้หรือไม่?")) {
+      return;
+    }
+
+    try {
+      await deleteSchedule(scheduleId);
+      alert("ลบตารางเวลาสำเร็จ!");
+      await loadSchedules(selectedPage);
+    } catch (error) {
+      console.error('Error deleting schedule:', error);
+      alert("เกิดข้อผิดพลาดในการลบตารางเวลา");
+    }
+  };
+
   const viewScheduleDetails = (schedule) => {
     setSelectedSchedule(schedule);
     setShowDetailModal(true);
@@ -162,14 +152,24 @@ function ScheduleDashboard() {
 
   const getScheduleDescription = (schedule) => {
     if (schedule.type === 'immediate') return 'ส่งทันที';
-    if (schedule.type === 'scheduled') return `${new Date(schedule.date).toLocaleDateString('th-TH')} ${schedule.time}`;
-    if (schedule.type === 'user-inactive') {
-      return `${schedule.inactivityPeriod} ${
-        schedule.inactivityUnit === 'minutes' ? 'นาที' :
-        schedule.inactivityUnit === 'hours' ? 'ชั่วโมง' :
-        schedule.inactivityUnit === 'days' ? 'วัน' :
-        schedule.inactivityUnit === 'weeks' ? 'สัปดาห์' : 'เดือน'
-      }`;
+    if (schedule.type === 'scheduled' && schedule.scheduled_at) {
+      const date = new Date(schedule.scheduled_at);
+      return `${date.toLocaleDateString('th-TH')} ${date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`;
+    }
+    if (schedule.type === 'user-inactive' && schedule.send_after_inactive) {
+      // แปลง timedelta string เป็นข้อความ
+      const match = schedule.send_after_inactive.match(/(\d+)\s*(day|hour|minute)/);
+      if (match) {
+        const value = match[1];
+        const unit = match[2];
+        const unitThai = {
+          'day': 'วัน',
+          'hour': 'ชั่วโมง',
+          'minute': 'นาที'
+        };
+        return `${value} ${unitThai[unit] || unit}`;
+      }
+      return schedule.send_after_inactive;
     }
     return '-';
   };
@@ -180,11 +180,6 @@ function ScheduleDashboard() {
 
   const goBack = () => {
     window.location.href = '/MinerGroup';
-  };
-
-  // 🔥 ฟังก์ชันตรวจสอบว่าเป็นกลุ่ม default หรือไม่
-  const isDefaultGroup = (groupIds) => {
-    return groupIds.some(id => DEFAULT_GROUP_IDS.includes(id));
   };
 
   return (
@@ -248,7 +243,11 @@ function ScheduleDashboard() {
 
         <div className="schedules-table">
           <h2>รายการตารางเวลา</h2>
-          {schedules.length === 0 ? (
+          {loading ? (
+            <div className="loading-state">
+              <p>กำลังโหลดข้อมูล...</p>
+            </div>
+          ) : schedules.length === 0 ? (
             <div className="empty-table">
               <p>ยังไม่มีตารางเวลาสำหรับเพจนี้</p>
               <button onClick={goToMinerGroup} className="create-link">
@@ -268,18 +267,14 @@ function ScheduleDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {schedules.map((schedule, index) => {
+                {schedules.map((schedule) => {
                   const status = getScheduleStatus(schedule);
-                  const isDefault = isDefaultGroup(schedule.groups || []);
                   
                   return (
-                    <tr key={schedule.id} className={isDefault ? 'default-schedule-row' : ''}>
+                    <tr key={schedule.id}>
                       <td>
                         <div className="group-names-cell">
-                          {schedule.groupNames?.join(', ') || 'ไม่ระบุ'}
-                          {isDefault && (
-                            <span className="default-badge-small">พื้นฐาน</span>
-                          )}
+                          {schedule.group_name || 'ไม่ระบุ'}
                         </div>
                       </td>
                       <td>
@@ -312,6 +307,12 @@ function ScheduleDashboard() {
                             {status === 'กำลังทำงาน' ? '⏸️ หยุด' : '▶️ เริ่ม'}
                           </button>
                         )}
+                        <button 
+                          className="action-btn delete-btn"
+                          onClick={() => handleDeleteSchedule(schedule.id)}
+                        >
+                          🗑️ ลบ
+                        </button>
                       </td>
                     </tr>
                   );
@@ -342,16 +343,12 @@ function ScheduleDashboard() {
                   selectedSchedule.type === 'immediate' ? 'ส่งทันที' :
                   selectedSchedule.type === 'scheduled' ? 'ตามเวลา' : 'User หายไป'
                 }</p>
-                <p><strong>กลุ่ม:</strong> {selectedSchedule.groupNames?.join(', ') || 'ไม่ระบุ'}
-                  {isDefaultGroup(selectedSchedule.groups || []) && (
-                    <span className="default-badge-small" style={{ marginLeft: '8px' }}>พื้นฐาน</span>
-                  )}
-                </p>
+                <p><strong>กลุ่ม:</strong> {selectedSchedule.group_name || 'ไม่ระบุ'}</p>
                 <p><strong>เงื่อนไข:</strong> {getScheduleDescription(selectedSchedule)}</p>
-                {selectedSchedule.repeat && selectedSchedule.repeat.type !== 'once' && (
+                {selectedSchedule.frequency && selectedSchedule.frequency !== 'once' && (
                   <p><strong>ทำซ้ำ:</strong> {
-                    selectedSchedule.repeat.type === 'daily' ? 'ทุกวัน' :
-                    selectedSchedule.repeat.type === 'weekly' ? 'ทุกสัปดาห์' : 'ทุกเดือน'
+                    selectedSchedule.frequency === 'daily' ? 'ทุกวัน' :
+                    selectedSchedule.frequency === 'weekly' ? 'ทุกสัปดาห์' : 'ทุกเดือน'
                   }</p>
                 )}
               </div>
@@ -376,9 +373,9 @@ function ScheduleDashboard() {
               <div className="detail-section">
                 <h4>สถานะ</h4>
                 <p><strong>สถานะปัจจุบัน:</strong> {getScheduleStatus(selectedSchedule)}</p>
-                <p><strong>สร้างเมื่อ:</strong> {new Date(selectedSchedule.createdAt).toLocaleString('th-TH')}</p>
-                {selectedSchedule.updatedAt && (
-                  <p><strong>แก้ไขล่าสุด:</strong> {new Date(selectedSchedule.updatedAt).toLocaleString('th-TH')}</p>
+                <p><strong>สร้างเมื่อ:</strong> {new Date(selectedSchedule.created_at).toLocaleString('th-TH')}</p>
+                {selectedSchedule.updated_at && (
+                  <p><strong>แก้ไขล่าสุด:</strong> {new Date(selectedSchedule.updated_at).toLocaleString('th-TH')}</p>
                 )}
               </div>
             </div>

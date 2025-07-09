@@ -199,3 +199,75 @@ export async function autoGroupCustomer(pageId, customerPsid, messageText) {
   if (!res.ok) throw new Error("ไม่สามารถจัดกลุ่มอัตโนมัติได้");
   return res.json();
 }
+
+// ========== Customer Group Messages Functions ==========
+
+export async function saveGroupMessages(groupId, messages) {
+  const res = await fetch(`http://localhost:8000/customer-groups/${groupId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages }),
+  });
+  if (!res.ok) throw new Error("ไม่สามารถบันทึกข้อความได้");
+  return res.json();
+}
+
+export async function getGroupMessages(groupId) {
+  const res = await fetch(`http://localhost:8000/customer-groups/${groupId}/messages`);
+  if (!res.ok) throw new Error("ไม่สามารถโหลดข้อความได้");
+  return res.json();
+}
+
+export async function updateGroupMessage(messageId, updateData) {
+  const res = await fetch(`http://localhost:8000/customer-type-messages/${messageId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updateData),
+  });
+  if (!res.ok) throw new Error("ไม่สามารถแก้ไขข้อความได้");
+  return res.json();
+}
+
+export async function deleteGroupMessage(messageId) {
+  const res = await fetch(`http://localhost:8000/customer-type-messages/${messageId}`, {
+    method: "DELETE"
+  });
+  if (!res.ok) throw new Error("ไม่สามารถลบข้อความได้");
+  return res.json();
+}
+
+// ========== Message Schedule Functions ==========
+
+export async function createSchedule(scheduleData) {
+  const res = await fetch('http://localhost:8000/schedules', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(scheduleData)
+  });
+  if (!res.ok) throw new Error('ไม่สามารถสร้างตารางเวลาได้');
+  return res.json();
+}
+
+export async function getPageSchedules(pageId) {
+  const res = await fetch(`http://localhost:8000/schedules/page/${pageId}`);
+  if (!res.ok) throw new Error('ไม่สามารถดึงตารางเวลาได้');
+  return res.json();
+}
+
+export async function updateSchedule(scheduleId, scheduleData) {
+  const res = await fetch(`http://localhost:8000/schedules/${scheduleId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(scheduleData)
+  });
+  if (!res.ok) throw new Error('ไม่สามารถแก้ไขตารางเวลาได้');
+  return res.json();
+}
+
+export async function deleteSchedule(scheduleId) {
+  const res = await fetch(`http://localhost:8000/schedules/${scheduleId}`, {
+    method: 'DELETE'
+  });
+  if (!res.ok) throw new Error('ไม่สามารถลบตารางเวลาได้');
+  return res.json();
+}

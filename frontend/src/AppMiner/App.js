@@ -921,94 +921,90 @@ useEffect(() => {
   };
 
   const sendMessagesBySelectedSets = async (messageSetIds) => {
-    if (!Array.isArray(messageSetIds) || selectedConversationIds.length === 0) {
-      return;
-    }
+  if (!Array.isArray(messageSetIds) || selectedConversationIds.length === 0) {
+    return;
+  }
 
-    try {
-      let successCount = 0;
-      let failCount = 0;
+  try {
+    let successCount = 0;
+    let failCount = 0;
 
-      const notification = document.createElement('div');
-      notification.className = 'send-notification';
-      notification.innerHTML = `
-        <div class="notification-content">
-          <div class="notification-icon">🚀</div>
-          <div class="notification-text">
-            <strong>กำลังส่งข้อความ...</strong>
-            <span>ส่งไปยัง ${selectedConversationIds.length} การสนทนา</span>
-          </div>
+    const notification = document.createElement('div');
+    notification.className = 'send-notification';
+    notification.innerHTML = `
+      <div class="notification-content">
+        <div class="notification-icon">🚀</div>
+        <div class="notification-text">
+          <strong>กำลังส่งข้อความ...</strong>
+          <span>ส่งไปยัง ${selectedConversationIds.length} การสนทนา</span>
         </div>
-      `;
-      document.body.appendChild(notification);
+      </div>
+    `;
+    document.body.appendChild(notification);
 
-      for (const conversationId of selectedConversationIds) {
-        const selectedConv = displayData.find(conv => conv.conversation_id === conversationId);
-        const psid = selectedConv?.raw_psid;
+    for (const conversationId of selectedConversationIds) {
+      const selectedConv = displayData.find(conv => conv.conversation_id === conversationId);
+      const psid = selectedConv?.raw_psid;
 
-        if (!psid) {
-          failCount++;
-          continue;
-        }
+      if (!psid) {
+        failCount++;
+        continue;
+      }
 
-        try {
-          for (const setId of messageSetIds) {
-            const response = await fetch(`http://localhost:8000/custom_messages/${setId}`);
-            if (!response.ok) continue;
-            
-            const messages = await response.json();
-            const sortedMessages = messages.sort((a, b) => a.display_order - b.display_order);
+      try {
+        for (const setId of messageSetIds) {
+          const response = await fetch(`http://localhost:8000/custom_messages/${setId}`);
+          if (!response.ok) continue;
+          
+          const messages = await response.json();
+          const sortedMessages = messages.sort((a, b) => a.display_order - b.display_order);
 
-            for (const messageObj of sortedMessages) {
-              let messageContent = messageObj.content;
+          for (const messageObj of sortedMessages) {
+            let messageContent = messageObj.content;
 
-              if (messageObj.message_type === "image") {
-                messageContent = `http://localhost:8000/images/${messageContent.replace('[IMAGE] ', '')}`;
-              } else if (messageObj.message_type === "video") {
-                messageContent = `http://localhost:8000/videos/${messageContent.replace('[VIDEO] ', '')}`;
-              }
-
-              // 🔥 เพิ่ม parameter is_system_message
-              await fetch(`http://localhost:8000/send/${selectedPage}/${psid}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
-                  message: messageContent,
-                  type: messageObj.message_type,
-                  is_system_message: true  // 🔥 บอกว่าเป็นข้อความจากระบบ
-                }),
-              });
-
-              await new Promise(resolve => setTimeout(resolve, 500));
+            if (messageObj.message_type === "image") {
+              messageContent = `http://localhost:8000/images/${messageContent.replace('[IMAGE] ', '')}`;
+            } else if (messageObj.message_type === "video") {
+              messageContent = `http://localhost:8000/videos/${messageContent.replace('[VIDEO] ', '')}`;
             }
 
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await fetch(`http://localhost:8000/send/${selectedPage}/${psid}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ 
+                message: messageContent,
+                type: messageObj.message_type,
+                is_system_message: true
+              }),
+            });
+
+            await new Promise(resolve => setTimeout(resolve, 500));
           }
-          
-          successCount++;
-        } catch (err) {
-          console.error(`ส่งข้อความไม่สำเร็จสำหรับ ${conversationId}:`, err);
-          failCount++;
+
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
-      }
-
-      notification.remove();
-
-      if (successCount > 0) {   
-        showSuccessNotification(`ส่งข้อความสำเร็จ ${successCount} การสนทนา`);
-        setSelectedConversationIds([]);
         
-        // 🔥 ไม่ต้อง refresh ข้อมูลทันที เพื่อให้เห็นเวลาเดิม
-        // หรือจะ refresh แต่เวลาจะไม่เปลี่ยนเพราะไม่ได้อัพเดท last_interaction_at
-      } else {
-        showErrorNotification(`ส่งข้อความไม่สำเร็จ ${failCount} การสนทนา`);
+        successCount++;
+      } catch (err) {
+        console.error(`ส่งข้อความไม่สำเร็จสำหรับ ${conversationId}:`, err);
+        failCount++;
       }
-      
-    } catch (error) {
-      console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
-      alert("เกิดข้อผิดพลาดในการส่งข้อความ");
     }
-  };
+
+    notification.remove();
+
+    if (successCount > 0) {   
+      showSuccessNotification(`ส่งข้อความสำเร็จ ${successCount} การสนทนา`);
+      setSelectedConversationIds([]);
+    } else {
+      showErrorNotification(`ส่งข้อความไม่สำเร็จ ${failCount} การสนทนา`);
+    }
+    
+  } catch (error) {
+    console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
+    alert("เกิดข้อผิดพลาดในการส่งข้อความ");
+  }
+};
 
   const showSuccessNotification = (message) => {
     const notification = document.createElement('div');

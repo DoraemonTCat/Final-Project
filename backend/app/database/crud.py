@@ -426,3 +426,255 @@ def get_customer_type_statistics(db: Session, page_id: int):
     })
     
     return statistics
+
+# ========== CustomerTypeMessage CRUD Operations ==========
+
+def create_customer_type_message(db: Session, page_id: int, message_data: dict):
+    """สร้างข้อความสำหรับกลุ่มลูกค้า"""
+    db_message = models.CustomerTypeMessage(
+        page_id=page_id,
+        customer_type_custom_id=message_data.get('customer_type_custom_id'),
+        page_customer_type_knowledge_id=message_data.get('page_customer_type_knowledge_id'),
+        message_type=message_data['message_type'],
+        content=message_data['content'],
+        dir=message_data.get('dir', ''),
+        display_order=message_data['display_order']
+    )
+    db.add(db_message)
+    db.commit()
+    db.refresh(db_message)
+    return db_message
+
+def get_customer_type_messages(db: Session, page_id: int, customer_type_custom_id: int = None):
+    """ดึงข้อความของกลุ่มลูกค้า"""
+    query = db.query(models.CustomerTypeMessage).filter(
+        models.CustomerTypeMessage.page_id == page_id
+    )
+    
+    if customer_type_custom_id:
+        query = query.filter(
+            models.CustomerTypeMessage.customer_type_custom_id == customer_type_custom_id
+        )
+    
+    return query.order_by(models.CustomerTypeMessage.display_order).all()
+
+def update_customer_type_message(db: Session, message_id: int, update_data: dict):
+    """อัพเดทข้อความของกลุ่มลูกค้า"""
+    db_message = db.query(models.CustomerTypeMessage).filter(
+        models.CustomerTypeMessage.id == message_id
+    ).first()
+    
+    if not db_message:
+        return None
+    
+    for key, value in update_data.items():
+        if hasattr(db_message, key):
+            setattr(db_message, key, value)
+    
+    db_message.updated_at = datetime.now()
+    db.commit()
+    db.refresh(db_message)
+    return db_message
+
+def delete_customer_type_message(db: Session, message_id: int):
+    """ลบข้อความของกลุ่มลูกค้า"""
+    db_message = db.query(models.CustomerTypeMessage).filter(
+        models.CustomerTypeMessage.id == message_id
+    ).first()
+    
+    if db_message:
+        db.delete(db_message)
+        db.commit()
+        return True
+    return False
+
+def delete_customer_type_messages_by_group(db: Session, customer_type_custom_id: int):
+    """ลบข้อความทั้งหมดของกลุ่มลูกค้า"""
+    db.query(models.CustomerTypeMessage).filter(
+        models.CustomerTypeMessage.customer_type_custom_id == customer_type_custom_id
+    ).delete()
+    db.commit()
+
+def bulk_create_customer_type_messages(db: Session, page_id: int, customer_type_custom_id: int, messages: List[Dict]):
+    """สร้างข้อความหลายรายการพร้อมกัน"""
+    # ลบข้อความเดิมทั้งหมดก่อน
+    delete_customer_type_messages_by_group(db, customer_type_custom_id)
+    
+    # สร้างข้อความใหม่
+    db_messages = []
+    for idx, msg in enumerate(messages):
+        db_message = models.CustomerTypeMessage(
+            page_id=page_id,
+            customer_type_custom_id=customer_type_custom_id,
+            message_type=msg['type'],
+            content=msg['content'],
+            dir=msg.get('dir', ''),
+            display_order=msg.get('order', idx)
+        )
+        db_messages.append(db_message)
+    
+    db.add_all(db_messages)
+    db.commit()
+    
+    return {"created": len(db_messages)}
+
+# ========== MessageSchedule CRUD Operations ==========
+
+def create_message_schedule(db: Session, schedule_data: dict):
+    """สร้างตารางเวลาส่งข้อความ"""
+    db_schedule = models.MessageSchedule(
+        customer_type_message_id=schedule_data['customer_type_message_id'],
+        send_type=schedule_data['send_type'],
+        scheduled_at=schedule_data.get('scheduled_at'),
+        send_after_inactive=schedule_data.get('send_after_inactive'),
+        frequency=schedule_data.get('frequency', 'once')
+    )
+    db.add(db_schedule)
+    db.commit()
+    db.refresh(db_schedule)
+    return db_schedule
+
+def get_message_schedules_by_page(db: Session, page_id: int):
+    """ดึงตารางเวลาทั้งหมดของเพจ"""
+    return db.query(models.MessageSchedule).join(
+        models.CustomerTypeMessage,
+        models.MessageSchedule.customer_type_message_id == models.CustomerTypeMessage.id
+    ).filter(
+        models.CustomerTypeMessage.page_id == page_id
+    ).all()
+
+def get_message_schedule(db: Session, schedule_id: int):
+    """ดึงตารางเวลาตาม ID"""
+    return db.query(models.MessageSchedule).filter(
+        models.MessageSchedule.id == schedule_id
+    ).first()
+
+def update_message_schedule(db: Session, schedule_id: int, update_data: dict):
+    """อัพเดทตารางเวลา"""
+    db_schedule = get_message_schedule(db, schedule_id)
+    if not db_schedule:
+        return None
+    
+    for key, value in update_data.items():
+        if hasattr(db_schedule, key):
+            setattr(db_schedule, key, value)
+    
+    db_schedule.updated_at = datetime.now()
+    db.commit()
+    db.refresh(db_schedule)
+    return db_schedule
+
+def delete_message_schedule(db: Session, schedule_id: int):
+    """ลบตารางเวลา"""
+    db_schedule = get_message_schedule(db, schedule_id)
+    if db_schedule:
+        db.delete(db_schedule)
+        db.commit()
+        return True
+    return False
+
+def create_schedule_with_messages(db: Session, page_id: int, group_id: int, schedule_data: dict):
+    """สร้างตารางเวลาพร้อมข้อความ"""
+    try:
+        # สร้างข้อความก่อน
+        messages = schedule_data.get('messages', [])
+        message_schedules = []
+        
+        for idx, msg in enumerate(messages):
+            # สร้างข้อความ
+            db_message = models.CustomerTypeMessage(
+                page_id=page_id,
+                customer_type_custom_id=group_id,
+                message_type=msg['type'],
+                content=msg['content'],
+                dir=msg.get('dir', ''),
+                display_order=idx
+            )
+            db.add(db_message)
+            db.flush()  # ให้ได้ ID ของข้อความ
+            
+            # สร้างตารางเวลาสำหรับข้อความนี้
+            send_after_inactive = None
+            if schedule_data['type'] == 'user-inactive':
+                # แปลงเป็น timedelta
+                period = int(schedule_data.get('inactivityPeriod', 1))
+                unit = schedule_data.get('inactivityUnit', 'days')
+                
+                if unit == 'minutes':
+                    send_after_inactive = timedelta(minutes=period)
+                elif unit == 'hours':
+                    send_after_inactive = timedelta(hours=period)
+                elif unit == 'days':
+                    send_after_inactive = timedelta(days=period)
+                elif unit == 'weeks':
+                    send_after_inactive = timedelta(weeks=period)
+                elif unit == 'months':
+                    send_after_inactive = timedelta(days=period * 30)
+            
+            scheduled_at = None
+            if schedule_data['type'] == 'scheduled':
+                scheduled_at = datetime.fromisoformat(f"{schedule_data['date']}T{schedule_data['time']}:00")
+            
+            db_schedule = models.MessageSchedule(
+                customer_type_message_id=db_message.id,
+                send_type=schedule_data['type'],
+                scheduled_at=scheduled_at,
+                send_after_inactive=send_after_inactive,
+                frequency=schedule_data.get('repeat', {}).get('type', 'once')
+            )
+            db.add(db_schedule)
+            message_schedules.append(db_schedule)
+        
+        db.commit()
+        return {"success": True, "schedules_created": len(message_schedules)}
+        
+    except Exception as e:
+        db.rollback()
+        raise e
+
+def get_schedules_with_details(db: Session, page_id: int):
+    """ดึงตารางเวลาพร้อมรายละเอียดทั้งหมด"""
+    schedules = db.query(
+        models.MessageSchedule,
+        models.CustomerTypeMessage,
+        models.CustomerTypeCustom
+    ).join(
+        models.CustomerTypeMessage,
+        models.MessageSchedule.customer_type_message_id == models.CustomerTypeMessage.id
+    ).join(
+        models.CustomerTypeCustom,
+        models.CustomerTypeMessage.customer_type_custom_id == models.CustomerTypeCustom.id
+    ).filter(
+        models.CustomerTypeMessage.page_id == page_id
+    ).order_by(
+        models.CustomerTypeCustom.id,
+        models.CustomerTypeMessage.display_order
+    ).all()
+    
+    # จัดกลุ่มตาม customer group
+    grouped_schedules = {}
+    for schedule, message, group in schedules:
+        group_key = f"{group.id}_{schedule.send_type}_{schedule.scheduled_at}_{schedule.send_after_inactive}"
+        
+        if group_key not in grouped_schedules:
+            grouped_schedules[group_key] = {
+                'id': f"schedule_{group.id}_{int(datetime.now().timestamp())}",
+                'group_id': group.id,
+                'group_name': group.type_name,
+                'type': schedule.send_type,
+                'scheduled_at': schedule.scheduled_at.isoformat() if schedule.scheduled_at else None,
+                'send_after_inactive': str(schedule.send_after_inactive) if schedule.send_after_inactive else None,
+                'frequency': schedule.frequency,
+                'messages': [],
+                'created_at': schedule.created_at.isoformat(),
+                'updated_at': schedule.updated_at.isoformat()
+            }
+        
+        grouped_schedules[group_key]['messages'].append({
+            'id': message.id,
+            'type': message.message_type,
+            'content': message.content,
+            'order': message.display_order
+        })
+    
+    return list(grouped_schedules.values())
