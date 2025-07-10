@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 import logging
 from datetime import datetime, date
+from datetime import  timedelta
 
 from app.database.models import MessageSchedule
 

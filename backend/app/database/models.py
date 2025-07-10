@@ -96,7 +96,9 @@ class MessageSchedule(Base):
         ),
         CheckConstraint(
             "send_type IN ('immediate', 'scheduled', 'after_inactive')",
+           
             name="message_schedules_send_type_check"
+            
         ),
     )
 

@@ -4,6 +4,7 @@ import '../CSS/GroupSchedule.css';
 import { fetchPages, connectFacebook } from "../Features/Tool";
 import Sidebar from "./Sidebar"; 
 
+
 function GroupSchedule() {
   const [pages, setPages] = useState([]);
   const [selectedPage, setSelectedPage] = useState("");
@@ -33,36 +34,41 @@ function GroupSchedule() {
     { id: 6, name: 'เสาร์', short: 'ส' }
   ];
 
-  // แก้ไข useEffect เพื่อดึง message IDs
-useEffect(() => {
-  const loadGroupMessages = async () => {
-    if (!selectedPage || selectedGroups.length === 0) return;
-    
-    // ถ้าเป็น default group ไม่ต้องโหลด message IDs
-    if (selectedGroups[0].id && selectedGroups[0].id.toString().startsWith('default_')) {
-      return;
-    }
-    
-    try {
-      const dbId = await getPageDbId(selectedPage);
-      if (!dbId) return;
+  const SCHEDULE_TYPE_MAP = {
+  'immediate': 'immediate',
+  'scheduled': 'scheduled',
+  'user-inactive': 'after_inactive'
+};
+
+  // เพิ่ม useEffect เพื่อดึง message IDs และโหลด schedule data
+  useEffect(() => {
+    const loadGroupMessages = async () => {
+      if (!selectedPage || selectedGroups.length === 0) return;
       
-      const groupId = selectedGroups[0].id;
-      const response = await fetch(`http://localhost:8000/group-messages/${dbId}/${groupId}`);
-      if (response.ok) {
-        const messages = await response.json();
-        const ids = messages.map(msg => msg.id);
-        setMessageIds(ids);
+      // ถ้าเป็น default group ไม่ต้องโหลด message IDs
+      if (selectedGroups[0].id && selectedGroups[0].id.toString().startsWith('default_')) {
+        return;
       }
-    } catch (error) {
-      console.error('Error loading group messages:', error);
-    }
-  };
-  
-  loadGroupMessages();
-}, [selectedPage, selectedGroups]);
-
-
+      
+      try {
+        const dbId = await getPageDbId(selectedPage);
+        if (!dbId) return;
+        
+        const groupId = selectedGroups[0].id;
+        const response = await fetch(`http://localhost:8000/group-messages/${dbId}/${groupId}`);
+        if (response.ok) {
+          const messages = await response.json();
+          const ids = messages.map(msg => msg.id);
+          setMessageIds(ids);
+          console.log('Loaded message IDs:', ids);
+        }
+      } catch (error) {
+        console.error('Error loading group messages:', error);
+      }
+    };
+    
+    loadGroupMessages();
+  }, [selectedPage, selectedGroups]);
 
   // Listen for page changes from Sidebar
   useEffect(() => {
@@ -128,26 +134,139 @@ useEffect(() => {
   };
 
   useEffect(() => {
-    // 🔥 ตรวจสอบว่า page ID ตรงกันหรือไม่
-    const selectedPageId = localStorage.getItem("selectedCustomerGroupsPageId");
-    const savedPage = localStorage.getItem("selectedPage");
+    const loadSelectedGroups = async () => {
+      // 🔥 ตรวจสอบว่า page ID ตรงกันหรือไม่
+      const selectedPageId = localStorage.getItem("selectedCustomerGroupsPageId");
+      const savedPage = localStorage.getItem("selectedPage");
+      
+      if (selectedPageId && selectedPageId !== savedPage) {
+        alert("กลุ่มลูกค้าที่เลือกมาจากเพจอื่น กรุณากลับไปเลือกใหม่");
+        navigate('/MinerGroup');
+        return;
+      }
+
+      // โหลดกลุ่มที่เลือก
+      const selectedGroupIds = JSON.parse(localStorage.getItem("selectedCustomerGroups") || '[]');
+      
+      if (savedPage) {
+        setSelectedPage(savedPage);
+        
+        // ดึง page DB ID
+        const dbId = await getPageDbId(savedPage);
+        
+        if (selectedGroupIds.length > 0 && dbId) {
+          try {
+            // ตรวจสอบว่าเป็น default group หรือไม่
+            const isDefaultGroup = selectedGroupIds.some(id => 
+              id === 'default_1' || id === 'default_2' || id === 'default_3'
+            );
+            
+            if (isDefaultGroup) {
+              // สำหรับ default groups
+              const DEFAULT_GROUPS = [
+                { id: 'default_1', name: 'กลุ่มคนหาย', isDefault: true },
+                { id: 'default_2', name: 'กลุ่มคนหายนาน', isDefault: true },
+                { id: 'default_3', name: 'กลุ่มคนหายนานมาก', isDefault: true }
+              ];
+              
+              const selectedDefaultGroups = DEFAULT_GROUPS.filter(g => 
+                selectedGroupIds.includes(g.id)
+              );
+              
+              // เพิ่มชื่อที่กำหนดเอง
+              const customNamesKey = `defaultGroupCustomNames_${savedPage}`;
+              const customNames = JSON.parse(localStorage.getItem(customNamesKey) || '{}');
+              
+              const groupsWithCustomNames = selectedDefaultGroups.map(group => ({
+                ...group,
+                name: customNames[group.id] || group.name
+              }));
+              
+              setSelectedGroups(groupsWithCustomNames);
+              
+              // โหลด schedules จาก localStorage สำหรับ default group
+              if (groupsWithCustomNames.length > 0) {
+                const groupId = groupsWithCustomNames[0].id;
+                const scheduleKey = `defaultGroupSchedules_${savedPage}_${groupId}`;
+                const savedSchedules = JSON.parse(localStorage.getItem(scheduleKey) || '[]');
+                
+                if (savedSchedules.length > 0 && editingScheduleId) {
+                  const schedule = savedSchedules.find(s => s.id === editingScheduleId);
+                  if (schedule) {
+                    setScheduleType(schedule.type || 'immediate');
+                    setScheduleDate(schedule.date || new Date().toISOString().split('T')[0]);
+                    setScheduleTime(schedule.time || new Date().toTimeString().slice(0, 5));
+                    setInactivityPeriod(schedule.inactivityPeriod || '1');
+                    setInactivityUnit(schedule.inactivityUnit || 'days');
+                    setRepeatType(schedule.repeat?.type || 'once');
+                    setRepeatDays(schedule.repeat?.days || []);
+                    setEndDate(schedule.repeat?.endDate || '');
+                  }
+                }
+              }
+            } else {
+              // สำหรับ user groups - ดึงข้อมูลจาก database
+              const response = await fetch(`http://localhost:8000/customer-groups/${dbId}`);
+              if (response.ok) {
+                const allGroups = await response.json();
+                const selectedGroupsData = allGroups.filter(g => 
+                  selectedGroupIds.includes(g.id)
+                );
+                
+                // แปลงข้อมูลให้อยู่ในรูปแบบที่ component ใช้
+                const formattedGroups = selectedGroupsData.map(group => ({
+                  id: group.id,
+                  name: group.type_name,
+                  type_name: group.type_name,
+                  isDefault: false
+                }));
+                
+                setSelectedGroups(formattedGroups);
+                
+                // โหลด schedules จาก database สำหรับกลุ่มแรก
+                if (formattedGroups.length > 0 && editingScheduleId) {
+                  const groupId = formattedGroups[0].id;
+                  const schedulesResponse = await fetch(`http://localhost:8000/message-schedules/group/${dbId}/${groupId}`);
+                  if (schedulesResponse.ok) {
+                    const schedules = await schedulesResponse.json();
+                    const schedule = schedules.find(s => s.id === editingScheduleId);
+                    
+                    if (schedule) {
+                      setScheduleType(schedule.send_type || 'immediate');
+                      
+                      if (schedule.scheduled_at) {
+                        const scheduledDate = new Date(schedule.scheduled_at);
+                        setScheduleDate(scheduledDate.toISOString().split('T')[0]);
+                        setScheduleTime(scheduledDate.toTimeString().slice(0, 5));
+                      }
+                      
+                      if (schedule.send_after_inactive) {
+                        // Parse "1 days" -> period: 1, unit: days
+                        const parts = schedule.send_after_inactive.split(' ');
+                        if (parts.length >= 2) {
+                          setInactivityPeriod(parts[0]);
+                          setInactivityUnit(parts[1].replace(/s$/, ''));
+                        }
+                      }
+                      
+                      setRepeatType(schedule.frequency || 'once');
+                    }
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error loading groups:', error);
+          }
+        }
+      } else {
+        // ถ้าไม่มีการบันทึกไว้ ใช้ค่า default
+        setDefaultScheduleValues();
+      }
+    };
+
+    loadSelectedGroups();
     
-    if (selectedPageId && selectedPageId !== savedPage) {
-      alert("กลุ่มลูกค้าที่เลือกมาจากเพจอื่น กรุณากลับไปเลือกใหม่");
-      navigate('/MinerGroup');
-      return;
-    }
-
-    // โหลดกลุ่มที่เลือก
-    const groups = JSON.parse(localStorage.getItem("selectedCustomerGroups") || '[]');
-    const allGroups = getGroupsForPage(savedPage);
-    const selectedGroupsData = allGroups.filter(g => groups.includes(g.id));
-    setSelectedGroups(selectedGroupsData);
-
-    if (savedPage) {
-      setSelectedPage(savedPage);
-    }
-
     // 🔥 ตรวจสอบว่าเป็นการแก้ไขหรือไม่
     const editingId = localStorage.getItem("editingScheduleId");
     if (editingId) {
@@ -157,33 +276,6 @@ useEffect(() => {
     fetchPages()
       .then(setPages)
       .catch(err => console.error("ไม่สามารถโหลดเพจได้:", err));
-
-    // 🔥 โหลดการตั้งค่าที่บันทึกไว้ล่าสุด (ถ้ามี)
-    const savedScheduleKey = `lastScheduleSettings_${savedPage}`;
-    const savedSettings = localStorage.getItem(savedScheduleKey);
-    
-    if (savedSettings) {
-      try {
-        const settings = JSON.parse(savedSettings);
-        // โหลดค่าที่บันทึกไว้
-        setScheduleType(settings.scheduleType || 'immediate');
-        setScheduleDate(settings.scheduleDate || new Date().toISOString().split('T')[0]);
-        setScheduleTime(settings.scheduleTime || new Date().toTimeString().slice(0, 5));
-        setInactivityPeriod(settings.inactivityPeriod || '1');
-        setInactivityUnit(settings.inactivityUnit || 'days');
-        setRepeatType(settings.repeatType || 'once');
-        setRepeatCount(settings.repeatCount || 1);
-        setRepeatDays(settings.repeatDays || []);
-        setEndDate(settings.endDate || '');
-      } catch (error) {
-        console.error('Error loading saved settings:', error);
-        // ถ้าโหลดไม่สำเร็จ ใช้ค่า default
-        setDefaultScheduleValues();
-      }
-    } else {
-      // ถ้าไม่มีการบันทึกไว้ ใช้ค่า default
-      setDefaultScheduleValues();
-    }
   }, [navigate]);
 
   // 🔥 ฟังก์ชันตั้งค่า default
@@ -249,6 +341,8 @@ useEffect(() => {
   };
 
   // แก้ไขฟังก์ชัน saveSchedule
+  // แก้ไขส่วนของฟังก์ชัน saveSchedule ในบริเวณบรรทัดที่ 400-450
+
 const saveSchedule = async () => {
   if (!validateSchedule()) return;
   
@@ -299,18 +393,53 @@ const saveSchedule = async () => {
     } else {
       // สำหรับ user groups บันทึกใน database
       if (!messageIds || messageIds.length === 0) {
-        alert('ไม่พบข้อความในกลุ่มนี้');
-        return;
+        // ถ้าไม่มี messageIds ให้ลองดึงใหม่
+        const dbId = await getPageDbId(selectedPage);
+        if (!dbId) {
+          alert('ไม่พบข้อมูลเพจในระบบ');
+          return;
+        }
+        
+        const groupId = selectedGroups[0].id;
+        const response = await fetch(`http://localhost:8000/group-messages/${dbId}/${groupId}`);
+        if (!response.ok) {
+          alert('ไม่พบข้อความในกลุ่มนี้ กรุณาตั้งค่าข้อความก่อน');
+          navigate('/GroupDefault');
+          return;
+        }
+        
+        const messages = await response.json();
+        const ids = messages.map(msg => msg.id);
+        setMessageIds(ids);
+        
+        if (ids.length === 0) {
+          alert('ไม่พบข้อความในกลุ่มนี้');
+          return;
+        }
+      }
+      
+      // ถ้าเป็นการแก้ไข ลบ schedules เดิมก่อน
+      if (editingScheduleId) {
+        try {
+          await fetch(`http://localhost:8000/message-schedules/${editingScheduleId}`, {
+            method: 'DELETE'
+          });
+        } catch (error) {
+          console.error('Error deleting old schedule:', error);
+        }
       }
       
       const schedulePromises = messageIds.map(async (messageId) => {
+        // 🔥 แก้ไขการส่งข้อมูลให้ตรงกับ database constraint
         const scheduleData = {
           customer_type_message_id: messageId,
-          send_type: scheduleType,
+          send_type: SCHEDULE_TYPE_MAP[scheduleType],
           scheduled_at: scheduleType === 'scheduled' ? `${scheduleDate}T${scheduleTime}:00` : null,
-          send_after_inactive: scheduleType === 'user-inactive' ? `${inactivityPeriod} ${inactivityUnit}` : null,
+          send_after_inactive: scheduleType === 'user-inactive' ? `${inactivityPeriod} ${inactivityUnit}` : null, // ส่งเป็น string
           frequency: repeatType
         };
+        
+        console.log('Saving schedule data:', scheduleData);
         
         const response = await fetch('http://localhost:8000/message-schedules', {
           method: 'POST',
@@ -321,13 +450,16 @@ const saveSchedule = async () => {
         });
         
         if (!response.ok) {
-          throw new Error('Failed to save schedule');
+          const error = await response.json();
+          console.error('Schedule save error:', error);
+          throw new Error(`Failed to save schedule: ${error.detail || 'Unknown error'}`);
         }
         
         return response.json();
       });
       
-      await Promise.all(schedulePromises);
+      const results = await Promise.all(schedulePromises);
+      console.log('All schedules saved:', results);
       alert(editingScheduleId ? "แก้ไขการตั้งเวลาสำเร็จ!" : "บันทึกการตั้งเวลาสำเร็จ!");
     }
     
@@ -340,7 +472,7 @@ const saveSchedule = async () => {
     
   } catch (error) {
     console.error('Error saving schedule:', error);
-    alert('เกิดข้อผิดพลาดในการบันทึกการตั้งเวลา');
+    alert('เกิดข้อผิดพลาดในการบันทึกการตั้งเวลา: ' + error.message);
   } finally {
     setSavingSchedule(false);
   }
@@ -404,20 +536,20 @@ const saveSchedule = async () => {
   };
 
   // เพิ่มฟังก์ชันดึง page DB ID
-const getPageDbId = async (pageId) => {
-  try {
-    const response = await fetch('http://localhost:8000/pages/');
-    if (!response.ok) throw new Error('Failed to fetch pages');
-    
-    const pagesData = await response.json();
-    const currentPage = pagesData.find(p => p.page_id === pageId || p.id === pageId);
-    
-    return currentPage ? currentPage.ID : null;
-  } catch (error) {
-    console.error('Error getting page DB ID:', error);
-    return null;
-  }
-};
+  const getPageDbId = async (pageId) => {
+    try {
+      const response = await fetch('http://localhost:8000/pages/');
+      if (!response.ok) throw new Error('Failed to fetch pages');
+      
+      const pagesData = await response.json();
+      const currentPage = pagesData.find(p => p.page_id === pageId || p.id === pageId);
+      
+      return currentPage ? currentPage.ID : null;
+    } catch (error) {
+      console.error('Error getting page DB ID:', error);
+      return null;
+    }
+  };
 
   const selectedPageInfo = pages.find(p => p.id === selectedPage);
   const isForDefaultGroup = selectedGroups.some(g => g.isDefault); // 🔥 ตรวจสอบว่าเป็น default group
@@ -468,7 +600,12 @@ const getPageDbId = async (pageId) => {
             </div>
             <div className="summary-item">
               <span className="summary-label">จำนวนข้อความ:</span>
-              <span className="summary-value">{JSON.parse(localStorage.getItem(`groupMessages_${selectedPage}`) || '[]').length} ข้อความ</span>
+              <span className="summary-value">
+                {isForDefaultGroup 
+                  ? JSON.parse(localStorage.getItem(`defaultGroupMessages_${selectedPage}_${selectedGroups[0]?.id}`) || '[]').length 
+                  : messageIds.length
+                } ข้อความ
+              </span>
             </div>
           </div>
         </div>

@@ -140,28 +140,28 @@ function SetMiner() {
 
   // ฟังก์ชันตรวจสอบว่ากลุ่มมีการตั้งเวลาไว้หรือไม่
   const getGroupSchedules = async (groupId) => {
-  try {
-    // ถ้าเป็น default group ให้ดึงจาก localStorage
-    if (groupId && groupId.toString().startsWith('default_')) {
-      const scheduleKey = `defaultGroupSchedules_${selectedPage}_${groupId}`;
-      const localSchedules = JSON.parse(localStorage.getItem(scheduleKey) || '[]');
-      return localSchedules;
+    try {
+      // ถ้าเป็น default group ให้ดึงจาก localStorage
+      if (groupId && groupId.toString().startsWith('default_')) {
+        const scheduleKey = `defaultGroupSchedules_${selectedPage}_${groupId}`;
+        const localSchedules = JSON.parse(localStorage.getItem(scheduleKey) || '[]');
+        return localSchedules;
+      }
+      
+      // สำหรับ user groups ให้ดึงจาก database
+      const dbId = await getPageDbId(selectedPage);
+      if (!dbId) return [];
+      
+      const response = await fetch(`http://localhost:8000/message-schedules/group/${dbId}/${groupId}`);
+      if (!response.ok) return [];
+      
+      const schedules = await response.json();
+      return schedules;
+    } catch (error) {
+      console.error('Error fetching group schedules:', error);
+      return [];
     }
-    
-    // สำหรับ user groups ให้ดึงจาก database
-    const dbId = await getPageDbId(selectedPage);
-    if (!dbId) return [];
-    
-    const response = await fetch(`http://localhost:8000/message-schedules/group/${dbId}/${groupId}`);
-    if (!response.ok) return [];
-    
-    const schedules = await response.json();
-    return schedules;
-  } catch (error) {
-    console.error('Error fetching group schedules:', error);
-    return [];
-  }
-};
+  };
 
   // โหลดกลุ่มลูกค้าเมื่อเปลี่ยนเพจ
   useEffect(() => {

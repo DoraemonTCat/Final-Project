@@ -164,11 +164,20 @@ function GroupDefault() {
                 selectedGroupIds.includes(g.id)
               );
               
-              setSelectedGroups(selectedDefaultGroups);
+              // เพิ่มชื่อที่กำหนดเอง
+              const customNamesKey = `defaultGroupCustomNames_${savedPage}`;
+              const customNames = JSON.parse(localStorage.getItem(customNamesKey) || '{}');
+              
+              const groupsWithCustomNames = selectedDefaultGroups.map(group => ({
+                ...group,
+                name: customNames[group.id] || group.name
+              }));
+              
+              setSelectedGroups(groupsWithCustomNames);
               
               // โหลดข้อความจาก localStorage สำหรับ default group
-              if (selectedDefaultGroups.length > 0) {
-                const groupId = selectedDefaultGroups[0].id;
+              if (groupsWithCustomNames.length > 0) {
+                const groupId = groupsWithCustomNames[0].id;
                 const messageKey = `defaultGroupMessages_${savedPage}_${groupId}`;
                 const savedMessages = JSON.parse(localStorage.getItem(messageKey) || '[]');
                 setMessageSequence(savedMessages);
