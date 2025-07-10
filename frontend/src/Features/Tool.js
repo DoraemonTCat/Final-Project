@@ -252,3 +252,49 @@ export async function deleteAllGroupMessages(pageId, groupId) {
   if (!res.ok) throw new Error("ไม่สามารถลบข้อความทั้งหมดได้");
   return res.json();
 }
+
+////////////////////// เพิ่มฟังก์ชันสำหรับจัดการ schedules //////////////////////////////
+
+export async function createMessageSchedule(scheduleData) {
+  const res = await fetch("http://localhost:8000/message-schedules", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(scheduleData),
+  });
+  if (!res.ok) throw new Error("ไม่สามารถสร้าง schedule ได้");
+  return res.json();
+}
+
+export async function getGroupSchedules(pageId, groupId) {
+  const res = await fetch(`http://localhost:8000/message-schedules/group/${pageId}/${groupId}`);
+  if (!res.ok) throw new Error("ไม่สามารถโหลด schedules ได้");
+  return res.json();
+}
+
+export async function updateMessageSchedule(scheduleId, updateData) {
+  const res = await fetch(`http://localhost:8000/message-schedules/${scheduleId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updateData),
+  });
+  if (!res.ok) throw new Error("ไม่สามารถอัพเดท schedule ได้");
+  return res.json();
+}
+
+export async function deleteMessageSchedule(scheduleId) {
+  const res = await fetch(`http://localhost:8000/message-schedules/${scheduleId}`, {
+    method: "DELETE"
+  });
+  if (!res.ok) throw new Error("ไม่สามารถลบ schedule ได้");
+  return res.json();
+}
+
+export async function createBatchSchedules(schedules) {
+  const res = await fetch("http://localhost:8000/message-schedules/batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(schedules),
+  });
+  if (!res.ok) throw new Error("ไม่สามารถสร้าง schedules แบบ batch ได้");
+  return res.json();
+}

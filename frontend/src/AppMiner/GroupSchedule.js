@@ -20,6 +20,8 @@ function GroupSchedule() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [editingScheduleId, setEditingScheduleId] = useState(null);
   const navigate = useNavigate();
+  const [messageIds, setMessageIds] = useState([]);
+  const [savingSchedule, setSavingSchedule] = useState(false);
 
   const weekDays = [
     { id: 0, name: 'อาทิตย์', short: 'อา' },
@@ -30,6 +32,37 @@ function GroupSchedule() {
     { id: 5, name: 'ศุกร์', short: 'ศ' },
     { id: 6, name: 'เสาร์', short: 'ส' }
   ];
+
+  // แก้ไข useEffect เพื่อดึง message IDs
+useEffect(() => {
+  const loadGroupMessages = async () => {
+    if (!selectedPage || selectedGroups.length === 0) return;
+    
+    // ถ้าเป็น default group ไม่ต้องโหลด message IDs
+    if (selectedGroups[0].id && selectedGroups[0].id.toString().startsWith('default_')) {
+      return;
+    }
+    
+    try {
+      const dbId = await getPageDbId(selectedPage);
+      if (!dbId) return;
+      
+      const groupId = selectedGroups[0].id;
+      const response = await fetch(`http://localhost:8000/group-messages/${dbId}/${groupId}`);
+      if (response.ok) {
+        const messages = await response.json();
+        const ids = messages.map(msg => msg.id);
+        setMessageIds(ids);
+      }
+    } catch (error) {
+      console.error('Error loading group messages:', error);
+    }
+  };
+  
+  loadGroupMessages();
+}, [selectedPage, selectedGroups]);
+
+
 
   // Listen for page changes from Sidebar
   useEffect(() => {
@@ -215,69 +248,22 @@ function GroupSchedule() {
     return true;
   };
 
-  const saveSchedule = () => {
-    if (!validateSchedule()) return;
-
-    // 🔥 บันทึกการตั้งค่าปัจจุบันสำหรับใช้ครั้งต่อไป
-    const currentSettings = {
-      scheduleType,
-      scheduleDate,
-      scheduleTime,
-      inactivityPeriod,
-      inactivityUnit,
-      repeatType,
-      repeatCount,
-      repeatDays,
-      endDate
-    };
+  // แก้ไขฟังก์ชัน saveSchedule
+const saveSchedule = async () => {
+  if (!validateSchedule()) return;
+  
+  setSavingSchedule(true);
+  
+  try {
+    // ตรวจสอบว่าเป็น default group หรือไม่
+    const isDefaultGroup = selectedGroups.some(g => g.id && g.id.toString().startsWith('default_'));
     
-    const savedScheduleKey = `lastScheduleSettings_${selectedPage}`;
-    localStorage.setItem(savedScheduleKey, JSON.stringify(currentSettings));
-
-    // 🔥 ดึงข้อความที่บันทึกไว้แยกตามเพจ
-    const messageKey = `groupMessages_${selectedPage}`;
-    const messages = JSON.parse(localStorage.getItem(messageKey) || '[]');
-
-    // 🔥 ตรวจสอบว่าเป็นการแก้ไขหรือการสร้างใหม่
-    const schedules = getSchedulesForPage(selectedPage);
-    
-    if (editingScheduleId) {
-      // แก้ไขตารางเวลาที่มีอยู่ - ทับของเดิมเลย
-      const updatedSchedules = schedules.map(schedule => {
-        if (schedule.id === editingScheduleId) {
-          // ทับข้อมูลเดิมทั้งหมด
-          return {
-            id: schedule.id, // คง ID เดิมไว้
-            pageId: selectedPage,
-            type: scheduleType,
-            date: scheduleDate,
-            time: scheduleTime,
-            inactivityPeriod: scheduleType === 'user-inactive' ? inactivityPeriod : null,
-            inactivityUnit: scheduleType === 'user-inactive' ? inactivityUnit : null,
-            repeat: {
-              type: repeatType,
-              count: repeatCount,
-              days: repeatDays,
-              endDate: endDate
-            },
-            groups: selectedGroups.map(g => g.id),
-            groupNames: selectedGroups.map(g => g.name),
-            messages: messages,
-            createdAt: schedule.createdAt, // คงวันที่สร้างเดิม
-            updatedAt: new Date().toISOString(),
-            isForDefaultGroup: selectedGroups.some(g => g.isDefault) // 🔥 เพิ่ม flag
-          };
-        }
-        return schedule;
-      });
-      
-      saveSchedulesForPage(selectedPage, updatedSchedules);
-      alert("แก้ไขการตั้งเวลาสำเร็จ!");
-    } else {
-      // สร้างตารางเวลาใหม่
+    if (isDefaultGroup) {
+      // สำหรับ default groups บันทึกใน localStorage
+      const groupId = selectedGroups[0].id;
       const scheduleData = {
-        id: Date.now(),
-        pageId: selectedPage,
+        id: editingScheduleId || Date.now(),
+        groupId: groupId,
         type: scheduleType,
         date: scheduleDate,
         time: scheduleTime,
@@ -289,26 +275,76 @@ function GroupSchedule() {
           days: repeatDays,
           endDate: endDate
         },
-        groups: selectedGroups.map(g => g.id),
-        groupNames: selectedGroups.map(g => g.name),
-        messages: messages,
         createdAt: new Date().toISOString(),
-        isForDefaultGroup: selectedGroups.some(g => g.isDefault) // 🔥 เพิ่ม flag
+        updatedAt: new Date().toISOString()
       };
-
-      schedules.push(scheduleData);
-      saveSchedulesForPage(selectedPage, schedules);
-      alert("บันทึกการตั้งเวลาสำเร็จ!");
+      
+      const scheduleKey = `defaultGroupSchedules_${selectedPage}_${groupId}`;
+      const existingSchedules = JSON.parse(localStorage.getItem(scheduleKey) || '[]');
+      
+      if (editingScheduleId) {
+        // แก้ไข schedule ที่มีอยู่
+        const index = existingSchedules.findIndex(s => s.id === editingScheduleId);
+        if (index !== -1) {
+          existingSchedules[index] = scheduleData;
+        }
+      } else {
+        // เพิ่ม schedule ใหม่
+        existingSchedules.push(scheduleData);
+      }
+      
+      localStorage.setItem(scheduleKey, JSON.stringify(existingSchedules));
+      alert(editingScheduleId ? "แก้ไขการตั้งเวลาสำเร็จ!" : "บันทึกการตั้งเวลาสำเร็จ!");
+      
+    } else {
+      // สำหรับ user groups บันทึกใน database
+      if (!messageIds || messageIds.length === 0) {
+        alert('ไม่พบข้อความในกลุ่มนี้');
+        return;
+      }
+      
+      const schedulePromises = messageIds.map(async (messageId) => {
+        const scheduleData = {
+          customer_type_message_id: messageId,
+          send_type: scheduleType,
+          scheduled_at: scheduleType === 'scheduled' ? `${scheduleDate}T${scheduleTime}:00` : null,
+          send_after_inactive: scheduleType === 'user-inactive' ? `${inactivityPeriod} ${inactivityUnit}` : null,
+          frequency: repeatType
+        };
+        
+        const response = await fetch('http://localhost:8000/message-schedules', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(scheduleData)
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to save schedule');
+        }
+        
+        return response.json();
+      });
+      
+      await Promise.all(schedulePromises);
+      alert(editingScheduleId ? "แก้ไขการตั้งเวลาสำเร็จ!" : "บันทึกการตั้งเวลาสำเร็จ!");
     }
-
-    // 🔥 เคลียร์ข้อมูลที่เลือกไว้
+    
+    // เคลียร์ข้อมูลและกลับไปหน้ากลุ่ม
     localStorage.removeItem("selectedCustomerGroups");
     localStorage.removeItem("selectedCustomerGroupsPageId");
-    localStorage.removeItem(messageKey);
     localStorage.removeItem("editingScheduleId");
-
-    navigate('/MinerGroup'); // กลับไปยังหน้ากลุ่มลูกค้า
-  };
+    
+    navigate('/MinerGroup');
+    
+  } catch (error) {
+    console.error('Error saving schedule:', error);
+    alert('เกิดข้อผิดพลาดในการบันทึกการตั้งเวลา');
+  } finally {
+    setSavingSchedule(false);
+  }
+};
 
   const getScheduleSummary = () => {
     if (scheduleType === 'immediate') return 'ส่งทันที';
@@ -366,6 +402,22 @@ function GroupSchedule() {
     
     return summary;
   };
+
+  // เพิ่มฟังก์ชันดึง page DB ID
+const getPageDbId = async (pageId) => {
+  try {
+    const response = await fetch('http://localhost:8000/pages/');
+    if (!response.ok) throw new Error('Failed to fetch pages');
+    
+    const pagesData = await response.json();
+    const currentPage = pagesData.find(p => p.page_id === pageId || p.id === pageId);
+    
+    return currentPage ? currentPage.ID : null;
+  } catch (error) {
+    console.error('Error getting page DB ID:', error);
+    return null;
+  }
+};
 
   const selectedPageInfo = pages.find(p => p.id === selectedPage);
   const isForDefaultGroup = selectedGroups.some(g => g.isDefault); // 🔥 ตรวจสอบว่าเป็น default group
@@ -619,11 +671,11 @@ function GroupSchedule() {
               ← กลับ
             </Link>
             <button
-              onClick={saveSchedule}
-              className="save-schedule-btn"
-            >
-              <span className="btn-icon">💾</span>
-              {editingScheduleId ? 'บันทึกการแก้ไข' : 'บันทึกการตั้งค่า'}
+                onClick={saveSchedule}
+                className="save-schedule-btn"
+                disabled={savingSchedule}>
+                <span className="btn-icon">💾</span>
+                {savingSchedule ? 'กำลังบันทึก...' : (editingScheduleId ? 'บันทึกการแก้ไข' : 'บันทึกการตั้งค่า')}
             </button>
           </div>
         </div>

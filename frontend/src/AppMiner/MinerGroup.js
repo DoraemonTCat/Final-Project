@@ -27,6 +27,7 @@ function SetMiner() {
   const [viewingGroupSchedules, setViewingGroupSchedules] = useState([]);
   const [viewingGroupName, setViewingGroupName] = useState('');
   const navigate = useNavigate();
+  const [groupScheduleCounts, setGroupScheduleCounts] = useState({});
 
   // 🔥 กลุ่ม Default ที่มีมาแต่แรก
   const DEFAULT_GROUPS = [
@@ -138,22 +139,29 @@ function SetMiner() {
   };
 
   // ฟังก์ชันตรวจสอบว่ากลุ่มมีการตั้งเวลาไว้หรือไม่
-  const getGroupSchedules = (groupId) => {
-    const schedules = getSchedulesForPage(selectedPage);
-    return schedules.filter(schedule => schedule.groups.includes(groupId));
-  };
-
-  useEffect(() => {
-    const savedPage = localStorage.getItem("selectedPage");
-    
-    if (savedPage) {
-      setSelectedPage(savedPage);
+  const getGroupSchedules = async (groupId) => {
+  try {
+    // ถ้าเป็น default group ให้ดึงจาก localStorage
+    if (groupId && groupId.toString().startsWith('default_')) {
+      const scheduleKey = `defaultGroupSchedules_${selectedPage}_${groupId}`;
+      const localSchedules = JSON.parse(localStorage.getItem(scheduleKey) || '[]');
+      return localSchedules;
     }
     
-    fetchPages()
-      .then(setPages)
-      .catch(err => console.error("ไม่สามารถโหลดเพจได้:", err));
-  }, []);
+    // สำหรับ user groups ให้ดึงจาก database
+    const dbId = await getPageDbId(selectedPage);
+    if (!dbId) return [];
+    
+    const response = await fetch(`http://localhost:8000/message-schedules/group/${dbId}/${groupId}`);
+    if (!response.ok) return [];
+    
+    const schedules = await response.json();
+    return schedules;
+  } catch (error) {
+    console.error('Error fetching group schedules:', error);
+    return [];
+  }
+};
 
   // โหลดกลุ่มลูกค้าเมื่อเปลี่ยนเพจ
   useEffect(() => {
@@ -267,6 +275,28 @@ function SetMiner() {
       alert(`เกิดข้อผิดพลาดในการสร้างกลุ่ม: ${error.message}`);
     }
   };
+
+  // เพิ่ม useEffect เพื่อโหลด schedule counts
+useEffect(() => {
+  const loadScheduleCounts = async () => {
+    const counts = {};
+    
+    for (const group of customerGroups) {
+      try {
+        const schedules = await getGroupSchedules(group.id);
+        counts[group.id] = schedules.length;
+      } catch (error) {
+        counts[group.id] = 0;
+      }
+    }
+    
+    setGroupScheduleCounts(counts);
+  };
+  
+  if (customerGroups.length > 0) {
+    loadScheduleCounts();
+  }
+}, [customerGroups, selectedPage]);
 
   // แก้ไขฟังก์ชันลบกลุ่มลูกค้า
 const removeCustomerGroup = async (groupId) => {
@@ -482,28 +512,57 @@ const saveEditGroup = async () => {
   };
 
   // ฟังก์ชันแสดงตารางเวลาของกลุ่ม
-  const viewGroupSchedules = (group) => {
-    const schedules = getGroupSchedules(group.id);
-    setViewingGroupSchedules(schedules);
-    setViewingGroupName(group.type_name || group.name);
-    setShowScheduleModal(true);
-  };
+  const viewGroupSchedules = async (group) => {
+  const schedules = await getGroupSchedules(group.id);
+  setViewingGroupSchedules(schedules);
+  setViewingGroupName(group.type_name || group.name);
+  setShowScheduleModal(true);
+};
 
   // ฟังก์ชันลบตารางเวลา
-  const deleteSchedule = (scheduleId) => {
-    if (window.confirm("คุณต้องการลบตารางเวลานี้หรือไม่?")) {
-      const schedules = getSchedulesForPage(selectedPage);
-      const updatedSchedules = schedules.filter(s => s.id !== scheduleId);
-      saveSchedulesForPage(selectedPage, updatedSchedules);
+  const deleteSchedule = async (scheduleId) => {
+  if (window.confirm("คุณต้องการลบตารางเวลานี้หรือไม่?")) {
+    try {
+      // ตรวจสอบว่าเป็น default group หรือไม่
+      const currentGroup = customerGroups.find(g => g.id === viewingGroupSchedules[0]?.groupId);
       
-      const newViewingSchedules = viewingGroupSchedules.filter(s => s.id !== scheduleId);
-      setViewingGroupSchedules(newViewingSchedules);
-      
-      if (newViewingSchedules.length === 0) {
-        setShowScheduleModal(false);
+      if (currentGroup && currentGroup.id.toString().startsWith('default_')) {
+        // สำหรับ default group ลบจาก localStorage
+        const scheduleKey = `defaultGroupSchedules_${selectedPage}_${currentGroup.id}`;
+        const localSchedules = JSON.parse(localStorage.getItem(scheduleKey) || '[]');
+        const updatedSchedules = localSchedules.filter(s => s.id !== scheduleId);
+        localStorage.setItem(scheduleKey, JSON.stringify(updatedSchedules));
+        
+        setViewingGroupSchedules(updatedSchedules);
+        
+        if (updatedSchedules.length === 0) {
+          setShowScheduleModal(false);
+        }
+      } else {
+        // สำหรับ user group ลบจาก database
+        const response = await fetch(`http://localhost:8000/message-schedules/${scheduleId}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Failed to delete schedule');
+        
+        // รีโหลด schedules
+        const groupId = viewingGroupSchedules[0]?.groupId || selectedGroups[0]?.id;
+        const schedules = await getGroupSchedules(groupId);
+        setViewingGroupSchedules(schedules);
+        
+        if (schedules.length === 0) {
+          setShowScheduleModal(false);
+        }
       }
+    } catch (error) {
+      console.error('Error deleting schedule:', error);
+      alert('เกิดข้อผิดพลาดในการลบตารางเวลา');
     }
-  };
+  }
+};
+
+
 
   // แยกกลุ่ม default และ user groups สำหรับการแสดงผล
   const defaultGroups = customerGroups.filter(g => g.isDefault);
@@ -799,14 +858,14 @@ const saveEditGroup = async () => {
                             <p className="group-description">{group.rule_description}</p>
                           )}
                           
-                          {getGroupSchedules(group.id).length > 0 && (
-                            <div className="schedule-info" onClick={(e) => {
-                              e.stopPropagation();
-                              viewGroupSchedules(group);
-                            }}>
-                              <span>⏰ มีการตั้งเวลา {getGroupSchedules(group.id).length} รายการ</span>
-                            </div>
-                          )}
+                          {groupScheduleCounts[group.id] > 0 && (
+                          <div className="schedule-info" onClick={(e) => {
+                            e.stopPropagation();
+                            viewGroupSchedules(group);
+                          }}>
+                            <span>⏰ มีการตั้งเวลา {groupScheduleCounts[group.id]} รายการ</span>
+                          </div>
+                        )}
                           
                           <div className="group-date">
                             กลุ่มพื้นฐานของระบบ
