@@ -56,7 +56,8 @@ function SetMiner() {
     }
   ];
 
-  // ฟังก์ชันดึงกลุ่มลูกค้าจาก Database
+ 
+  // อัพเดทฟังก์ชัน fetchCustomerGroups เพื่อดึงจำนวนข้อความด้วย
   const fetchCustomerGroups = async (pageId) => {
     setLoading(true);
     try {
@@ -90,17 +91,22 @@ function SetMiner() {
       const data = await response.json();
       console.log('Customer groups from database:', data);
       
-      // แปลงข้อมูลให้มีโครงสร้างเดียวกับ DEFAULT_GROUPS
-      const formattedGroups = data.map(group => ({
-        id: group.id,
-        type_name: group.type_name,
-        isDefault: false,
-        rule_description: group.rule_description || '',
-        keywords: Array.isArray(group.keywords) ? group.keywords.join(', ') : group.keywords || '',
-        examples: Array.isArray(group.examples) ? group.examples.join('\n') : group.examples || '',
-        created_at: group.created_at,
-        customer_count: group.customer_count || 0,
-        is_active: group.is_active !== false // default true if not specified
+      // แปลงข้อมูลให้มีโครงสร้างเดียวกับ DEFAULT_GROUPS และดึงจำนวนข้อความ
+      const formattedGroups = await Promise.all(data.map(async group => {
+        const messageCount = await getGroupMessageCount(pageId, group.id);
+        
+        return {
+          id: group.id,
+          type_name: group.type_name,
+          isDefault: false,
+          rule_description: group.rule_description || '',
+          keywords: Array.isArray(group.keywords) ? group.keywords.join(', ') : group.keywords || '',
+          examples: Array.isArray(group.examples) ? group.examples.join('\n') : group.examples || '',
+          created_at: group.created_at,
+          customer_count: group.customer_count || 0,
+          is_active: group.is_active !== false,
+          message_count: messageCount // เพิ่มจำนวนข้อความ
+        };
       }));
       
       // รวมกลุ่ม default กับกลุ่มจาก database
@@ -513,6 +519,39 @@ const saveEditGroup = async () => {
   );
 
   const selectedPageInfo = selectedPage ? pages.find(p => p.id === selectedPage) : null;
+
+  // ฟังก์ชันดึงจำนวนข้อความของกลุ่มจาก database
+  const getGroupMessageCount = async (pageId, groupId) => {
+    try {
+      const dbId = await getPageDbId(pageId);
+      if (!dbId) return 0;
+      
+      const response = await fetch(`http://localhost:8000/group-messages/${dbId}/${groupId}`);
+      if (!response.ok) return 0;
+      
+      const messages = await response.json();
+      return messages.length;
+    } catch (error) {
+      console.error('Error getting message count:', error);
+      return 0;
+    }
+  };
+
+  // ฟังก์ชันดึง page DB ID
+  const getPageDbId = async (pageId) => {
+    try {
+      const response = await fetch('http://localhost:8000/pages/');
+      if (!response.ok) throw new Error('Failed to fetch pages');
+      
+      const pagesData = await response.json();
+      const currentPage = pagesData.find(p => p.page_id === pageId || p.id === pageId);
+      
+      return currentPage ? currentPage.ID : null;
+    } catch (error) {
+      console.error('Error getting page DB ID:', error);
+      return null;
+    }
+  };
 
   return (
     <div className="app-container">

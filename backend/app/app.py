@@ -14,7 +14,7 @@ import threading
 from app.service.message_scheduler import message_scheduler
 import logging
 from app.service.auto_sync_service import auto_sync_service
-
+from app.routes import group_messages
 
 # Setup logging
 logging.basicConfig(
@@ -41,6 +41,9 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.get("/robots.txt")
 def robots():
     return FileResponse("static/robots.txt", media_type="text/plain")
+
+# เพิ่มบรรทัดนี้ในส่วน include router
+app.include_router(group_messages.router)
 
 # สร้างตารางในฐานข้อมูล
 Base.metadata.create_all(bind=engine)

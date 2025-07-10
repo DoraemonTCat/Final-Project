@@ -199,3 +199,56 @@ export async function autoGroupCustomer(pageId, customerPsid, messageText) {
   if (!res.ok) throw new Error("ไม่สามารถจัดกลุ่มอัตโนมัติได้");
   return res.json();
 }
+
+/////////////////////// ฟังก์ชันสำหรับจัดการข้อความของกลุ่ม ///////////////////////
+export async function createGroupMessage(messageData) {
+  const res = await fetch("http://localhost:8000/group-messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(messageData),
+  });
+  if (!res.ok) throw new Error("ไม่สามารถสร้างข้อความได้");
+  return res.json();
+}
+
+export async function getGroupMessages(pageId, groupId) {
+  const res = await fetch(`http://localhost:8000/group-messages/${pageId}/${groupId}`);
+  if (!res.ok) throw new Error("ไม่สามารถโหลดข้อความได้");
+  return res.json();
+}
+
+export async function updateGroupMessage(messageId, updateData) {
+  const res = await fetch(`http://localhost:8000/group-messages/${messageId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updateData),
+  });
+  if (!res.ok) throw new Error("ไม่สามารถอัพเดทข้อความได้");
+  return res.json();
+}
+
+export async function deleteGroupMessage(messageId) {
+  const res = await fetch(`http://localhost:8000/group-messages/${messageId}`, {
+    method: "DELETE"
+  });
+  if (!res.ok) throw new Error("ไม่สามารถลบข้อความได้");
+  return res.json();
+}
+
+export async function createBatchGroupMessages(messages) {
+  const res = await fetch("http://localhost:8000/group-messages/batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(messages),
+  });
+  if (!res.ok) throw new Error("ไม่สามารถสร้างข้อความแบบ batch ได้");
+  return res.json();
+}
+
+export async function deleteAllGroupMessages(pageId, groupId) {
+  const res = await fetch(`http://localhost:8000/group-messages/${pageId}/${groupId}/all`, {
+    method: "DELETE"
+  });
+  if (!res.ok) throw new Error("ไม่สามารถลบข้อความทั้งหมดได้");
+  return res.json();
+}
