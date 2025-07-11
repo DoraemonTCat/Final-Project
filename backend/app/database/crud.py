@@ -103,21 +103,23 @@ def create_or_update_customer(db: Session, page_id: int, customer_psid: str, cus
         first_interaction = customer_data.get('first_interaction_at', datetime.now())
         if isinstance(first_interaction, str):
             first_interaction = datetime.fromisoformat(first_interaction.replace('Z', '+00:00'))
-        
+
         last_interaction = customer_data.get('last_interaction_at', first_interaction)
         if isinstance(last_interaction, str):
             last_interaction = datetime.fromisoformat(last_interaction.replace('Z', '+00:00'))
-        
+
+        source_type = customer_data.get('source_type', 'new')
+
         db_customer = models.FbCustomer(
             page_id=page_id,
             customer_psid=customer_psid,
             name=customer_data.get('name', ''),
             customer_type_custom_id=customer_data.get('customer_type_custom_id'),
             customer_type_knowledge_id=customer_data.get('customer_type_knowledge_id'),
-            first_interaction_at=first_interaction,  # ครั้งแรกที่ทักเข้ามา - ไม่เปลี่ยนแปลง
-            last_interaction_at=last_interaction,    # ครั้งล่าสุดที่ทักเข้ามา
-            source_type=customer_data.get('source_type', 'new')
-            # created_at และ updated_at จะถูกตั้งค่าอัตโนมัติโดย database
+            first_interaction_at=first_interaction,
+            last_interaction_at=last_interaction,
+            source_type=source_type
+            # created_at, updated_at handled by DB
         )
         db.add(db_customer)
         db.commit()

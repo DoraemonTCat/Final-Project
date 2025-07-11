@@ -826,6 +826,8 @@ async def sync_facebook_customers_enhanced(
     """Sync ข้อมูลลูกค้าจาก Facebook มาเก็บใน database พร้อมข้อมูลเวลาที่ถูกต้อง"""
     print(f"🔄 เริ่ม sync ข้อมูลลูกค้าสำหรับ page_id: {page_id}")
     print(f"📅 ช่วงเวลา: period={period}, start={start_date}, end={end_date}")
+
+    bangkok_tz = pytz.timezone("Asia/Bangkok")
     
     # ตรวจสอบว่ามี page ใน database หรือไม่
     page = crud.get_page_by_page_id(db, page_id)
@@ -837,11 +839,13 @@ async def sync_facebook_customers_enhanced(
     
     # ดึง access token
     access_token = page_tokens.get(page_id)
+    print(f"Received access_token: {access_token}")  # <--- debug line
+
     if not access_token:
-        return JSONResponse(
-            status_code=400, 
-            content={"error": f"ไม่พบ access_token สำหรับ page_id: {page_id}"}
-        )
+        access_token = page_tokens.get(page_id)
+
+    if not access_token:
+        return JSONResponse(status_code=400, content={"error": f"ไม่พบ access_token สำหรับ page_id: {page_id}"})
     
     try:
         # คำนวณช่วงเวลาที่ต้องการดึงข้อมูล
@@ -849,7 +853,7 @@ async def sync_facebook_customers_enhanced(
         filter_end_date = None
         
         if period:
-            now = datetime.now()
+            now = datetime.now(bangkok_tz)
             if period == 'today':
                 filter_start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
             elif period == 'week':
@@ -866,8 +870,8 @@ async def sync_facebook_customers_enhanced(
             filter_end_date = now
         
         elif start_date and end_date:
-            filter_start_date = datetime.fromisoformat(start_date)
-            filter_end_date = datetime.fromisoformat(end_date + 'T23:59:59')
+            filter_start_date = bangkok_tz.localize(datetime.fromisoformat(start_date))
+            filter_end_date = bangkok_tz.localize(datetime.fromisoformat(end_date + 'T23:59:59'))
         
         print(f"🕒 กรองข้อมูลตั้งแต่: {filter_start_date} ถึง {filter_end_date}")
         
@@ -901,7 +905,7 @@ async def sync_facebook_customers_enhanced(
             # ตรวจสอบช่วงเวลาถ้ามีการกำหนด
             if filter_start_date and updated_time:
                 try:
-                    convo_time = datetime.fromisoformat(updated_time.replace('Z', '+00:00'))
+                    convo_time = datetime.fromisoformat(updated_time.replace('Z', '+00:00')).astimezone(bangkok_tz)
                     if convo_time < filter_start_date or convo_time > filter_end_date:
                         filtered_count += 1
                         continue
@@ -914,33 +918,52 @@ async def sync_facebook_customers_enhanced(
                 if participant_id and participant_id != page_id:
                     try:
                         # หาข้อความแรกและล่าสุดของ user
+                        # ตรวจสอบว่า messages มีข้อมูลหรือไม่
+                        if not messages:
+                            print(f"⚠️ ไม่มี messages ใน conversation {convo_id}")
+                            continue
+
+                        # ดึงข้อความทั้งหมดของฝั่ง user
                         user_messages = [
                             msg for msg in messages 
                             if msg.get("from", {}).get("id") == participant_id
                         ]
-                        
-                        first_interaction = None
-                        last_interaction = None
-                        
+                                    
+                        # fallback: ถ้าไม่มีข้อความฝั่ง user ให้ใช้ข้อความแรกใน conversation แทน
+                        sorted_messages = sorted(messages, key=lambda x: x.get("created_time", ""))
+                        first_msg_time = None
+                        last_msg_time = None
+
                         if user_messages:
-                            # เรียงตามเวลา
-                            user_messages.sort(key=lambda x: x.get("created_time", ""))
-                            
-                            # ข้อความแรก
+                            user_messages.sort(key=lambda x: x.get("created_time") or "")
                             first_msg_time = user_messages[0].get("created_time")
-                            if first_msg_time:
-                                try:
-                                    first_interaction = datetime.fromisoformat(first_msg_time.replace('Z', '+00:00'))
-                                except:
-                                    pass
-                            
-                            # ข้อความล่าสุด
                             last_msg_time = user_messages[-1].get("created_time")
-                            if last_msg_time:
-                                try:
-                                    last_interaction = datetime.fromisoformat(last_msg_time.replace('Z', '+00:00'))
-                                except:
-                                    pass
+                        elif messages:
+                            sorted_messages = sorted(messages, key=lambda x: x.get("created_time") or "")
+                            first_msg_time = sorted_messages[0].get("created_time")
+                            last_msg_time = sorted_messages[-1].get("created_time")
+                        else:
+                            first_msg_time = last_msg_time = updated_time
+
+                        # แปลงเวลาถ้ามี
+                        if first_msg_time:
+                            try:
+                                fixed_str = fix_isoformat(first_msg_time.replace("Z", "+00:00"))
+                                first_interaction = datetime.fromisoformat(fixed_str).astimezone(bangkok_tz)
+                            except Exception as e:
+                                print(f"⚠️ ไม่สามารถแปลง first_msg_time: {first_msg_time} - {e}")
+                                first_interaction = None
+
+                        if last_msg_time:
+                            try:
+                                fixed_str = fix_isoformat(last_msg_time.replace("Z", "+00:00"))
+                                last_interaction = datetime.fromisoformat(fixed_str).astimezone(bangkok_tz)
+                            except Exception as e:
+                                print(f"⚠️ ไม่สามารถแปลง last_msg_time: {last_msg_time} - {e}")
+                                last_interaction = first_interaction
+
+                        print(f"🕓 first_msg_time: {first_msg_time}, last_msg_time: {last_msg_time}")
+                        print(f"➡️ first_interaction: {first_interaction}, last_interaction: {last_interaction}")
                         
                         # ถ้าไม่มีข้อความของ user ใช้เวลาของ conversation
                         if not first_interaction:
@@ -973,7 +996,6 @@ async def sync_facebook_customers_enhanced(
                             'name': user_name,
                             'first_interaction_at': first_interaction,
                             'last_interaction_at': last_interaction,
-                            'source_type': 'imported'  # ระบุว่าเป็นการ import จาก sync
                         }
                         
                         customers_to_sync.append(customer_data)
@@ -981,14 +1003,45 @@ async def sync_facebook_customers_enhanced(
                     except Exception as e:
                         print(f"❌ Error processing customer {participant_id}: {e}")
                         error_count += 1
+                    
+        installed_at = page.created_at
+        if installed_at is None:
+            installed_at = datetime.now(bangkok_tz)
+        elif installed_at.tzinfo is None:
+            installed_at = bangkok_tz.localize(installed_at)
+        else:
+            installed_at = installed_at.astimezone(bangkok_tz)
+
+
+        for customer_data in customers_to_sync:
+            first = customer_data.get("first_interaction_at")
+    
+            if isinstance(first, str):
+                first = datetime.fromisoformat(first.replace("Z", "+00:00")).astimezone(bangkok_tz)
+    
+            if not first:
+                first = datetime.now(bangkok_tz)
+            elif first.tzinfo is None:
+                first = bangkok_tz.localize(first)
+            else:
+                first = first.astimezone(bangkok_tz)
+            # คำนวณ source_type
+            source_type = "new" if first >= installed_at else "imported"
+
+            customer_data["first_interaction_at"] = first
+            customer_data["source_type"] = source_type
         
         # Bulk sync ข้อมูลลง database
+        sync_results = {"created": 0, "updated": 0, "errors": 0}  # default
+
         if customers_to_sync:
             sync_results = crud.bulk_create_or_update_customers(db, page.ID, customers_to_sync)
             sync_count = sync_results["created"] + sync_results["updated"]
             error_count += sync_results["errors"]
-            
+
             print(f"✅ Sync เสร็จสิ้น: สร้างใหม่ {sync_results['created']} คน, อัพเดท {sync_results['updated']} คน")
+        else:
+            sync_count = 0
         
         return {
             "status": "success",
