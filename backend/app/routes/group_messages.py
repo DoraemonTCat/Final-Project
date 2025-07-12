@@ -466,3 +466,43 @@ async def create_batch_schedules(
         db.rollback()
         logger.error(f"Error creating batch schedules: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+    
+# API สำหรับลบ schedules ทั้งหมดของกลุ่ม
+@router.delete("/message-schedules/group/{page_id}/{group_id}")
+async def delete_group_schedules(
+    page_id: int,
+    group_id: int,
+    db: Session = Depends(get_db)
+):
+    """ลบ schedules ทั้งหมดของกลุ่มก่อนสร้างใหม่"""
+    try:
+        # ดึงข้อความทั้งหมดของกลุ่ม
+        messages = db.query(models.CustomerTypeMessage).filter(
+            models.CustomerTypeMessage.page_id == page_id,
+            models.CustomerTypeMessage.customer_type_custom_id == group_id
+        ).all()
+        
+        if not messages:
+            return {"status": "no_messages", "deleted_count": 0}
+        
+        message_ids = [msg.id for msg in messages]
+        
+        # ลบ schedules ที่เกี่ยวข้อง
+        deleted_count = db.query(models.MessageSchedule).filter(
+            models.MessageSchedule.customer_type_message_id.in_(message_ids)
+        ).delete(synchronize_session=False)
+        
+        db.commit()
+        
+        logger.info(f"Deleted {deleted_count} schedules for group {group_id}")
+        
+        return {
+            "status": "success",
+            "deleted_count": deleted_count,
+            "message": f"ลบ {deleted_count} schedules สำเร็จ"
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting group schedules: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
