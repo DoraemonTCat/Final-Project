@@ -467,42 +467,139 @@ async def create_batch_schedules(
         logger.error(f"Error creating batch schedules: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     
-# API สำหรับลบ schedules ทั้งหมดของกลุ่ม
-@router.delete("/message-schedules/group/{page_id}/{group_id}")
-async def delete_group_schedules(
+# API สำหรับลบ schedule ทั้งหมดของกลุ่ม
+@router.delete("/group-schedule/{page_id}/{group_id}")
+async def delete_group_schedule(
     page_id: int,
     group_id: int,
     db: Session = Depends(get_db)
 ):
-    """ลบ schedules ทั้งหมดของกลุ่มก่อนสร้างใหม่"""
+    """ลบ schedule ทั้งหมดของกลุ่ม"""
     try:
-        # ดึงข้อความทั้งหมดของกลุ่ม
+        messages = db.query(models.CustomerTypeMessage).filter(
+            models.CustomerTypeMessage.page_id == page_id,
+            models.CustomerTypeMessage.customer_type_custom_id == group_id
+        ).all()
+        
+        if messages:
+            message_ids = [msg.id for msg in messages]
+            deleted = db.query(models.MessageSchedule).filter(
+                models.MessageSchedule.customer_type_message_id.in_(message_ids)
+            ).delete(synchronize_session=False)
+            
+            db.commit()
+            
+            return {
+                "status": "success",
+                "deleted_count": deleted
+            }
+        
+        return {
+            "status": "no_messages",
+            "deleted_count": 0
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting group schedule: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    
+# API สำหรับบันทึก schedule เดียวสำหรับทั้งกลุ่ม
+@router.post("/group-schedule/{page_id}/{group_id}")
+async def create_group_schedule(
+    page_id: int,
+    group_id: int,
+    schedule_data: MessageScheduleCreate,
+    db: Session = Depends(get_db)
+):
+    """สร้าง schedule เดียวสำหรับข้อความทั้งหมดในกลุ่ม"""
+    try:
+        # ลบ schedules เก่าทั้งหมดของกลุ่มนี้ก่อน
         messages = db.query(models.CustomerTypeMessage).filter(
             models.CustomerTypeMessage.page_id == page_id,
             models.CustomerTypeMessage.customer_type_custom_id == group_id
         ).all()
         
         if not messages:
-            return {"status": "no_messages", "deleted_count": 0}
+            raise HTTPException(status_code=404, detail="No messages found for this group")
         
         message_ids = [msg.id for msg in messages]
         
-        # ลบ schedules ที่เกี่ยวข้อง
-        deleted_count = db.query(models.MessageSchedule).filter(
+        # ลบ schedules เก่า
+        db.query(models.MessageSchedule).filter(
             models.MessageSchedule.customer_type_message_id.in_(message_ids)
         ).delete(synchronize_session=False)
         
-        db.commit()
+        # สร้าง schedule ใหม่สำหรับแต่ละข้อความ (ใช้เงื่อนไขเดียวกัน)
+        new_schedules = []
+        for msg_id in message_ids:
+            db_schedule = models.MessageSchedule(
+                customer_type_message_id=msg_id,
+                send_type=schedule_data.send_type,
+                scheduled_at=schedule_data.scheduled_at,
+                send_after_inactive=schedule_data.send_after_inactive,
+                frequency=schedule_data.frequency
+            )
+            new_schedules.append(db_schedule)
         
-        logger.info(f"Deleted {deleted_count} schedules for group {group_id}")
+        db.add_all(new_schedules)
+        db.commit()
         
         return {
             "status": "success",
-            "deleted_count": deleted_count,
-            "message": f"ลบ {deleted_count} schedules สำเร็จ"
+            "message": f"Created schedule for {len(new_schedules)} messages",
+            "group_id": group_id
         }
         
     except Exception as e:
         db.rollback()
-        logger.error(f"Error deleting group schedules: {e}")
+        logger.error(f"Error creating group schedule: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+# API สำหรับดึง schedule สรุปของกลุ่ม (ใช้ schedule แรกเป็นตัวแทน)
+@router.get("/group-schedule-summary/{page_id}")
+async def get_group_schedule_summaries(
+    page_id: int,
+    db: Session = Depends(get_db)
+):
+    """ดึงสรุป schedule ของแต่ละกลุ่ม"""
+    try:
+        # ดึงกลุ่มทั้งหมด
+        groups = db.query(models.CustomerTypeCustom).filter(
+            models.CustomerTypeCustom.page_id == page_id,
+            models.CustomerTypeCustom.is_active == True
+        ).all()
+        
+        summaries = []
+        
+        for group in groups:
+            # ดึงข้อความของกลุ่ม
+            messages = db.query(models.CustomerTypeMessage).filter(
+                models.CustomerTypeMessage.page_id == page_id,
+                models.CustomerTypeMessage.customer_type_custom_id == group.id
+            ).all()
+            
+            if messages:
+                # ดึง schedule แรก (ถ้ามี) เป็นตัวแทน
+                first_message_id = messages[0].id
+                schedule = db.query(models.MessageSchedule).filter(
+                    models.MessageSchedule.customer_type_message_id == first_message_id
+                ).first()
+                
+                if schedule:
+                    summaries.append({
+                        "group_id": group.id,
+                        "group_name": group.type_name,
+                        "message_count": len(messages),
+                        "send_type": schedule.send_type,
+                        "scheduled_at": schedule.scheduled_at,
+                        "send_after_inactive": schedule.send_after_inactive,
+                        "frequency": schedule.frequency,
+                        "created_at": schedule.created_at
+                    })
+        
+        return summaries
+        
+    except Exception as e:
+        logger.error(f"Error getting group schedule summaries: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

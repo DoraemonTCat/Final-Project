@@ -65,9 +65,22 @@ function ScheduleDashboard() {
       // 2. โหลด schedules จาก database สำหรับ user groups
       const dbSchedules = await loadDatabaseSchedules(dbId);
 
-      // 3. รวมทั้งสองแหล่งข้อมูล
+      // 3. รวมทั้งสองแหล่งข้อมูล - กรองให้เหลือ schedule เดียวต่อกลุ่ม
       const allSchedules = [...localSchedules, ...dbSchedules];
-      setSchedules(allSchedules);
+      
+      // Group schedules by group and take only the first one
+      const uniqueSchedules = [];
+      const seenGroups = new Set();
+      
+      allSchedules.forEach(schedule => {
+        const groupKey = schedule.groups.join(',');
+        if (!seenGroups.has(groupKey)) {
+          seenGroups.add(groupKey);
+          uniqueSchedules.push(schedule);
+        }
+      });
+      
+      setSchedules(uniqueSchedules);
 
     } catch (error) {
       console.error('Error loading schedules:', error);
@@ -122,31 +135,45 @@ function ScheduleDashboard() {
           if (schedulesResponse.ok) {
             const groupSchedules = await schedulesResponse.json();
             
-            // เพิ่มข้อมูลกลุ่มให้กับแต่ละ schedule
-            for (const schedule of groupSchedules) {
-              // ดึงข้อความของ schedule นี้
-              const messages = await getScheduleMessages(schedule.customer_type_message_id);
+            // ถ้ามี schedules หลายอันในกลุ่ม ให้ใช้อันแรกเป็นตัวแทน
+            if (groupSchedules.length > 0) {
+              const firstSchedule = groupSchedules[0];
+              
+              // นับจำนวนข้อความทั้งหมดในกลุ่ม
+              const messagesResponse = await fetch(`http://localhost:8000/group-messages/${dbId}/${group.id}`);
+              let messageCount = 0;
+              let messages = [];
+              
+              if (messagesResponse.ok) {
+                messages = await messagesResponse.json();
+                messageCount = messages.length;
+              }
               
               // แปลงรูปแบบข้อมูลให้ตรงกับ frontend
               const formattedSchedule = {
-                id: schedule.id,
-                type: convertScheduleType(schedule.send_type),
+                id: `group_${group.id}`, // ใช้ group ID เป็น schedule ID
+                type: convertScheduleType(firstSchedule.send_type),
                 groups: [group.id],
                 groupNames: [group.type_name],
-                messages: messages,
-                date: schedule.scheduled_at ? new Date(schedule.scheduled_at).toISOString().split('T')[0] : null,
-                time: schedule.scheduled_at ? new Date(schedule.scheduled_at).toTimeString().slice(0, 5) : null,
-                inactivityPeriod: extractInactivityPeriod(schedule.send_after_inactive),
-                inactivityUnit: extractInactivityUnit(schedule.send_after_inactive),
+                messages: messages.map(msg => ({
+                  type: msg.message_type,
+                  content: msg.content,
+                  order: msg.display_order
+                })),
+                messageCount: messageCount,
+                date: firstSchedule.scheduled_at ? new Date(firstSchedule.scheduled_at).toISOString().split('T')[0] : null,
+                time: firstSchedule.scheduled_at ? new Date(firstSchedule.scheduled_at).toTimeString().slice(0, 5) : null,
+                inactivityPeriod: extractInactivityPeriod(firstSchedule.send_after_inactive),
+                inactivityUnit: extractInactivityUnit(firstSchedule.send_after_inactive),
                 repeat: {
-                  type: schedule.frequency || 'once',
+                  type: firstSchedule.frequency || 'once',
                   endDate: null
                 },
-                createdAt: schedule.created_at,
-                updatedAt: schedule.updated_at,
+                createdAt: firstSchedule.created_at,
+                updatedAt: firstSchedule.updated_at,
                 source: 'database',
-                dbScheduleId: schedule.id,
-                messageId: schedule.customer_type_message_id
+                dbScheduleIds: groupSchedules.map(s => s.id), // เก็บ schedule IDs ทั้งหมด
+                groupId: group.id
               };
               
               allSchedules.push(formattedSchedule);
@@ -314,12 +341,18 @@ function ScheduleDashboard() {
 
     try {
       if (schedule.source === 'database') {
-        // ลบจาก database
-        const response = await fetch(`http://localhost:8000/message-schedules/${schedule.dbScheduleId}`, {
-          method: 'DELETE'
-        });
-        
-        if (!response.ok) throw new Error('Failed to delete schedule');
+        // ลบ schedules ทั้งหมดของกลุ่มนี้จาก database
+        if (schedule.dbScheduleIds && schedule.dbScheduleIds.length > 0) {
+          for (const scheduleId of schedule.dbScheduleIds) {
+            const response = await fetch(`http://localhost:8000/message-schedules/${scheduleId}`, {
+              method: 'DELETE'
+            });
+            
+            if (!response.ok) {
+              console.error(`Failed to delete schedule ${scheduleId}`);
+            }
+          }
+        }
       } else {
         // ลบจาก localStorage
         const key = `miningSchedules_${selectedPage}`;
@@ -434,12 +467,12 @@ function ScheduleDashboard() {
             <table>
               <thead>
                 <tr>
-                  <th>ชื่อกลุ่ม</th>
-                  <th>ประเภท</th>
+                  <th >ชื่อกลุ่ม</th>
+                  <th style={{paddingLeft:"30px"}}>ประเภท</th>
                   <th>เงื่อนไข</th>
                   <th>จำนวนข้อความ</th>
                   
-                  <th>สถานะ</th>
+                  <th style={{paddingLeft:"40px"}}>สถานะ</th>
                   <th>การจัดการ</th>
                 </tr>
               </thead>
@@ -450,7 +483,7 @@ function ScheduleDashboard() {
                   
                   return (
                     <tr key={`${schedule.source}-${schedule.id}`} className={isDefault ? 'default-schedule-row' : ''}>
-                      <td> 
+                      <td>
                         <div className="group-names-cell">
                           {schedule.groupNames?.join(', ') || 'ไม่ระบุ'}
                           {isDefault && (
@@ -458,13 +491,13 @@ function ScheduleDashboard() {
                           )}
                         </div>
                       </td>
-                      <td>
+                      <td >
                         {schedule.type === 'immediate' && '⚡ ส่งทันที'}
                         {schedule.type === 'scheduled' && '📅 ตามเวลา'}
                         {schedule.type === 'user-inactive' && '🕰️ User หาย'}
                       </td>
                       <td>{getScheduleDescription(schedule)}</td>
-                      <td style={{paddingLeft:"60px"}}>{getMessageCount(schedule)}</td>
+                      <td style={{paddingLeft:"60px"}}>{getMessageCount(schedule) || schedule.messageCount || 0}</td>
                       
                       <td>
                         <span 
