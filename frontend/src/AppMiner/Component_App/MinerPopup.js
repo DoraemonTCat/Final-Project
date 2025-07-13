@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import '../CSS/Popup.css';
-import { getMessageSetsByPage, getMessagesBySetId } from '../Features/Tool';
-import MessagePopup from './MessagePopup';
+import '../../CSS/Popup.css';
+import { getMessageSetsByPage, getMessagesBySetId } from '../../Features/Tool';
+import MessagePopup from '../MessagePopup';
 
 // FontAwesome
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';

@@ -2,12 +2,12 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import '../CSS/App.css';
 import { fetchPages, getMessagesBySetId, fetchConversations } from "../Features/Tool";
 import Sidebar from "./Sidebar"; 
-import Popup from "./MinerPopup";
+import Popup from "./Component_App/MinerPopup";
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import * as mammoth from 'mammoth';
-import SyncCustomersButton from './SyncCustomersButton';
-import DateFilterBadge from './DateFilterBadge';
+import SyncCustomersButton from './Component_App/SyncCustomersButton';
+import DateFilterBadge from './Component_App/DateFilterBadge';
 
 // 🎨 Component สำหรับแสดงเวลาแบบ optimized
 const TimeAgoCell = React.memo(({ lastMessageTime, updatedTime, userId, onInactivityChange }) => {
