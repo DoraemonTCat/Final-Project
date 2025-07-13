@@ -9,15 +9,33 @@ function ScheduleDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [pageDbId, setPageDbId] = useState(null);
 
-  // 🔥 กลุ่ม Default IDs
+  // กลุ่ม Default IDs
   const DEFAULT_GROUP_IDS = ['default_1', 'default_2', 'default_3'];
+
+  // ฟังก์ชันดึง page DB ID
+  const getPageDbId = async (pageId) => {
+    try {
+      const response = await fetch('http://localhost:8000/pages/');
+      if (!response.ok) throw new Error('Failed to fetch pages');
+      
+      const pagesData = await response.json();
+      const currentPage = pagesData.find(p => p.page_id === pageId || p.id === pageId);
+      
+      return currentPage ? currentPage.ID : null;
+    } catch (error) {
+      console.error('Error getting page DB ID:', error);
+      return null;
+    }
+  };
 
   useEffect(() => {
     const savedPage = localStorage.getItem("selectedPage");
     if (savedPage) {
       setSelectedPage(savedPage);
-      loadSchedules(savedPage);
+      loadAllSchedules(savedPage);
       loadActiveSchedules(savedPage);
     }
   }, []);
@@ -34,49 +52,166 @@ function ScheduleDashboard() {
     }
   };
 
-  const loadSchedules = (pageId) => {
+  // ฟังก์ชันโหลด schedules จากทั้ง localStorage และ database
+  const loadAllSchedules = async (pageId) => {
+    setLoading(true);
+    try {
+      const dbId = await getPageDbId(pageId);
+      setPageDbId(dbId);
+
+      // 1. โหลด schedules จาก localStorage สำหรับ default groups
+      const localSchedules = loadLocalSchedules(pageId);
+
+      // 2. โหลด schedules จาก database สำหรับ user groups
+      const dbSchedules = await loadDatabaseSchedules(dbId);
+
+      // 3. รวมทั้งสองแหล่งข้อมูล
+      const allSchedules = [...localSchedules, ...dbSchedules];
+      setSchedules(allSchedules);
+
+    } catch (error) {
+      console.error('Error loading schedules:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // โหลด schedules จาก localStorage สำหรับ default groups
+  const loadLocalSchedules = (pageId) => {
     const key = `miningSchedules_${pageId}`;
     const savedSchedules = JSON.parse(localStorage.getItem(key) || '[]');
 
-    // 🔥 ดึงกลุ่มทั้งหมดของเพจนี้ (รวม default groups)
-    const groupKey = `customerGroups_${pageId}`;
-    const userGroups = JSON.parse(localStorage.getItem(groupKey) || '[]');
-    
-    // 🔥 สร้าง array ของ group IDs ทั้งหมด (รวม default)
-    const userGroupIds = userGroups.map(g => g.id);
-    const allGroupIds = [...DEFAULT_GROUP_IDS, ...userGroupIds];
-
-    // 🔥 filter schedule ที่กลุ่มยังอยู่ (รวม default groups)
-    const filteredSchedules = savedSchedules.filter(sch =>
-      sch.groups?.some(gid => allGroupIds.includes(gid))
+    // กรองเฉพาะ default groups
+    const defaultSchedules = savedSchedules.filter(sch =>
+      sch.groups?.some(gid => DEFAULT_GROUP_IDS.includes(gid))
     );
 
-    // 🔥 เพิ่มชื่อกลุ่มให้กับ schedule (รวม default groups)
-    const schedulesWithNames = filteredSchedules.map(schedule => {
+    // เพิ่มชื่อกลุ่ม
+    return defaultSchedules.map(schedule => {
       const groupNames = schedule.groups.map(groupId => {
-        // ตรวจสอบว่าเป็น default group หรือไม่
         if (groupId === 'default_1') return 'กลุ่มคนหาย';
         if (groupId === 'default_2') return 'กลุ่มคนหายนาน';
         if (groupId === 'default_3') return 'กลุ่มคนหายนานมาก';
-        
-        // ถ้าไม่ใช่ default ให้หาจาก user groups
-        const userGroup = userGroups.find(g => g.id === groupId);
-        return userGroup?.name || 'ไม่ระบุ';
+        return 'ไม่ระบุ';
       });
 
       return {
         ...schedule,
-        groupNames
+        groupNames,
+        source: 'localStorage'
       };
     });
+  };
 
-    setSchedules(schedulesWithNames);
+  // โหลด schedules จาก database สำหรับ user groups
+  const loadDatabaseSchedules = async (dbId) => {
+    if (!dbId) return [];
+
+    try {
+      // 1. ดึงกลุ่มทั้งหมดของ page
+      const groupsResponse = await fetch(`http://localhost:8000/customer-groups/${dbId}`);
+      if (!groupsResponse.ok) return [];
+      const groups = await groupsResponse.json();
+
+      // 2. ดึง schedules ของแต่ละกลุ่ม
+      const allSchedules = [];
+      
+      for (const group of groups) {
+        try {
+          const schedulesResponse = await fetch(`http://localhost:8000/message-schedules/group/${dbId}/${group.id}`);
+          if (schedulesResponse.ok) {
+            const groupSchedules = await schedulesResponse.json();
+            
+            // เพิ่มข้อมูลกลุ่มให้กับแต่ละ schedule
+            for (const schedule of groupSchedules) {
+              // ดึงข้อความของ schedule นี้
+              const messages = await getScheduleMessages(schedule.customer_type_message_id);
+              
+              // แปลงรูปแบบข้อมูลให้ตรงกับ frontend
+              const formattedSchedule = {
+                id: schedule.id,
+                type: convertScheduleType(schedule.send_type),
+                groups: [group.id],
+                groupNames: [group.type_name],
+                messages: messages,
+                date: schedule.scheduled_at ? new Date(schedule.scheduled_at).toISOString().split('T')[0] : null,
+                time: schedule.scheduled_at ? new Date(schedule.scheduled_at).toTimeString().slice(0, 5) : null,
+                inactivityPeriod: extractInactivityPeriod(schedule.send_after_inactive),
+                inactivityUnit: extractInactivityUnit(schedule.send_after_inactive),
+                repeat: {
+                  type: schedule.frequency || 'once',
+                  endDate: null
+                },
+                createdAt: schedule.created_at,
+                updatedAt: schedule.updated_at,
+                source: 'database',
+                dbScheduleId: schedule.id,
+                messageId: schedule.customer_type_message_id
+              };
+              
+              allSchedules.push(formattedSchedule);
+            }
+          }
+        } catch (error) {
+          console.error(`Error loading schedules for group ${group.id}:`, error);
+        }
+      }
+
+      return allSchedules;
+    } catch (error) {
+      console.error('Error loading database schedules:', error);
+      return [];
+    }
+  };
+
+  // แปลง schedule type จาก database เป็น frontend format
+  const convertScheduleType = (dbType) => {
+    const typeMap = {
+      'immediate': 'immediate',
+      'scheduled': 'scheduled',
+      'after_inactive': 'user-inactive'
+    };
+    return typeMap[dbType] || dbType;
+  };
+
+  // ดึงตัวเลขจาก send_after_inactive string
+  const extractInactivityPeriod = (sendAfterInactive) => {
+    if (!sendAfterInactive) return '1';
+    const match = sendAfterInactive.match(/(\d+)/);
+    return match ? match[1] : '1';
+  };
+
+  // ดึงหน่วยเวลาจาก send_after_inactive string
+  const extractInactivityUnit = (sendAfterInactive) => {
+    if (!sendAfterInactive) return 'days';
+    if (sendAfterInactive.includes('minute')) return 'minutes';
+    if (sendAfterInactive.includes('hour')) return 'hours';
+    if (sendAfterInactive.includes('day')) return 'days';
+    if (sendAfterInactive.includes('week')) return 'weeks';
+    if (sendAfterInactive.includes('month')) return 'months';
+    return 'days';
+  };
+
+  // ดึงข้อความของ schedule
+  const getScheduleMessages = async (messageId) => {
+    try {
+      // สำหรับ database schedules, messageId คือ customer_type_message_id
+      // ต้องดึงข้อความจาก group messages API
+      if (!pageDbId) return [];
+      
+      // Note: อาจต้องเพิ่ม API endpoint เพื่อดึงข้อความตาม message ID
+      // หรือเก็บข้อความไว้ใน schedule
+      return [];
+    } catch (error) {
+      console.error('Error loading schedule messages:', error);
+      return [];
+    }
   };
 
   const refreshStatus = async () => {
     setRefreshing(true);
     try {
-      loadSchedules(selectedPage);
+      await loadAllSchedules(selectedPage);
       await loadActiveSchedules(selectedPage);
       alert("รีเฟรชสถานะสำเร็จ!");
     } catch (error) {
@@ -174,6 +309,33 @@ function ScheduleDashboard() {
     return '-';
   };
 
+  const deleteSchedule = async (schedule) => {
+    if (!window.confirm('คุณต้องการลบตารางเวลานี้หรือไม่?')) return;
+
+    try {
+      if (schedule.source === 'database') {
+        // ลบจาก database
+        const response = await fetch(`http://localhost:8000/message-schedules/${schedule.dbScheduleId}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Failed to delete schedule');
+      } else {
+        // ลบจาก localStorage
+        const key = `miningSchedules_${selectedPage}`;
+        const savedSchedules = JSON.parse(localStorage.getItem(key) || '[]');
+        const updatedSchedules = savedSchedules.filter(s => s.id !== schedule.id);
+        localStorage.setItem(key, JSON.stringify(updatedSchedules));
+      }
+
+      await loadAllSchedules(selectedPage);
+      alert('ลบตารางเวลาสำเร็จ!');
+    } catch (error) {
+      console.error('Error deleting schedule:', error);
+      alert('เกิดข้อผิดพลาดในการลบตารางเวลา');
+    }
+  };
+
   const goToMinerGroup = () => {
     window.location.href = '/MinerGroup';
   };
@@ -182,9 +344,17 @@ function ScheduleDashboard() {
     window.location.href = '/MinerGroup';
   };
 
-  // 🔥 ฟังก์ชันตรวจสอบว่าเป็นกลุ่ม default หรือไม่
   const isDefaultGroup = (groupIds) => {
     return groupIds.some(id => DEFAULT_GROUP_IDS.includes(id));
+  };
+
+  // คำนวณจำนวนข้อความสำหรับ schedule
+  const getMessageCount = (schedule) => {
+    if (schedule.messages && Array.isArray(schedule.messages)) {
+      return schedule.messages.length;
+    }
+    // สำหรับ database schedules ที่อาจไม่มีข้อความ
+    return schedule.messageCount || 0;
   };
 
   return (
@@ -248,7 +418,12 @@ function ScheduleDashboard() {
 
         <div className="schedules-table">
           <h2>รายการตารางเวลา</h2>
-          {schedules.length === 0 ? (
+          {loading ? (
+            <div className="loading-state">
+              <div className="loading-spinner"></div>
+              <p>กำลังโหลดข้อมูล...</p>
+            </div>
+          ) : schedules.length === 0 ? (
             <div className="empty-table">
               <p>ยังไม่มีตารางเวลาสำหรับเพจนี้</p>
               <button onClick={goToMinerGroup} className="create-link">
@@ -263,6 +438,7 @@ function ScheduleDashboard() {
                   <th>ประเภท</th>
                   <th>เงื่อนไข</th>
                   <th>จำนวนข้อความ</th>
+                  
                   <th>สถานะ</th>
                   <th>การจัดการ</th>
                 </tr>
@@ -273,8 +449,8 @@ function ScheduleDashboard() {
                   const isDefault = isDefaultGroup(schedule.groups || []);
                   
                   return (
-                    <tr key={schedule.id} className={isDefault ? 'default-schedule-row' : ''}>
-                      <td>
+                    <tr key={`${schedule.source}-${schedule.id}`} className={isDefault ? 'default-schedule-row' : ''}>
+                      <td> 
                         <div className="group-names-cell">
                           {schedule.groupNames?.join(', ') || 'ไม่ระบุ'}
                           {isDefault && (
@@ -288,7 +464,8 @@ function ScheduleDashboard() {
                         {schedule.type === 'user-inactive' && '🕰️ User หาย'}
                       </td>
                       <td>{getScheduleDescription(schedule)}</td>
-                      <td>{schedule.messages?.length || 0}</td>
+                      <td style={{paddingLeft:"60px"}}>{getMessageCount(schedule)}</td>
+                      
                       <td>
                         <span 
                           className="status-badge"
@@ -312,6 +489,12 @@ function ScheduleDashboard() {
                             {status === 'กำลังทำงาน' ? '⏸️ หยุด' : '▶️ เริ่ม'}
                           </button>
                         )}
+                        <button 
+                          className="action-btn delete-btn"
+                          onClick={() => deleteSchedule(schedule)}
+                        >
+                          🗑️ ลบ
+                        </button>
                       </td>
                     </tr>
                   );
@@ -348,6 +531,7 @@ function ScheduleDashboard() {
                   )}
                 </p>
                 <p><strong>เงื่อนไข:</strong> {getScheduleDescription(selectedSchedule)}</p>
+                <p><strong>แหล่งข้อมูล:</strong> {selectedSchedule.source === 'database' ? 'Database' : 'Local Storage'}</p>
                 {selectedSchedule.repeat && selectedSchedule.repeat.type !== 'once' && (
                   <p><strong>ทำซ้ำ:</strong> {
                     selectedSchedule.repeat.type === 'daily' ? 'ทุกวัน' :
@@ -357,28 +541,35 @@ function ScheduleDashboard() {
               </div>
 
               <div className="detail-section">
-                <h4>ข้อความ ({selectedSchedule.messages?.length || 0})</h4>
+                <h4>ข้อความ ({getMessageCount(selectedSchedule)})</h4>
                 <div className="messages-list">
-                  {selectedSchedule.messages?.map((msg, idx) => (
-                    <div key={idx} className="message-item">
-                      <span className="message-number">{idx + 1}.</span>
-                      <span className="message-type">
-                        {msg.type === 'text' ? '💬' : msg.type === 'image' ? '🖼️' : '📹'}
-                      </span>
-                      <span className="message-content">
-                        {msg.type === 'text' ? msg.content : `[${msg.type.toUpperCase()}] ${msg.content}`}
-                      </span>
-                    </div>
-                  ))}
+                  {selectedSchedule.messages && selectedSchedule.messages.length > 0 ? (
+                    selectedSchedule.messages.map((msg, idx) => (
+                      <div key={idx} className="message-item">
+                        <span className="message-number">{idx + 1}.</span>
+                        <span className="message-type">
+                          {msg.type === 'text' ? '💬' : msg.type === 'image' ? '🖼️' : '📹'}
+                        </span>
+                        <span className="message-content">
+                          {msg.type === 'text' ? msg.content : `[${msg.type.toUpperCase()}] ${msg.content}`}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p style={{ color: '#718096', fontStyle: 'italic' }}>ไม่มีข้อมูลข้อความ</p>
+                  )}
                 </div>
               </div>
 
               <div className="detail-section">
                 <h4>สถานะ</h4>
                 <p><strong>สถานะปัจจุบัน:</strong> {getScheduleStatus(selectedSchedule)}</p>
-                <p><strong>สร้างเมื่อ:</strong> {new Date(selectedSchedule.createdAt).toLocaleString('th-TH')}</p>
+                <p><strong>สร้างเมื่อ:</strong> {new Date(selectedSchedule.createdAt || Date.now()).toLocaleString('th-TH')}</p>
                 {selectedSchedule.updatedAt && (
                   <p><strong>แก้ไขล่าสุด:</strong> {new Date(selectedSchedule.updatedAt).toLocaleString('th-TH')}</p>
+                )}
+                {selectedSchedule.dbScheduleId && (
+                  <p><strong>Schedule ID (DB):</strong> {selectedSchedule.dbScheduleId}</p>
                 )}
               </div>
             </div>
@@ -389,6 +580,55 @@ function ScheduleDashboard() {
           </div>
         </div>
       )}
+
+      <style>{`
+        .source-badge {
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 12px;
+          font-weight: 500;
+        }
+        
+        .source-badge.database {
+          background: #e6f3ff;
+          color: #2b6cb0;
+        }
+        
+        .source-badge.localStorage {
+          background: #fef3c7;
+          color: #92400e;
+        }
+        
+        .action-btn.delete-btn {
+          background: #fee;
+          color: #e53e3e;
+          border: 1px solid #fc8181;
+        }
+        
+        .action-btn.delete-btn:hover {
+          background: #fed7d7;
+        }
+        
+        .loading-state {
+          text-align: center;
+          padding: 60px 20px;
+        }
+        
+        .loading-spinner {
+          display: inline-block;
+          width: 40px;
+          height: 40px;
+          border: 4px solid #f3f4f6;
+          border-top: 4px solid #4299e1;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }
