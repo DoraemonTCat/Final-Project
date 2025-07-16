@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from fastapi import Query
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Optional
-
+import pytz
 
 router = APIRouter()
 
@@ -340,19 +340,6 @@ async def send_user_message_by_psid(
     else:
         result = send_message(psid, req.message, access_token)
 
-    # 🔥 ลบหรือ comment ส่วนนี้ออก เพื่อไม่ให้อัพเดท interaction time
-    # if "error" not in result:
-    #     try:
-    #         # ดึง page จาก database
-    #         page = crud.get_page_by_page_id(db, page_id)
-    #         if page:
-    #             # อัพเดท last_interaction_at
-    #             crud.update_customer_interaction(db, page.ID, psid)
-    #             print(f"✅ อัพเดท interaction time สำเร็จสำหรับ {psid}")
-    #     except Exception as e:
-    #         print(f"⚠️ ไม่สามารถอัพเดท interaction time: {e}")
-    #         # ไม่ return error เพราะการส่งข้อความสำเร็จแล้ว
-
     if "error" in result:
         return {"error": result["error"], "details": result}
     else:
@@ -494,111 +481,6 @@ async def debug_conversations(page_id: str):
         "token_preview": f"{access_token[:20]}..." if access_token else None,
         "raw_data": raw_conversations
     }
-
-# เพิ่ม endpoint ใหม่ใน facebook.py
-# เพิ่มฟังก์ชันนี้ใน facebook.py หลังจากฟังก์ชัน get_conversations_with_last_message
-
-@router.get("/conversations-with-last-message/{page_id}")
-async def get_conversations_with_last_message(page_id: str, db: Session = Depends(get_db)):
-    """ดึง conversations จาก database และ sync อัตโนมัติถ้าไม่มีข้อมูล"""
-    print(f"🚀 เริ่มดึงข้อมูล conversations สำหรับ page_id: {page_id}")
-    
-    # ตรวจสอบว่ามี page ใน database หรือไม่
-    page = crud.get_page_by_page_id(db, page_id)
-    if not page:
-        return JSONResponse(
-            status_code=400, 
-            content={"error": f"ไม่พบเพจ {page_id} ในระบบ"}
-        )
-    
-    try:
-        # ดึงข้อมูลลูกค้าจาก database
-        conversations_data = crud.get_customer_with_conversation_data(db, page.ID)
-        
-        # ถ้าไม่มีข้อมูลใน database ให้ sync อัตโนมัติ
-        if not conversations_data:
-            print("📊 ไม่พบข้อมูลใน database, กำลัง sync อัตโนมัติ...")
-            
-            # ดึง access token
-            access_token = page_tokens.get(page_id)
-            if access_token:
-                # ดึงข้อมูลจาก Facebook และบันทึก
-                conversations = get_conversations_with_participants(page_id, access_token)
-                
-                if conversations and "data" in conversations:
-                    sync_count = 0
-                    
-                    for convo in conversations.get("data", []):
-                        convo_id = convo.get("id")
-                        updated_time = convo.get("updated_time")
-                        participants = convo.get("participants", {}).get("data", [])
-                        
-                        for participant in participants:
-                            participant_id = participant.get("id")
-                            if participant_id and participant_id != page_id:
-                                # ดึงข้อมูล user
-                                user_name = participant.get("name")
-                                
-                                if not user_name:
-                                    user_info = get_user_info_from_psid(participant_id, access_token)
-                                    user_name = user_info.get("name")
-                                
-                                if not user_name or user_name.startswith("User"):
-                                    message_name = get_name_from_messages(convo_id, access_token, page_id)
-                                    if message_name:
-                                        user_name = message_name
-                                
-                                if not user_name:
-                                    user_name = f"User...{participant_id[-8:]}"
-                                
-                                # ดึงเวลาข้อความแรกและล่าสุด
-                                first_message_time = get_first_message_time(convo_id, access_token)
-                                
-                                # แปลง string เป็น datetime
-                                first_interaction = None
-                                last_interaction = None
-                                
-                                if first_message_time:
-                                    try:
-                                        first_interaction = datetime.fromisoformat(first_message_time.replace('Z', '+00:00'))
-                                    except:
-                                        first_interaction = datetime.now()
-                                
-                                if updated_time:
-                                    try:
-                                        last_interaction = datetime.fromisoformat(updated_time.replace('Z', '+00:00'))
-                                    except:
-                                        last_interaction = datetime.now()
-                                
-                                # บันทึกข้อมูลลูกค้า
-                                customer_data = {
-                                    'name': user_name,
-                                    'first_interaction_at': first_interaction,
-                                    'last_interaction_at': last_interaction
-                                }
-                                
-                                crud.create_or_update_customer(db, page.ID, participant_id, customer_data)
-                                sync_count += 1
-                    
-                    print(f"✅ Sync อัตโนมัติสำเร็จ: {sync_count} คน")
-                    
-                    # ดึงข้อมูลใหม่จาก database
-                    conversations_data = crud.get_customer_with_conversation_data(db, page.ID)
-        
-        print(f"✅ พบข้อมูลลูกค้าใน database จำนวน: {len(conversations_data)} คน")
-        
-        return {
-            "conversations": conversations_data, 
-            "total": len(conversations_data),
-            "source": "database"
-        }
-        
-    except Exception as e:
-        print(f"❌ เกิดข้อผิดพลาด: {e}")
-        return JSONResponse(
-            status_code=500, 
-            content={"error": f"เกิดข้อผิดพลาดในการดึงข้อมูล: {str(e)}"}
-        )
         
 # เพิ่ม endpoint สำหรับดึงข้อมูลจาก Facebook โดยตรง (ใช้เฉพาะเวลาต้องการ sync)
 @router.get("/conversations-from-facebook/{page_id}")
@@ -615,9 +497,6 @@ async def get_conversations_from_facebook(page_id: str):
         )
     
     try:
-        # เรียก function เดิมที่ดึงจาก Facebook
-        # ... (ใช้ logic เดิมจาก endpoint เก่า)
-        
         return {
             "conversations": [], # ข้อมูลจาก Facebook
             "total": 0,
@@ -662,21 +541,6 @@ async def activate_schedule(request: Request):
     
     # สำหรับ scheduled และ user-inactive จะรอให้ scheduler ทำงานตามเวลา
     return {"status": "success", "message": "Schedule activated"}
-
-# เพิ่มฟังก์ชันใหม่สำหรับทดสอบการส่งข้อความ:
-@router.post("/test-send/{page_id}")
-async def test_send_message(page_id: str, request: Request):
-    """ทดสอบการส่งข้อความตรง"""
-    data = await request.json()
-    psid = data.get('psid')
-    message = data.get('message', 'Test message')
-    
-    access_token = page_tokens.get(page_id)
-    if not access_token:
-        return {"error": "No access token for this page"}
-    
-    result = send_message(psid, message, access_token)
-    return {"result": result}
 
 # เพิ่มฟังก์ชันสำหรับดู active schedules:
 @router.get("/active-schedules/{page_id}")
@@ -750,21 +614,6 @@ async def test_user_inactivity(page_id: str, minutes: int = 1):
         "sent_to_users": sent_users,
         "count": len(sent_users)
     }
-
-# เพิ่มฟังก์ชันสำหรับทดสอบการส่งข้อความ:
-@router.post("/test-send/{page_id}")
-async def test_send_message(page_id: str, request: Request):
-    """ทดสอบการส่งข้อความตรง"""
-    data = await request.json()
-    psid = data.get('psid')
-    message = data.get('message', 'Test message')
-    
-    access_token = page_tokens.get(page_id)
-    if not access_token:
-        return {"error": "No access token for this page"}
-    
-    result = send_message(psid, message, access_token)
-    return {"result": result}
 
 # เพิ่ม endpoint สำหรับ reset tracking
 @router.post("/schedule/reset-tracking/{schedule_id}")
@@ -968,13 +817,14 @@ async def sync_facebook_customers_enhanced(
                         # ถ้าไม่มีข้อความของ user ใช้เวลาของ conversation
                         if not first_interaction:
                             try:
-                                first_interaction = datetime.fromisoformat(updated_time.replace('Z', '+00:00'))
-                            except:
-                                first_interaction = datetime.now()
-                        
+                                first_interaction = datetime.fromisoformat(updated_time.replace('Z', '+00:00')).astimezone(bangkok_tz)
+                            except Exception as e:
+                                print(f"⚠️ ไม่สามารถแปลง updated_time: {updated_time} - {e}")
+                                first_interaction = None
+
                         if not last_interaction:
                             last_interaction = first_interaction
-                        
+
                         # ดึงข้อมูล user
                         user_name = participant.get("name")
                         
@@ -1062,6 +912,11 @@ async def sync_facebook_customers_enhanced(
             status_code=500,
             content={"error": f"เกิดข้อผิดพลาดในการ sync: {str(e)}"}
         )
+
+def fix_isoformat(dt_str: str) -> str:
+    if dt_str[-5] in ['+', '-'] and dt_str[-3] != ':':
+        dt_str = dt_str[:-2] + ':' + dt_str[-2:]
+    return dt_str
 
 # เพิ่ม endpoint สำหรับดึงสถิติลูกค้า
 @router.get("/customer-statistics/{page_id}")

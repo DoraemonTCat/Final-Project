@@ -23,8 +23,6 @@ def fb_post(endpoint: str, payload: dict, access_token: str = None):
     print(f"🔍 POST to: {url}")
     print(f"🔍 Payload: {payload}")
     response = requests.post(url, params=params, json=payload)
-    print(f"🔍 Response Status: {response.status_code}")
-    print(f"🔍 Response: {response.text}")
     return response.json()
 
 def fb_get(endpoint: str, params: dict = {}, access_token: str = None):
@@ -33,8 +31,6 @@ def fb_get(endpoint: str, params: dict = {}, access_token: str = None):
     print(f"🔍 GET from: {url}")
     print(f"🔍 Params: {params}")
     response = requests.get(url, params=params)
-    print(f"🔍 Response Status: {response.status_code}")
-    print(f"🔍 Response: {response.text}")
     return response.json()
 
 def send_image_file_from_db(recipient_id: str, image_binary: bytes, filename: str, access_token: str):

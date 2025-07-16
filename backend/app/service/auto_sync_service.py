@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class AutoSyncService:
     def __init__(self):
         self.is_running = False
-        self.sync_interval = 10  # sync ทุก 10 วินาที
+        self.sync_interval = 600  # sync ทุก 10 วินาที
         self.page_tokens = {}
         # เก็บ track เวลาล่าสุดที่ sync แต่ละ conversation
         self.last_sync_times: Dict[str, datetime] = {}

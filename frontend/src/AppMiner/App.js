@@ -259,8 +259,8 @@ const ConversationRow = React.memo(({
       </td>
       <td className="table-cell">
         <div className="date-display">
-          {conv.updated_time
-            ? new Date(conv.updated_time).toLocaleDateString("th-TH", {
+          {conv.last_user_message_time
+            ? new Date(conv.last_user_message_time).toLocaleDateString("th-TH", {
               year: 'numeric', month: 'short', day: 'numeric'
             })
             : "-"

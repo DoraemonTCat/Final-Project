@@ -54,6 +54,9 @@ class FbCustomerResponse(BaseModel):
     last_interaction: Optional[str]
     customer_type: Optional[str]
 
+    class Config:
+        orm_mode = True
+
 class ConversationResponse(BaseModel):
     id: int
     conversation_id: str
@@ -71,6 +74,22 @@ class SyncResponse(BaseModel):
     synced: int
     errors: int
     message: str
+
+class FbCustomerSchema(BaseModel):
+    id: int
+    page_id: int
+    customer_psid: str
+    name: Optional[str]
+    customer_type_custom_id: Optional[int]
+    customer_type_knowledge_id: Optional[int]
+    first_interaction_at: Optional[datetime]
+    last_interaction_at: Optional[datetime]
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+    source_type: str
+
+    class Config:
+        orm_mode = True
     
 # ========== CustomerTypeCustom Schemas ==========
 
@@ -87,42 +106,6 @@ class CustomerTypeCustomUpdate(BaseModel):
     type_name: Optional[str] = None
     keywords: Optional[str] = None
     rule_description: Optional[str] = None
-    examples: Optional[str] = None
-    is_active: Optional[bool] = None
-
-class CustomerTypeCustomInDB(CustomerTypeCustomBase):
-    id: int
-    page_id: int
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        orm_mode = True
-
-class CustomerTypeCustomResponse(BaseModel):
-    id: int
-    page_id: int
-    type_name: str
-    keywords: List[str]
-    rule_description: str
-    examples: List[str]
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
-    customer_count: Optional[int] = 0
-
-    class Config:
-        orm_mode = True
-    rule_description: Optional[str] = ""
-
-class CustomerTypeCustomCreate(CustomerTypeCustomBase):
-    pass
-
-class CustomerTypeCustomUpdate(BaseModel):
-    type_name: Optional[str] = None
-    description: Optional[str] = None
-    keywords: Optional[str] = None
     examples: Optional[str] = None
     is_active: Optional[bool] = None
 

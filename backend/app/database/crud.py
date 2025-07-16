@@ -52,6 +52,12 @@ def delete_page(db: Session, id: int):
         db.commit()
     return db_page
 
+def get_all_connected_pages(db: Session):
+    return [
+        page.page_id
+        for page in db.query(FacebookPage).all()
+    ]
+
 # ========== FbCustomer CRUD Operations ==========
 
 def get_customer_by_psid(db: Session, page_id: int, customer_psid: str):
@@ -216,25 +222,42 @@ def get_customers_by_page_with_details(db: Session, page_id: int, skip: int = 0,
 def bulk_create_or_update_customers(db: Session, page_id: int, customers_data: List[Dict]):
     """สร้างหรืออัพเดทลูกค้าหลายคนพร้อมกัน"""
     results = {"created": 0, "updated": 0, "errors": 0}
-    
-    for customer_data in customers_data:
-        try:
-            psid = customer_data.get('customer_psid')
-            if not psid:
+
+    try:
+        # ดึง PSID ทั้งหมดในครั้งเดียวเพื่อลดจำนวน query
+        psids = [c.get("customer_psid") for c in customers_data if c.get("customer_psid")]
+        existing_customers = {
+            customer.customer_psid: customer
+            for customer in db.query(FbCustomer)
+            .filter(FbCustomer.page_id == page_id, FbCustomer.customer_psid.in_(psids))
+            .all()
+        }
+
+        for customer_data in customers_data:
+            try:
+                psid = customer_data.get("customer_psid")
+                if not psid:
+                    results["errors"] += 1
+                    continue
+
+                # ตรวจสอบว่ามีอยู่แล้วหรือไม่
+                if psid in existing_customers:
+                    create_or_update_customer(db, page_id, psid, customer_data)
+                    results["updated"] += 1
+                else:
+                    create_or_update_customer(db, page_id, psid, customer_data)
+                    results["created"] += 1
+
+            except Exception as e:
+                logger.error(f"❌ Error processing customer {customer_data.get('customer_psid')}: {e}")
                 results["errors"] += 1
-                continue
-            
-            existing = get_customer_by_psid(db, page_id, psid)
-            if existing:
-                results["updated"] += 1
-            else:
-                results["created"] += 1
-            
-            create_or_update_customer(db, page_id, psid, customer_data)
-            
-        except Exception as e:
-            logger.error(f"Error processing customer {customer_data.get('customer_psid')}: {e}")
-            results["errors"] += 1
+
+        db.commit()
+
+    except Exception as e:
+        logger.exception("❌ Bulk sync failed")
+        db.rollback()
+        results["errors"] += len(customers_data)  # ถ้า fail ทั้งหมด
     
     return results
 

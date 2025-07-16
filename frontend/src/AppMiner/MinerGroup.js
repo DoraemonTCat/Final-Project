@@ -426,16 +426,17 @@ const ScheduleModal = ({ show, schedules, groupName, onClose, onDeleteSchedule }
                       }`
                     }
                   </p>
-                  {schedule?.repeat?.type && schedule.repeat.type !== 'once' && (
-                  <p style={{ margin: '0 0 4px 0', fontSize: '13px', color: '#718096' }}>
+                  {schedule?.repeat?.type !== 'once' && (
+                  <p>
                     🔄 ทำซ้ำ: {
-                      schedule.repeat.type === 'daily' ? 'ทุกวัน' :
-                      schedule.repeat.type === 'weekly' ? `ทุกสัปดาห์` :
+                      schedule?.repeat?.type === 'daily' ? 'ทุกวัน' :
+                      schedule?.repeat?.type === 'weekly' ? 'ทุกสัปดาห์' :
                       'ทุกเดือน'
                     }
-                    {schedule.repeat.endDate && ` จนถึง ${new Date(schedule.repeat.endDate).toLocaleDateString('th-TH')}`}
+                    {schedule?.repeat?.endDate && ` จนถึง ${new Date(schedule.repeat.endDate).toLocaleDateString('th-TH')}`}
                   </p>
                 )}
+
                 </div>
                 <button
                   onClick={() => onDeleteSchedule(schedule.id)}

@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from dotenv import load_dotenv
-from app.routes import pages, webhook, facebook, custom_messages
+from app.routes import pages, webhook, facebook, custom_messages, fb_customer, sync
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import crud, database, models, schemas
 from app.database.database import SessionLocal, engine, Base
@@ -15,6 +15,7 @@ from app.service.message_scheduler import message_scheduler
 import logging
 from app.service.auto_sync_service import auto_sync_service
 from app.routes import group_messages
+from app.task.scheduler import start_scheduler
 
 # Setup logging
 logging.basicConfig(
@@ -42,6 +43,10 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 def robots():
     return FileResponse("static/robots.txt", media_type="text/plain")
 
+@app.on_event("startup")
+def startup_event():
+    start_scheduler()
+
 # เพิ่มบรรทัดนี้ในส่วน include router
 app.include_router(group_messages.router)
 
@@ -62,6 +67,8 @@ app.include_router(pages.router)
 app.include_router(webhook.router)
 app.include_router(facebook.router)
 app.include_router(custom_messages.router)
+app.include_router(fb_customer.router)
+app.include_router(sync.router)
 
 # Root endpoint
 @app.get("/")
