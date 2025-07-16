@@ -269,12 +269,7 @@ function ManageMessageSets() {
                     )}
                 </div>
 
-                <div className="content-footer">
-                    <Link to="/App" className="back-button">
-                        <span className="back-icon">←</span>
-                        กลับไปหน้าแรก
-                    </Link>
-                </div>
+                
             </main>
         </div>
     );

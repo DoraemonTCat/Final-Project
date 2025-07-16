@@ -1,0 +1,63 @@
+// components/ConversationTable.js
+// =====================================================
+// COMPONENT: ConversationTable
+// PURPOSE: แสดงตารางข้อมูลการสนทนา
+// FEATURES:
+// - แสดงข้อมูลในรูปแบบตาราง
+// - มี checkbox สำหรับเลือกทั้งหมด
+// - ใช้ ConversationRow สำหรับแต่ละแถว
+// =====================================================
+
+import React from 'react';
+import ConversationRow from './ConversationRow';
+
+const ConversationTable = ({ 
+  displayData, 
+  selectedConversationIds, 
+  onToggleCheckbox, 
+  onToggleAll,
+  onInactivityChange 
+}) => {
+  return (
+    <div className="table-container">
+      <table className="modern-table">
+        <thead>
+          <tr>
+            <th className="th-number">ลำดับ</th>
+            <th className="th-user">ผู้ใช้</th>
+            <th className="th-date">วันที่เข้ามา</th>
+            <th className="th-time">ระยะเวลาที่หาย</th>
+            <th className="th-product">สินค้าที่สนใจ</th>
+            <th className="th-platform">Platform</th>
+            <th className="th-type">หมวดหมู่ลูกค้า</th>
+            <th className="th-status">สถานะการขุด</th>
+            <th className="th-select">
+              <label className="select-all-checkbox">
+                <input
+                  type="checkbox"
+                  checked={selectedConversationIds.length === displayData.length && displayData.length > 0}
+                  onChange={(e) => onToggleAll(e.target.checked)}
+                />
+                <span className="checkbox-mark"></span>
+              </label>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {displayData.map((conv, idx) => (
+            <ConversationRow
+              key={conv.conversation_id || idx}
+              conv={conv}
+              idx={idx}
+              isSelected={selectedConversationIds.includes(conv.conversation_id)}
+              onToggleCheckbox={onToggleCheckbox}
+              onInactivityChange={onInactivityChange}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+export default ConversationTable;

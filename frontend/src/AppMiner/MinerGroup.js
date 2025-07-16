@@ -367,6 +367,12 @@ const GroupCard = ({
           }} className="action-btn edit-message-btn">
             💬 {isDefault ? 'แก้ไขข้อความ' : 'ข้อความ'}
           </button>
+          <button onClick={(e) => {
+            e.stopPropagation();
+            onEditMessages(group.id);
+          }} className="action-btn edit-message-btn">
+           {isDefault ? 'รายละเอียดกลุ่ม' : 'รายละเอียด'}
+          </button>
         </div>
       </div>
       

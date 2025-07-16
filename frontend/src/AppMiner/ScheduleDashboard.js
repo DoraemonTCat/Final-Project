@@ -537,9 +537,6 @@ function ScheduleDashboard() {
           )}
         </div>
 
-        <button onClick={goBack} className="back-link">
-          ← กลับไปหน้ากลุ่ม
-        </button>
       </div>
 
       {/* Modal แสดงรายละเอียด */}
