@@ -687,7 +687,7 @@ function MinerGroup() {
           return group;
         }));
         
-        alert("แก้ไขชื่อกลุ่มพื้นฐานสำเร็จ!");
+        console.log("แก้ไขชื่อกลุ่มพื้นฐานสำเร็จ!");
       } else {
         const response = await fetch(`http://localhost:8000/customer-groups/${editingGroupId}`, {
           method: 'PUT',

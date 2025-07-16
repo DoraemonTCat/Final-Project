@@ -466,7 +466,7 @@ function GroupDefault() {
     // สำหรับ default groups ใช้ localStorage
     if (selectedGroups[0] && selectedGroups[0].isDefault) {
       saveMessagesForDefaultGroup();
-      alert("บันทึกข้อความสำเร็จ!");
+      console.log("บันทึกข้อความสำเร็จ!");
     } else {
       // สำหรับ user groups ข้อความถูกบันทึกใน database แล้วตอนเพิ่ม
       alert("ข้อความถูกบันทึกอัตโนมัติ!");

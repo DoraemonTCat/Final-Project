@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams ,useNavigate} from 'react-router-dom';
 import '../CSS/Default.css';
 import {
   saveMessageToDB, saveMessagesBatch, getMessagesBySetId, 
   deleteMessageFromDB, createMessageSet, getMessageSetsByPage, updateMessageSet
 } from "../Features/Tool";
 import Sidebar from './Sidebar';
+
 
 function SetDefault() {
   const [selectedPage, setSelectedPage] = useState("");
@@ -15,6 +16,7 @@ function SetDefault() {
   const [messageSetName, setMessageSetName] = useState("");
   const [isEditMode, setIsEditMode] = useState(false);
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [currentInput, setCurrentInput] = useState({
     type: 'text',
     content: '',
@@ -285,7 +287,7 @@ function SetDefault() {
       }));
 
       await saveMessagesBatch(payloads);
-      alert(isEditMode ? "แก้ไขชุดข้อความสำเร็จ!" : "บันทึกข้อความสำเร็จ!");
+     
       console.log("✅ บันทึกข้อความสำเร็จ");
 
       // โหลดข้อความใหม่
@@ -433,12 +435,15 @@ function SetDefault() {
           <div className="sequence-card">
             <div className="sequence-header-container">
               <h3 className="sequence-header">📋 ลำดับการส่ง </h3>
-              <button
-                onClick={saveMessageSequence}
-                className="save-btn"
-              >
-                💾 {isEditMode ? "บันทึกการแก้ไข" : "บันทึกทั้งหมด"}
-              </button>
+             <button
+              onClick={() => {
+                saveMessageSequence();       // เรียกฟังก์ชันบันทึกก่อน
+                navigate("/manage-message-sets");  // แล้วค่อยย้อนกลับ
+              }}
+              className="save-btn"
+            >
+              💾 {isEditMode ? "บันทึกการแก้ไข" : "บันทึกทั้งหมด"}
+            </button>
             </div>
 
             <div className="sequence-hint">
