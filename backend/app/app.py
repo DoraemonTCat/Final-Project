@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from dotenv import load_dotenv
-from app.routes import pages, webhook, facebook, custom_messages, fb_customer, sync
+from app.routes import pages, webhook, custom_messages, fb_customer, sync
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import crud, database, models, schemas
 from app.database.database import SessionLocal, engine, Base
@@ -16,6 +16,7 @@ import logging
 from app.service.auto_sync_service import auto_sync_service
 from app.routes import group_messages
 from app.task.scheduler import start_scheduler
+from backend.app.routes.facebook import facebook
 
 # Setup logging
 logging.basicConfig(

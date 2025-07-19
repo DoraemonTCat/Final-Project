@@ -1,7 +1,7 @@
 from datetime import datetime
 import pytz
 
-from app.routes.facebook import get_user_info_from_psid, get_name_from_messages
+from backend.app.routes.facebook.facebook import get_user_info_from_psid, get_name_from_messages
 from app.service.facebook_api import fb_get
 
 bangkok_tz = pytz.timezone("Asia/Bangkok")

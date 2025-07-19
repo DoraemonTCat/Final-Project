@@ -26,7 +26,7 @@ async def verify_webhook(request: Request):
 async def sync_new_user_data(page_id: str, sender_id: str, page_db_id: int, db: Session):
     """ฟังก์ชันสำหรับ sync ข้อมูล user ใหม่แบบละเอียด"""
     try:
-        from app.routes.facebook import page_tokens
+        from backend.app.routes.facebook.facebook import page_tokens
         access_token = page_tokens.get(page_id)
         
         if not access_token:
@@ -178,7 +178,7 @@ async def get_new_user_notifications(page_id: str):
 async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: int, db: Session):
     """ฟังก์ชันสำหรับ sync ข้อมูล user ใหม่แบบละเอียด พร้อมดึงข้อมูลเวลาที่ถูกต้อง"""
     try:
-        from app.routes.facebook import page_tokens
+        from backend.app.routes.facebook.facebook import page_tokens
         access_token = page_tokens.get(page_id)
         
         if not access_token:
