@@ -27,7 +27,7 @@ const ActionBar = ({
         <button
           onClick={onOpenPopup}
           className={`action-btn primary ${selectedCount > 0 ? 'active' : ''}`} 
-          style={{paddingRight:"30%" }}
+          style={{paddingRight:"35%", paddingLeft:"10%" }}
           disabled={loading || selectedCount === 0}
         >
           <span className="btn-icon">⛏️</span>
@@ -37,7 +37,7 @@ const ActionBar = ({
         <button 
           onClick={onRefresh} 
           className="action-btn secondary"  
-          style={{paddingRight:"30%"}}
+          style={{paddingRight:"30%", paddingLeft:"10%"}}
           disabled={loading || !selectedPage}
         >
           <span className={`btn-icon ${loading ? 'spinning' : ''}`} >🔄</span>
@@ -48,8 +48,6 @@ const ActionBar = ({
       </div>
 
       <div className="action-right">
-        
-        
         {remainingMines !== undefined && (
           <div className="remaining-mines">
             <span className="remaining-icon">💎</span>
