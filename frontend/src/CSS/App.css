@@ -680,6 +680,8 @@ background-color: whitesmoke;
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+
+
 }
 
 .recent-message {
