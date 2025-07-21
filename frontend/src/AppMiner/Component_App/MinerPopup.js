@@ -2,12 +2,13 @@ import React, { useEffect, useState } from "react";
 import '../../CSS/Popup.css';
 import { getMessageSetsByPage, getMessagesBySetId } from '../../Features/Tool';
 import MessagePopup from '../MessagePopup';
+import DailyMiningLimit from './DailyMiningLimit';
 
 // FontAwesome
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEye, faGripVertical } from '@fortawesome/free-solid-svg-icons';
 
-const Popup = ({ onClose, onConfirm, count, selectedPage }) => {
+const Popup = ({ onClose, onConfirm, count, selectedPage, remainingMines, currentMiningCount, dailyMiningLimit, onLimitChange }) => {
     const [messageSets, setMessageSets] = useState([]);
     const [loading, setLoading] = useState(false);
     const [viewingSetName, setViewingSetName] = useState('');
@@ -108,11 +109,38 @@ const Popup = ({ onClose, onConfirm, count, selectedPage }) => {
         onClose();
     };
 
+    // Check if exceeds remaining mines
+    const exceedsLimit = remainingMines !== undefined && count > remainingMines;
+
     return (
         <div className="popup-overlay">
             <div className="popup-content" style={{ maxWidth: '700px', width: '90vw' }}>
                 <button className="popup-close" onClick={onClose}>✖</button>
                 <h2>ยืนยันการขุด</h2>
+                
+                {/* Daily Mining Limit - Compact Version */}
+                {currentMiningCount !== undefined && dailyMiningLimit !== undefined && (
+                    <DailyMiningLimit
+                        currentCount={currentMiningCount}
+                        dailyLimit={dailyMiningLimit}
+                        compact={true}
+                        onLimitChange={onLimitChange}
+                    />
+                )}
+                
+                {/* Mining limit warning */}
+                {remainingMines !== undefined && (
+                    <div className={`mining-limit-info ${exceedsLimit ? 'warning' : 'info'}`}>
+                        <span className="limit-icon">{exceedsLimit ? '⚠️' : '💎'}</span>
+                        <span>
+                            {exceedsLimit 
+                                ? `คุณเลือก ${count} รายการ แต่สามารถขุดได้อีก ${remainingMines} ครั้งเท่านั้น`
+                                : `คุณสามารถขุดได้อีก ${remainingMines} ครั้งในวันนี้`
+                            }
+                        </span>
+                    </div>
+                )}
+                
                 <p>คุณต้องการขุด {count} รายการใช่ไหม?</p>
 
                 <div style={{ display: 'flex', gap: '20px' }}>
@@ -199,6 +227,7 @@ const Popup = ({ onClose, onConfirm, count, selectedPage }) => {
                     className="popup-confirm"
                     onClick={handleConfirm}
                     style={{ marginTop: '20px' }}
+                    disabled={exceedsLimit}
                 >
                     ✅ ยืนยัน ({selectedSets.length} ชุด)
                 </button>

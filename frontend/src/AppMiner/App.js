@@ -24,6 +24,7 @@ import ConversationTable from './Component_App/ConversationTable';
 import ActionBar from './Component_App/ActionBar';
 import LoadingState from './Component_App/LoadingState';
 import EmptyState from './Component_App/EmptyState';
+import DailyMiningLimit from './Component_App/DailyMiningLimit';
 
 // =====================================================
 // MAIN APP COMPONENT
@@ -58,6 +59,23 @@ function App() {
   const [syncDateRange, setSyncDateRange] = useState(null);
   const [userInactivityData, setUserInactivityData] = useState({});
   
+  // Daily Mining Limit States
+  const [dailyMiningLimit, setDailyMiningLimit] = useState(() => {
+    const saved = localStorage.getItem('dailyMiningLimit');
+    return saved ? parseInt(saved) : 100;
+  });
+  const [todayMiningCount, setTodayMiningCount] = useState(() => {
+    const savedData = localStorage.getItem('miningData');
+    if (savedData) {
+      const data = JSON.parse(savedData);
+      const today = new Date().toDateString();
+      if (data.date === today) {
+        return data.count;
+      }
+    }
+    return 0;
+  });
+  
   // Refs
   const inactivityUpdateTimerRef = useRef(null);
   const clockIntervalRef = useRef(null);
@@ -78,6 +96,42 @@ function App() {
       data,
       timestamp: Date.now()
     };
+  };
+
+  // Mining Count Functions
+  const updateMiningCount = (count) => {
+    const today = new Date().toDateString();
+    const newCount = todayMiningCount + count;
+    setTodayMiningCount(newCount);
+    
+    localStorage.setItem('miningData', JSON.stringify({
+      date: today,
+      count: newCount
+    }));
+  };
+
+  const resetDailyCount = () => {
+    const today = new Date().toDateString();
+    const savedData = localStorage.getItem('miningData');
+    
+    if (savedData) {
+      const data = JSON.parse(savedData);
+      if (data.date !== today) {
+        setTodayMiningCount(0);
+        localStorage.setItem('miningData', JSON.stringify({
+          date: today,
+          count: 0
+        }));
+      }
+    }
+  };
+
+  const canMineMore = () => {
+    return todayMiningCount < dailyMiningLimit;
+  };
+
+  const getRemainingMines = () => {
+    return Math.max(0, dailyMiningLimit - todayMiningCount);
   };
 
   // Computed Values
@@ -235,6 +289,20 @@ function App() {
       return;
     }
 
+    // Check daily limit
+    const selectedCount = selectedConversationIds.length;
+    const remaining = getRemainingMines();
+    
+    if (remaining === 0) {
+      showNotification('error', 'ถึงขีดจำกัดประจำวันแล้ว', `คุณได้ขุดครบ ${dailyMiningLimit} ครั้งแล้ววันนี้`);
+      return;
+    }
+    
+    if (selectedCount > remaining) {
+      showNotification('warning', 'เกินขีดจำกัด', `คุณสามารถขุดได้อีก ${remaining} ครั้งเท่านั้นในวันนี้`);
+      return;
+    }
+
     try {
       let successCount = 0;
       let failCount = 0;
@@ -293,7 +361,11 @@ function App() {
       removeNotification();
 
       if (successCount > 0) {   
-        showNotification('success', `ส่งข้อความสำเร็จ ${successCount} การสนทนา`);
+        // Update mining count
+        updateMiningCount(successCount);
+        
+        showNotification('success', `ส่งข้อความสำเร็จ ${successCount} การสนทนา`, 
+          `ขุดไปแล้ว ${todayMiningCount + successCount}/${dailyMiningLimit} ครั้งวันนี้`);
         setSelectedConversationIds([]);
       } else {
         showNotification('error', `ส่งข้อความไม่สำเร็จ ${failCount} การสนทนา`);
@@ -313,6 +385,7 @@ function App() {
     const icons = {
       success: '✅',
       error: '❌',
+      warning: '⚠️',
       send: '🚀'
     };
     
@@ -340,6 +413,7 @@ function App() {
 
   // Popup Handlers
   const handleOpenPopup = () => {
+    // Allow opening popup even if limit reached
     setIsPopupOpen(true);
   };
 
@@ -405,6 +479,15 @@ function App() {
 
   // Effects
   useEffect(() => {
+    // Reset daily count at midnight
+    const checkMidnight = setInterval(() => {
+      resetDailyCount();
+    }, 60000); // Check every minute
+
+    return () => clearInterval(checkMidnight);
+  }, []);
+
+  useEffect(() => {
     const handlePageChange = (event) => {
       const newPageId = event.detail.pageId;
       setSelectedPage(newPageId);
@@ -424,6 +507,9 @@ function App() {
     if (Notification.permission === "default") {
       Notification.requestPermission();
     }
+
+    // Reset daily count on load
+    resetDailyCount();
 
     return () => {
       window.removeEventListener('pageChanged', handlePageChange);
@@ -578,6 +664,8 @@ function App() {
           selectedPage={selectedPage}
           onOpenPopup={handleOpenPopup}
           onRefresh={handleloadConversations}
+          canMineMore={canMineMore()}
+          remainingMines={getRemainingMines()}
         />
 
         {isPopupOpen && (
@@ -587,6 +675,13 @@ function App() {
             defaultMessages={defaultMessages}
             onConfirm={handleConfirmPopup}
             count={selectedConversationIds.length}
+            remainingMines={getRemainingMines()}
+            currentMiningCount={todayMiningCount}
+            dailyMiningLimit={dailyMiningLimit}
+            onLimitChange={(newLimit) => {
+              setDailyMiningLimit(newLimit);
+              localStorage.setItem('dailyMiningLimit', newLimit.toString());
+            }}
           />
         )}
       </main>

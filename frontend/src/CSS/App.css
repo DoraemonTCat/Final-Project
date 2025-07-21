@@ -1634,6 +1634,388 @@ body.no-animations * {
     opacity: 1;
   }
 }
+/* =====================================================
+   DAILY MINING LIMIT STYLES - UPDATED
+   ===================================================== */
+
+/* Full Version - Smaller and Simpler */
+.daily-mining-limit-section {
+  margin: 0 var(--spacing-xl) var(--spacing-md);
+}
+
+.limit-container {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-md);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--gray-200);
+}
+
+.limit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+.limit-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.limit-icon {
+  font-size: 1.125rem;
+}
+
+.edit-btn {
+  padding: 4px 12px;
+  background: var(--gray-100);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--gray-600);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.edit-btn:hover {
+  background: var(--gray-200);
+}
+
+.edit-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.limit-input {
+  width: 60px;
+  padding: 4px 8px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.save-btn, .cancel-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.save-btn {
+  background: var(--success-color);
+  color: white;
+}
+
+.cancel-btn {
+  background: var(--gray-400);
+  color: white;
+}
+
+/* Limit Content */
+.limit-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-lg);
+}
+
+.limit-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex: 1;
+}
+
+.stat-group {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--gray-500);
+}
+
+.stat-value {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--gray-800);
+}
+
+.stat-separator {
+  font-size: 1rem;
+  color: var(--gray-400);
+  margin: 0 4px;
+}
+
+/* Progress Bar */
+.progress-bar-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.progress-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--gray-200);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.progress-percentage {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--gray-600);
+  min-width: 35px;
+  text-align: right;
+}
+
+/* Compact Version for Popup */
+.mining-limit-compact {
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.limit-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-xs);
+}
+
+.limit-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--gray-700);
+}
+
+.limit-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.limit-numbers {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+}
+
+.current-count {
+  font-size: 1.125rem;
+}
+
+.divider {
+  color: var(--gray-400);
+  font-weight: 400;
+}
+
+.daily-limit {
+  font-size: 1rem;
+  color: var(--gray-600);
+}
+
+.edit-btn-compact {
+  padding: 4px 12px;
+  background: var(--gray-100);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--gray-600);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.edit-btn-compact:hover {
+  background: var(--gray-200);
+}
+
+.edit-controls-compact {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.limit-input-compact {
+  width: 60px;
+  padding: 4px 8px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.save-btn-compact, .cancel-btn-compact {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.625rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.save-btn-compact {
+  background: var(--success-color);
+  color: white;
+}
+
+.cancel-btn-compact {
+  background: var(--gray-400);
+  color: white;
+}
+
+.mini-progress {
+  height: 4px;
+  background: var(--gray-200);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-top: var(--spacing-xs);
+}
+
+.mini-progress-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.limit-warning-compact {
+  margin-top: var(--spacing-sm);
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--danger-color);
+  font-weight: 500;
+}
+
+/* Action Bar Updates */
+.limit-reached-badge {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: rgba(229, 62, 62, 0.1);
+  border: 1px solid rgba(229, 62, 62, 0.3);
+  border-radius: var(--radius-full);
+  color: var(--danger-color);
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-left: var(--spacing-md);
+}
+
+.remaining-mines {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  border-radius: var(--radius-full);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+.remaining-icon {
+  font-size: 1rem;
+}
+
+/* Popup Updates */
+.mining-limit-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-sm);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.mining-limit-info.info {
+  background: rgba(66, 153, 225, 0.1);
+  border: 1px solid rgba(66, 153, 225, 0.3);
+  color: var(--info-color);
+}
+
+.mining-limit-info.warning {
+  background: rgba(237, 137, 54, 0.1);
+  border: 1px solid rgba(237, 137, 54, 0.3);
+  color: var(--warning-color);
+}
+
+.limit-icon {
+  font-size: 1.125rem;
+}
+
+/* Notification Updates */
+.warning-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  min-width: 300px;
+  max-width: 500px;
+  background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
+  color: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  animation: slideInRight 0.3s ease-out;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .limit-content {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+  
+  .limit-stats {
+    width: 100%;
+    justify-content: space-around;
+  }
+  
+  .progress-bar-container {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .stat-value {
+    font-size: 1rem;
+  }
+  
+  .stat-label {
+    font-size: 0.625rem;
+  }
+}
 
 /* =====================================================
    END OF STYLESHEET
