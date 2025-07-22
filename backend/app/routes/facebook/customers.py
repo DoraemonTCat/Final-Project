@@ -347,6 +347,7 @@ async def sync_facebook_customers_enhanced(
             else:
                 first = first.astimezone(bangkok_tz)
                 
+            # กำหนด source_type: 'new' ถ้า first_interaction >= installed_at, 'imported' ถ้าก่อนหน้านั้น
             source_type = "new" if first >= installed_at else "imported"
             customer_data["first_interaction_at"] = first
             customer_data["source_type"] = source_type

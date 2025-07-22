@@ -54,7 +54,8 @@ export const fetchConversations = async (pageId) => {
       throw new Error(res.data?.error || "ไม่สามารถโหลดข้อมูลจาก backend");
     }
 
-    console.log("✅ Raw customer data from backend:", res.data);
+    console.log("✅ Raw customer data from backend (filtered):", res.data);
+    console.log(`📊 จำนวนลูกค้าที่ผ่านการกรอง: ${res.data.length} คน`);
 
     const conversationsData = res.data || [];
 

@@ -26,6 +26,29 @@ const CustomerInfoBadge = ({ customer }) => {
     return 'เมื่อสักครู่';
   };
 
+  const getSourceTypeDisplay = (sourceType) => {
+    if (sourceType === 'new') {
+      return {
+        text: 'ลูกค้าใหม่',
+        icon: '🆕',
+        color: '#48bb78'
+      };
+    } else if (sourceType === 'imported') {
+      return {
+        text: 'นำเข้า (แต่ Active)',
+        icon: '📥',
+        color: '#4299e1'
+      };
+    }
+    return {
+      text: 'ไม่ระบุ',
+      icon: '❓',
+      color: '#718096'
+    };
+  };
+
+  const sourceInfo = getSourceTypeDisplay(customer.source_type);
+
   return (
     <div style={{
       display: 'flex',
@@ -40,9 +63,15 @@ const CustomerInfoBadge = ({ customer }) => {
         <span>ครั้งแรก: {getTimeDiff(customer.first_interaction_at)} ที่แล้ว</span>
       </div>
       {customer.source_type && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span>📍</span>
-          <span>ที่มา: {customer.source_type === 'new' ? 'User ใหม่' : 'Import'}</span>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '4px'
+        }}>
+          <span>{sourceInfo.icon}</span>
+          <span style={{ color: sourceInfo.color, fontWeight: '500' }}>
+            {sourceInfo.text}
+          </span>
         </div>
       )}
     </div>

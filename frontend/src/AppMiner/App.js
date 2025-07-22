@@ -188,6 +188,7 @@ function App() {
     try {
       const conversations = await fetchConversations(pageId);
       console.log('📊 โหลดข้อมูลจาก database สำเร็จ');
+      console.log('📋 ข้อมูลที่ได้รับ (กรองแล้ว):', conversations);
       
       setConversations(conversations);
       setAllConversations(conversations);
