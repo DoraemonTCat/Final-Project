@@ -36,21 +36,41 @@ def get_customers_by_page(page_id: str, db: Session = Depends(get_db)):
     # 3. ดึง customer โดยใช้การกรองตามเงื่อนไข
     customers_query = db.query(FbCustomer).filter(FbCustomer.page_id == page.ID)
     
-    # 4. กรองตามเงื่อนไข source_type และ last_interaction
+    # 4. กรองตามเงื่อนไข:
+    # - ต้องมีทั้ง first_interaction_at และ last_interaction_at (หมายถึงเคยมีการทักมาแล้ว)
+    # - source_type = 'new': แสดงทุกคนที่มีการ interaction
+    # - source_type = 'imported': แสดงเฉพาะที่ last_interaction > install_date
     customers = customers_query.filter(
-        or_(
-            # กรณี source_type = 'new' - แสดงทุกคน
-            FbCustomer.source_type == 'new',
-            # กรณี source_type = 'imported' - แสดงเฉพาะที่ last_interaction > install_date
-            and_(
-                FbCustomer.source_type == 'imported',
-                FbCustomer.last_interaction_at > install_date
+        and_(
+            # ต้องมีทั้ง first และ last interaction (ยืนยันว่าเคยคุยกันจริง)
+            FbCustomer.first_interaction_at.isnot(None),
+            FbCustomer.last_interaction_at.isnot(None),
+            or_(
+                # กรณี source_type = 'new' - แสดงทุกคน
+                FbCustomer.source_type == 'new',
+                # กรณี source_type = 'imported' - แสดงเฉพาะที่ last_interaction > install_date
+                and_(
+                    FbCustomer.source_type == 'imported',
+                    FbCustomer.last_interaction_at > install_date
+                )
             )
         )
-    ).all()
+    ).order_by(FbCustomer.last_interaction_at.desc()).all()
     
-    print(f"✅ Found {len(customers)} customers for page_id {page_id} after filtering")
+    print(f"✅ Found {len(customers)} active customers for page_id {page_id}")
     print(f"📅 Install date: {install_date}")
+    print(f"🔍 Filter conditions applied:")
+    print(f"   - Must have both first_interaction_at AND last_interaction_at")
+    print(f"   - NEW customers: Show all who have interacted")
+    print(f"   - IMPORTED customers: Show only if last interaction > install date")
+    
+    # Debug: แสดงตัวอย่างข้อมูล
+    for idx, customer in enumerate(customers[:3]):  # แสดง 3 คนแรก
+        print(f"\n👤 Customer {idx+1}:")
+        print(f"   - Name: {customer.name}")
+        print(f"   - Source: {customer.source_type}")
+        print(f"   - First interaction: {customer.first_interaction_at}")
+        print(f"   - Last interaction: {customer.last_interaction_at}")
+        print(f"   - Shows in table: {'✅ Yes' if customer.last_interaction_at else '❌ No'}")
     
     return customers
-
