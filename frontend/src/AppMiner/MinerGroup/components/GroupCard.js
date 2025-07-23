@@ -8,7 +8,7 @@ import EditGroupForm from './EditGroupForm';
  * - รองรับทั้ง default group และ user group
  * - มี checkbox สำหรับเลือก
  * - แสดงจำนวน schedule
- * - มีปุ่มแก้ไขและลบ
+ * - มีปุ่มแก้ไข, ข้อความ, รายละเอียด และลบ
  */
 const GroupCard = ({ 
   group, 
@@ -21,7 +21,8 @@ const GroupCard = ({
   onEditMessages, 
   onViewSchedules,
   onSaveEdit,
-  onCancelEdit
+  onCancelEdit,
+  onViewDetails  // เพิ่ม prop ใหม่สำหรับดูรายละเอียด
 }) => {
   const isDefault = group.isDefault;
   
@@ -51,30 +52,6 @@ const GroupCard = ({
         ) : (
           <>
             <h3 className="group-name">{group.type_name || group.name}</h3>
-            
-            {group.rule_description && (
-              <p className="group-description">{group.rule_description}</p>
-            )}
-            
-            {group.keywords && !isDefault && (
-              <div className="group-keywords">
-                {(() => {
-                  const keywordsList = typeof group.keywords === 'string' 
-                    ? group.keywords.split(',').map(k => k.trim()).filter(k => k)
-                    : Array.isArray(group.keywords) 
-                    ? group.keywords 
-                    : [];
-                  
-                  return keywordsList.slice(0, 3).map((keyword, idx) => (
-                    <span key={idx} className="keyword-tag">{keyword}</span>
-                  )).concat(
-                    keywordsList.length > 3 
-                      ? [<span key="more" className="more-keywords">+{keywordsList.length - 3}</span>]
-                      : []
-                  );
-                })()}
-              </div>
-            )}
           </>
         )}
         
@@ -89,8 +66,7 @@ const GroupCard = ({
         
         <div className="group-meta">
           <div className="group-date">
-            {isDefault ? 'กลุ่มพื้นฐานของระบบ' : 
-             `สร้างเมื่อ ${group.created_at ? new Date(group.created_at).toLocaleDateString('th-TH') : 'ไม่ทราบ'}`}
+            <br></br>
           </div>
         </div>
         
@@ -107,12 +83,14 @@ const GroupCard = ({
           }} className="action-btn edit-message-btn">
             💬 {isDefault ? 'แก้ไขข้อความ' : 'ข้อความ'}
           </button>
-          <button onClick={(e) => {
-            e.stopPropagation();
-            onEditMessages(group.id);
-          }} className="action-btn edit-message-btn">
-            {isDefault ? 'รายละเอียด' : 'รายละเอียด'}
-          </button>
+          {!isDefault && (
+            <button onClick={(e) => {
+              e.stopPropagation();
+              onViewDetails(group);
+            }} className="action-btn detail-btn" style={{ width: '190px' }}>
+              📋 รายละเอียด
+            </button>
+          )}
         </div>
       </div>
       

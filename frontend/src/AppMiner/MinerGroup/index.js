@@ -14,6 +14,7 @@ import GroupsGrid from './components/GroupsGrid';
 import ActionBar from './components/ActionBar';
 import EmptyState from './components/EmptyState';
 import ScheduleModal from './components/ScheduleModal';
+import GroupDetailModal from './components/GroupDetailModal';  // เพิ่ม import
 
 import '../../CSS/MinerGroup.css';
 
@@ -35,6 +36,8 @@ function MinerGroup() {
   const [selectedPage, setSelectedPage] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [showAddGroupForm, setShowAddGroupForm] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);  // เพิ่ม state สำหรับ detail modal
+  const [selectedGroupDetail, setSelectedGroupDetail] = useState(null);  // เพิ่ม state สำหรับเก็บข้อมูลกลุ่มที่เลือก
 
   // Custom Hooks
   const {
@@ -237,6 +240,12 @@ function MinerGroup() {
     navigate('/GroupDefault');
   };
 
+  // เพิ่ม function สำหรับดูรายละเอียด
+  const handleViewDetails = (group) => {
+    setSelectedGroupDetail(group);
+    setShowDetailModal(true);
+  };
+
   // Effects
   useEffect(() => {
     const handlePageChange = (event) => {
@@ -364,6 +373,7 @@ function MinerGroup() {
                 onViewSchedules={handleViewSchedules}
                 onSaveEdit={handleSaveEdit}
                 onCancelEdit={() => setEditingGroupId(null)}
+                onViewDetails={handleViewDetails}  // เพิ่ม prop สำหรับดูรายละเอียด
               />
 
               <ActionBar
@@ -381,6 +391,12 @@ function MinerGroup() {
           groupName={viewingGroupName}
           onClose={() => setShowScheduleModal(false)}
           onDeleteSchedule={handleDeleteSchedule}
+        />
+
+        <GroupDetailModal 
+          show={showDetailModal}
+          group={selectedGroupDetail}
+          onClose={() => setShowDetailModal(false)}
         />
       </div>
     </div>

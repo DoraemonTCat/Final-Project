@@ -20,7 +20,8 @@ const GroupsGrid = ({
   onEditMessages,
   onViewSchedules,
   onSaveEdit,
-  onCancelEdit
+  onCancelEdit,
+  onViewDetails  // เพิ่ม prop ใหม่
 }) => {
   if (defaultGroups.length === 0 && userGroups.length === 0) {
     return (
@@ -55,6 +56,7 @@ const GroupsGrid = ({
                 onViewSchedules={onViewSchedules}
                 onSaveEdit={onSaveEdit}
                 onCancelEdit={onCancelEdit}
+                onViewDetails={onViewDetails}  // ส่งต่อ prop
               />
             ))}
           </div>
@@ -86,6 +88,7 @@ const GroupsGrid = ({
                 onViewSchedules={onViewSchedules}
                 onSaveEdit={onSaveEdit}
                 onCancelEdit={onCancelEdit}
+                onViewDetails={onViewDetails}  // ส่งต่อ prop
               />
             ))}
           </div>

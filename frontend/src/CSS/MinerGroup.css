@@ -12,6 +12,7 @@
   padding: 30px;
   background-color: #f5f7fa;
   min-height: 100vh;
+  
 }
 
 /* Header Section */
@@ -294,7 +295,7 @@
 .group-card {
   background: white;
   border-radius: 16px;
-  padding: 24px;
+  padding: 29px;
   position: relative;
   transition: all 0.3s ease;
   border: 3px solid transparent;
@@ -680,17 +681,20 @@
 /* Default Groups Styles */
 .default-groups-section {
   margin-bottom: 30px;
+ 
 }
 
 .group-card.default-group {
   background: linear-gradient(135deg, #f6f9fc 0%, #e9f3ff 100%);
   border: 2px solid #3182ce;
   position: relative;
+  
 }
 
 .group-card.default-group:hover {
   transform: translateY(-3px);
   box-shadow: 0 10px 30px rgba(49, 130, 206, 0.15);
+  
 }
 
 .default-badge {
@@ -705,6 +709,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  
 }
 
 .group-icon {
@@ -855,5 +860,54 @@
   
   .divider-text {
     font-size: 12px;
+  }
+}
+/* เพิ่มเติมใน MinerGroup.css สำหรับปุ่มรายละเอียด */
+
+/* Detail Button Styles */
+.detail-btn {
+  background-color: #4299e1;
+  color: white;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.detail-btn:hover {
+  background-color: #3182ce;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(66, 153, 225, 0.3);
+}
+
+.detail-btn:active {
+  transform: translateY(0);
+}
+
+/* ปรับ layout ของ group-actions เมื่อมีปุ่มเพิ่มมาก */
+.group-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+/* สำหรับ responsive บนมือถือ */
+@media (max-width: 768px) {
+  .group-actions {
+    flex-direction: column;
+  }
+  
+  .action-btn,
+  .detail-btn {
+    width: 100%;
+    justify-content: center;
   }
 }
