@@ -561,7 +561,7 @@ function ScheduleDashboard() {
                   )}
                 </p>
                 <p><strong>เงื่อนไข:</strong> {getScheduleDescription(selectedSchedule)}</p>
-                <p><strong>แหล่งข้อมูล:</strong> {selectedSchedule.source === 'database' ? 'Database' : 'Local Storage'}</p>
+               
                 {selectedSchedule.repeat && selectedSchedule.repeat.type !== 'once' && (
                   <p><strong>ทำซ้ำ:</strong> {
                     selectedSchedule.repeat.type === 'daily' ? 'ทุกวัน' :

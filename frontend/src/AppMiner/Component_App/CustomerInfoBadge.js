@@ -35,7 +35,7 @@ const CustomerInfoBadge = ({ customer }) => {
       };
     } else if (sourceType === 'imported') {
       return {
-        text: 'นำเข้า (แต่ Active)',
+        text: 'ลูกค้าเก่า',
         icon: '📥',
         color: '#4299e1'
       };
