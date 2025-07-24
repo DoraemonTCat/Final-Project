@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class AutoSyncService:
     def __init__(self):
         self.is_running = False
-        self.sync_interval = 10  # sync ทุก 10 วินาที
+        self.sync_interval = 600  # sync ทุก 10 วินาที
         self.page_tokens = {}
         # เก็บ track เวลาล่าสุดที่ sync แต่ละ conversation
         self.last_sync_times: Dict[str, datetime] = {}
@@ -156,18 +156,22 @@ class AutoSyncService:
                             
                         elif has_new_message and latest_user_message_time:
                             # มีข้อความใหม่ - อัพเดท last_interaction_at
-                            logger.info(f"📝 อัพเดท last_interaction_at สำหรับ: {existing_customer.name}")
-                            logger.info(f"   เวลาเดิม: {existing_customer.last_interaction_at}")
-                            logger.info(f"   เวลาใหม่: {latest_user_message_time}")
-                            
-                            # อัพเดทเวลาโดยตรง
-                            existing_customer.last_interaction_at = latest_user_message_time
-                            existing_customer.updated_at = datetime.now()
-                            db.commit()
-                            db.refresh(existing_customer)
-                            updated_count += 1
-                            
-                            logger.info(f"✅ อัพเดทสำเร็จ - last_interaction_at ใหม่: {existing_customer.last_interaction_at}")
+                            # ตรวจสอบว่าเวลาใหม่มากกว่าเวลาเดิมจริงๆ หรือไม่
+                            if existing_customer.last_interaction_at is None or latest_user_message_time > existing_customer.last_interaction_at:
+                                logger.info(f"📝 อัพเดท last_interaction_at สำหรับ: {existing_customer.name}")
+                                logger.info(f"   เวลาเดิม: {existing_customer.last_interaction_at}")
+                                logger.info(f"   เวลาใหม่: {latest_user_message_time}")
+                                
+                                # อัพเดทเวลาโดยตรง
+                                existing_customer.last_interaction_at = latest_user_message_time
+                                existing_customer.updated_at = datetime.now()
+                                db.commit()
+                                db.refresh(existing_customer)
+                                updated_count += 1
+                                
+                                logger.info(f"✅ อัพเดทสำเร็จ - last_interaction_at ใหม่: {existing_customer.last_interaction_at}")
+                            else:
+                                logger.info(f"⏭️ ข้ามการอัพเดท - เวลาใหม่ไม่ได้ใหม่กว่าเวลาเดิม")
                         
                         # เก็บข้อความทั้งหมดที่เห็นแล้ว
                         for msg in messages:
