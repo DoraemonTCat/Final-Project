@@ -74,10 +74,6 @@ class AutoSyncService:
             
             updated_count = 0
             new_count = 0
-            restored_count = 0  # เพิ่มตัวนับสำหรับลูกค้าที่ถูกกู้คืน
-            
-            # เก็บ PSIDs ที่พบใน Facebook
-            found_psids = set()
             
             for convo in conversations:
                 convo_id = convo.get("id")
@@ -93,8 +89,6 @@ class AutoSyncService:
                 for participant in participants:
                     participant_id = participant.get("id")
                     if participant_id and participant_id != page_id:
-                        found_psids.add(participant_id)  # เพิ่ม PSID ที่พบ
-                        
                         # ตรวจสอบว่ามี customer ในระบบหรือไม่
                         existing_customer = crud.get_customer_by_psid(db, page.ID, participant_id)
                         
@@ -135,8 +129,8 @@ class AutoSyncService:
                             user_name = user_info.get("name", f"User...{participant_id[-8:]}")
                         
                         if not existing_customer:
-                            # User ถูกลบหรือยังไม่มีในระบบ - สร้างใหม่
-                            logger.info(f"🆕 พบ User ที่ไม่มีในระบบ: {user_name} ({participant_id})")
+                            # User ใหม่ - สร้างข้อมูล
+                            logger.info(f"🆕 พบ User ใหม่: {user_name} ({participant_id})")
                             
                             # หาเวลาข้อความแรก
                             first_interaction = latest_user_message_time or datetime.now()
@@ -158,20 +152,22 @@ class AutoSyncService:
                             }
                             
                             crud.create_or_update_customer(db, page.ID, participant_id, customer_data)
-                            restored_count += 1  # นับเป็นการกู้คืน
-                            logger.info(f"✅ กู้คืน/สร้าง User: {user_name} สำเร็จ")
+                            new_count += 1
                             
                         elif has_new_message and latest_user_message_time:
                             # มีข้อความใหม่ - อัพเดท last_interaction_at
-                            if existing_customer.last_interaction_at is None or latest_user_message_time > existing_customer.last_interaction_at:
-                                logger.info(f"📝 อัพเดท last_interaction_at สำหรับ: {existing_customer.name}")
-                                
-                                # อัพเดทเวลาโดยตรง
-                                existing_customer.last_interaction_at = latest_user_message_time
-                                existing_customer.updated_at = datetime.now()
-                                db.commit()
-                                db.refresh(existing_customer)
-                                updated_count += 1
+                            logger.info(f"📝 อัพเดท last_interaction_at สำหรับ: {existing_customer.name}")
+                            logger.info(f"   เวลาเดิม: {existing_customer.last_interaction_at}")
+                            logger.info(f"   เวลาใหม่: {latest_user_message_time}")
+                            
+                            # อัพเดทเวลาโดยตรง
+                            existing_customer.last_interaction_at = latest_user_message_time
+                            existing_customer.updated_at = datetime.now()
+                            db.commit()
+                            db.refresh(existing_customer)
+                            updated_count += 1
+                            
+                            logger.info(f"✅ อัพเดทสำเร็จ - last_interaction_at ใหม่: {existing_customer.last_interaction_at}")
                         
                         # เก็บข้อความทั้งหมดที่เห็นแล้ว
                         for msg in messages:
@@ -179,28 +175,8 @@ class AutoSyncService:
                             if msg_id:
                                 self.seen_messages[convo_id].add(msg_id)
             
-            # ตรวจสอบลูกค้าที่อาจจะถูกลบไปแต่ยังมีใน Facebook
-            logger.info(f"📊 พบ PSIDs ทั้งหมด {len(found_psids)} รายการจาก Facebook")
-            
-            # Optional: แสดงรายการลูกค้าในระบบที่ไม่พบใน Facebook
-            all_customers = db.query(crud.models.FbCustomer).filter(
-                crud.models.FbCustomer.page_id == page.ID
-            ).all()
-            
-            db_psids = {customer.customer_psid for customer in all_customers}
-            missing_in_fb = db_psids - found_psids
-            
-            if missing_in_fb:
-                logger.warning(f"⚠️ พบลูกค้าใน DB ที่ไม่มีใน Facebook: {len(missing_in_fb)} ราย")
-                for psid in list(missing_in_fb)[:5]:  # แสดงแค่ 5 รายแรก
-                    customer = next((c for c in all_customers if c.customer_psid == psid), None)
-                    if customer:
-                        logger.warning(f"   - {customer.name} ({psid})")
-            
-            if restored_count > 0 or updated_count > 0:
-                logger.info(f"✅ Sync เสร็จสิ้น: กู้คืน/สร้างใหม่ {restored_count} คน, อัพเดท {updated_count} คน")
-            else:
-                logger.info(f"✅ Sync เสร็จสิ้น: ไม่มีการเปลี่ยนแปลง")
+            if new_count > 0 or updated_count > 0:
+                logger.info(f"✅ Sync เสร็จสิ้น: user ใหม่ {new_count} คน, อัพเดท {updated_count} คน")
                 
         except Exception as e:
             logger.error(f"❌ Error syncing page {page_id}: {e}")
