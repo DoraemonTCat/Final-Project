@@ -3,6 +3,7 @@
 // =====================================================
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useRealtimeUpdates } from './Component_App/useRealtimeUpdates'; // 🆕 เพิ่ม import
 import '../CSS/App.css';
 import { fetchPages, getMessagesBySetId, fetchConversations } from "../Features/Tool";
 import Sidebar from "./Sidebar"; 
@@ -58,6 +59,8 @@ function App() {
   const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
   const [syncDateRange, setSyncDateRange] = useState(null);
   const [userInactivityData, setUserInactivityData] = useState({});
+  const [pendingUpdates, setPendingUpdates] = useState([]);
+  const [lastUpdateId, setLastUpdateId] = useState(null);
   
   // Daily Mining Limit States
   const [dailyMiningLimit, setDailyMiningLimit] = useState(() => {
@@ -181,7 +184,7 @@ function App() {
     }
   };
 
-  const loadConversations = async (pageId) => {
+  const loadConversations = async (pageId, forceRefresh = false) => {
     if (!pageId) return;
 
     setLoading(true);
@@ -217,14 +220,80 @@ function App() {
     }
   };
 
-  const handleloadConversations = () => {
-    if (!selectedPage) {
-      alert("กรุณาเลือกเพจ");
-      return;
+  // 🆕 Callback สำหรับ real-time updates
+  const handleRealtimeUpdate = useCallback((updates) => {
+    setPendingUpdates(prev => [...prev, ...updates]);
+
+    setConversations(prevConvs => {
+      const conversationMap = new Map(prevConvs.map(c => [c.raw_psid, c]));
+      updates.forEach(update => {
+        const existing = conversationMap.get(update.psid);
+        if (existing) {
+          conversationMap.set(update.psid, {
+            ...existing,
+            user_name: update.name,
+            conversation_name: update.name,
+            last_user_message_time: update.last_interaction,
+            first_interaction_at: update.first_interaction,
+            source_type: update.source_type,
+            updated_time: new Date().toISOString()
+          });
+        } else {
+          const newConv = {
+            id: conversationMap.size + 1,
+            conversation_id: update.psid,
+            raw_psid: update.psid,
+            user_name: update.name,
+            conversation_name: update.name,
+            last_user_message_time: update.last_interaction,
+            first_interaction_at: update.first_interaction,
+            source_type: update.source_type,
+            created_time: update.first_interaction,
+            updated_time: new Date().toISOString()
+          };
+          conversationMap.set(update.psid, newConv);
+        }
+      });
+      const updatedConvs = Array.from(conversationMap.values()).sort((a, b) => {
+        const timeA = new Date(a.last_user_message_time || 0);
+        const timeB = new Date(b.last_user_message_time || 0);
+        return timeB - timeA;
+      });
+      return updatedConvs;
+    });
+
+    setAllConversations(prevAll => {
+      const allMap = new Map(prevAll.map(c => [c.raw_psid, c]));
+      updates.forEach(update => {
+        const existing = allMap.get(update.psid);
+        if (existing) {
+          allMap.set(update.psid, {
+            ...existing,
+            user_name: update.name,
+            conversation_name: update.name,
+            last_user_message_time: update.last_interaction,
+            first_interaction_at: update.first_interaction,
+            source_type: update.source_type
+          });
+        }
+      });
+      return Array.from(allMap.values());
+    });
+
+    setLastUpdateId(prev => prev + 1);
+    setLastUpdateTime(new Date());
+
+    const newCustomers = updates.filter(u => u.action === 'new');
+    if (newCustomers.length > 0) {
+      showNotification('info', `มีลูกค้าใหม่ ${newCustomers.length} คน`);
     }
-    messageCache.current = {};
-    loadConversations(selectedPage);
-  };
+  }, []);
+
+  // 🆕 ใช้ real-time updates
+  const { disconnect, reconnect } = useRealtimeUpdates(
+    selectedPage,
+    handleRealtimeUpdate
+  );
 
   // Filter Functions
   const applyFilters = () => {
@@ -475,17 +544,17 @@ function App() {
     const past = new Date(referenceTime);
     const now = new Date();
     const diffMs = now.getTime() - past.getTime();
-    const diffMinutes = Math.floor(diffMs / 60000);
+    const diffMinutes = Math.floor(diffMs / 60000); //  แปลงเป็นนาที
     
     return diffMinutes > 0 ? diffMinutes : 0;
   };
 
-  // Effects
+  // ตัวรีเซ็ตคือ resetDailyCount
   useEffect(() => {
     // Reset daily count at midnight
     const checkMidnight = setInterval(() => {
       resetDailyCount();
-    }, 60000); // Check every minute
+    }, 5000); // Check every second
 
     return () => clearInterval(checkMidnight);
   }, []);
@@ -538,7 +607,8 @@ function App() {
       setConversations([]);
     }
   }, [selectedPage]);
-
+  
+  // 🆕 ใช้ useRealtimeUpdates hook
   useEffect(() => {
     clockIntervalRef.current = setInterval(() => {
       setCurrentTime(new Date());
@@ -549,17 +619,8 @@ function App() {
     };
   }, []);
 
-  // รีเฟสหน้า 15 seconds
-  useEffect(() => {
-    if (selectedPage) {
-      const interval = setInterval(() => {
-        loadConversations(selectedPage);
-      }, 15000);
-
-      return () => clearInterval(interval);
-    }
-  }, [selectedPage]); 
-
+ 
+  
   useEffect(() => {
     if (inactivityUpdateTimerRef.current) {
       clearInterval(inactivityUpdateTimerRef.current);
@@ -615,6 +676,33 @@ function App() {
       return prevFiltered;
     });
   }, []);
+
+  // 🆕 Visual indicator สำหรับ update
+  const UpdateIndicator = () => {
+    const [showPulse, setShowPulse] = useState(false);
+
+    useEffect(() => {
+      if (lastUpdateId > 0) {
+        setShowPulse(true);
+        const timer = setTimeout(() => setShowPulse(false), 1000);
+        return () => clearTimeout(timer);
+      }
+    }, [lastUpdateId]);
+
+    if (!showPulse) return null;
+
+    return (
+      <div className="update-indicator">
+       
+      </div>
+    );
+  };
+
+  // ฟังก์ชันโหลดข้อมูลแชท (ใส่แบบง่ายๆ ไปก่อน)
+  const handleloadConversations = async () => {
+    console.log("🔄 โหลดแชทใหม่...");
+    // TODO: ดึงข้อมูลแชทจาก backend
+  };
 
   // Render
   return (
@@ -728,6 +816,8 @@ function App() {
             }}
           />
         )}
+
+      
       </main>
     </div>
   );

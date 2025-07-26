@@ -451,3 +451,10 @@ def get_customer_type_statistics(db: Session, page_id: int):
     })
     
     return statistics
+
+def get_customers_updated_after(db: Session, page_id: int, after_time: datetime):
+    """Get customers updated after specific time"""
+    return db.query(models.FbCustomer).filter(
+        models.FbCustomer.page_id == page_id,
+        models.FbCustomer.updated_at > after_time
+    ).all()
