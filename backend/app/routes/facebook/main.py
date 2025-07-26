@@ -13,6 +13,7 @@ from .messages import router as messages_router
 from .customers import router as customers_router
 from .groups import router as groups_router
 from .schedules import router as schedules_router
+from .file_search import router as file_search_router
 
 # สร้าง main router
 router = APIRouter()
@@ -24,6 +25,7 @@ router.include_router(messages_router, tags=["Facebook Messages"])
 router.include_router(customers_router, tags=["Facebook Customers"])
 router.include_router(groups_router, tags=["Facebook Groups"])
 router.include_router(schedules_router, tags=["Facebook Schedules"])
+router.include_router(file_search_router, tags=["File Search"])
 
 # Debug endpoints
 @router.get("/debug/tokens")

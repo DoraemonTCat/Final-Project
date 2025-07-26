@@ -2018,7 +2018,139 @@ body.no-animations * {
     font-size: 0.625rem;
   }
 }
+/* File Upload Section - Enhanced */
+.file-upload-label.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
+.search-loading,
+.upload-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: #4299e1;
+}
+
+.search-stats-container {
+  margin-top: 20px;
+  padding: 20px;
+  background: #f7fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.search-stats-container h4 {
+  margin: 0 0 16px 0;
+  color: #2d3748;
+  font-size: 16px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.stat-item.success {
+  border-color: #9ae6b4;
+  background: #f0fff4;
+}
+
+.stat-item.warning {
+  border-color: #fbd38d;
+  background: #fffff0;
+}
+
+.stat-icon {
+  font-size: 20px;
+}
+
+.stat-label {
+  flex: 1;
+  font-size: 14px;
+  color: #4a5568;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.not-found-details {
+  margin-top: 12px;
+  padding: 12px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.not-found-details summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: #4a5568;
+}
+
+.not-found-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.not-found-name {
+  padding: 4px 12px;
+  background: #fed7d7;
+  color: #742a2a;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.warning-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: #fffff0;
+  border: 1px solid #fbd38d;
+  color: #744210;
+  padding: 16px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  z-index: 9999;
+  animation: slideIn 0.3s ease-out;
+}
+
+.retry-search-btn {
+  margin-top: 10px;
+  padding: 8px 16px;
+  background: #4299e1;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.2s ease;
+}
+
+.retry-search-btn:hover {
+  background: #3182ce;
+}
 /* =====================================================
    END OF STYLESHEET
    ===================================================== */

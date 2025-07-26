@@ -13,13 +13,21 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import * as mammoth from 'mammoth';
 
-const FileUploadSection = ({ displayData, onSelectUsers, onClearSelection }) => {
+const FileUploadSection = ({ 
+  displayData, 
+  onSelectUsers, 
+  onClearSelection,
+  selectedPage,
+  onAddUsersFromFile // 🆕 Callback สำหรับเพิ่ม users จาก database
+}) => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [usersFromFile, setUsersFromFile] = useState([]);
+  const [searchStats, setSearchStats] = useState(null);
+  const [isSearching, setIsSearching] = useState(false);
   const fileInputRef = useRef(null);
 
-  // Read Excel file
+  // อ่านไฟล์ Excel
   const readExcelFile = async (file) => {
     try {
       const data = await file.arrayBuffer();
@@ -30,8 +38,9 @@ const FileUploadSection = ({ displayData, onSelectUsers, onClearSelection }) => 
       
       const userNames = [];
       jsonData.forEach(row => {
-        const name = row['ชื่อ'] || row['Name'] || row['ชื่อผู้ใช้'] || row['Username'] || 
-                    row['ชื่อ-นามสกุล'] || row['Full Name'] || row['ผู้ใช้'] || row['User'];
+        const name = row['ชื่อ'] || row['Name'] || row['ชื่อผู้ใช้'] || 
+                    row['Username'] || row['ชื่อ-นามสกุล'] || 
+                    row['Full Name'] || row['ผู้ใช้'] || row['User'];
         if (name) {
           userNames.push(name.toString().trim());
         }
@@ -44,7 +53,7 @@ const FileUploadSection = ({ displayData, onSelectUsers, onClearSelection }) => 
     }
   };
 
-  // Read Word file
+  // อ่านไฟล์ Word
   const readWordFile = async (file) => {
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -61,7 +70,7 @@ const FileUploadSection = ({ displayData, onSelectUsers, onClearSelection }) => 
     }
   };
 
-  // Read CSV file
+  // อ่านไฟล์ CSV
   const readCSVFile = async (file) => {
     return new Promise((resolve, reject) => {
       Papa.parse(file, {
@@ -83,12 +92,68 @@ const FileUploadSection = ({ displayData, onSelectUsers, onClearSelection }) => 
     });
   };
 
+  // 🆕 ค้นหาใน database
+  const searchInDatabase = async (userNames) => {
+    if (!selectedPage || userNames.length === 0) return;
+    
+    setIsSearching(true);
+    try {
+      const response = await fetch('http://localhost:8000/search-customers-by-file', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          page_id: selectedPage,
+          user_names: userNames
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('ค้นหาข้อมูลไม่สำเร็จ');
+      }
+
+      const data = await response.json();
+      
+      setSearchStats({
+        found: data.found_count,
+        notFound: data.not_found_count,
+        notFoundNames: data.not_found_names || []
+      });
+
+      if (data.found_count > 0) {
+        // เรียก callback เพื่อเพิ่ม users ที่พบเข้าไปในตาราง
+        if (onAddUsersFromFile) {
+          onAddUsersFromFile(data.customers);
+        }
+        
+        // เลือก users ที่พบอัตโนมัติ
+        const conversationIds = data.customers.map(c => c.conversation_id);
+        onSelectUsers(conversationIds);
+        
+        showSuccessNotification(
+          `พบข้อมูลในระบบ ${data.found_count} คน จากทั้งหมด ${userNames.length} คน`
+        );
+      } else {
+        showWarningNotification('ไม่พบข้อมูลที่ตรงกันในระบบ');
+      }
+      
+    } catch (error) {
+      console.error('Error searching in database:', error);
+      showErrorNotification('เกิดข้อผิดพลาดในการค้นหาข้อมูล');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // จัดการอัพโหลดไฟล์
   const handleFileUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
     setIsUploading(true);
     setUploadedFileName(file.name);
+    setSearchStats(null);
 
     try {
       let userNames = [];
@@ -107,7 +172,7 @@ const FileUploadSection = ({ displayData, onSelectUsers, onClearSelection }) => 
           userNames = await readCSVFile(file);
           break;
         default:
-          throw new Error('รองรับเฉพาะไฟล์ Excel (.xlsx, .xls), Word (.docx, .doc) และ CSV (.csv)');
+          throw new Error('รองรับเฉพาะไฟล์ Excel, Word และ CSV');
       }
 
       if (userNames.length === 0) {
@@ -116,6 +181,10 @@ const FileUploadSection = ({ displayData, onSelectUsers, onClearSelection }) => 
 
       setUsersFromFile(userNames);
       showSuccessNotification(`พบรายชื่อ ${userNames.length} คนในไฟล์`);
+      
+      // 🆕 ค้นหาใน database อัตโนมัติ
+      await searchInDatabase(userNames);
+      
     } catch (error) {
       showErrorNotification(error.message);
       setUploadedFileName('');
@@ -125,38 +194,7 @@ const FileUploadSection = ({ displayData, onSelectUsers, onClearSelection }) => 
     }
   };
 
-  const selectUsersFromFile = () => {
-    if (usersFromFile.length === 0) {
-      showErrorNotification('กรุณาอัปโหลดไฟล์ที่มีรายชื่อก่อน');
-      return;
-    }
-
-    // Find matching conversations
-    const conversationsToSelect = displayData.filter(conv => {
-      const userName = conv.user_name || conv.conversation_name || '';
-      return usersFromFile.some(name => 
-        userName.toLowerCase().includes(name.toLowerCase()) ||
-        name.toLowerCase().includes(userName.toLowerCase())
-      );
-    });
-
-    const conversationIds = conversationsToSelect.map(conv => conv.conversation_id);
-    onSelectUsers(conversationIds);
-    
-    showSuccessNotification(`เลือกแล้ว ${conversationsToSelect.length} จาก ${usersFromFile.length} รายชื่อในไฟล์`);
-  };
-
-  const clearFile = () => {
-    setUploadedFileName('');
-    setUsersFromFile([]);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-    if (onClearSelection) {
-      onClearSelection();
-    }
-  };
-
+  // ฟังก์ชัน Notification
   const showSuccessNotification = (message) => {
     const notification = document.createElement('div');
     notification.className = 'success-notification';
@@ -183,6 +221,31 @@ const FileUploadSection = ({ displayData, onSelectUsers, onClearSelection }) => 
     setTimeout(() => notification.remove(), 3000);
   };
 
+  const showWarningNotification = (message) => {
+    const notification = document.createElement('div');
+    notification.className = 'warning-notification';
+    notification.innerHTML = `
+      <div class="notification-content">
+        <span class="notification-icon">⚠️</span>
+        <span>${message}</span>
+      </div>
+    `;
+    document.body.appendChild(notification);
+    setTimeout(() => notification.remove(), 3000);
+  };
+
+  const clearFile = () => {
+    setUploadedFileName('');
+    setUsersFromFile([]);
+    setSearchStats(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    if (onClearSelection) {
+      onClearSelection();
+    }
+  };
+
   return (
     <div className="file-upload-section">
       <div className="file-upload-container">
@@ -193,8 +256,12 @@ const FileUploadSection = ({ displayData, onSelectUsers, onClearSelection }) => 
           onChange={handleFileUpload}
           className="file-input"
           id="file-upload"
+          disabled={!selectedPage}
         />
-        <label htmlFor="file-upload" className="file-upload-label">
+        <label 
+          htmlFor="file-upload" 
+          className={`file-upload-label ${!selectedPage ? 'disabled' : ''}`}
+        >
           <span className="upload-icon">📁</span>
           <span>เลือกไฟล์รายชื่อ</span>
         </label>
@@ -207,14 +274,12 @@ const FileUploadSection = ({ displayData, onSelectUsers, onClearSelection }) => 
           </div>
         )}
         
-        <button
-          onClick={selectUsersFromFile}
-          disabled={usersFromFile.length === 0 || isUploading}
-          className="select-from-file-btn"
-        >
-          <span className="btn-icon">✓</span>
-          เลือกจากไฟล์
-        </button>
+        {isSearching && (
+          <div className="search-loading">
+            <span className="loading-spinner"></span>
+            <span>กำลังค้นหาในระบบ...</span>
+          </div>
+        )}
         
         {isUploading && (
           <div className="upload-loading">
@@ -224,19 +289,6 @@ const FileUploadSection = ({ displayData, onSelectUsers, onClearSelection }) => 
         )}
       </div>
       
-      {usersFromFile.length > 0 && (
-        <div className="file-users-preview">
-          <h4>รายชื่อในไฟล์:</h4>
-          <div className="users-list">
-            {usersFromFile.slice(0, 5).map((user, index) => (
-              <span key={index} className="user-badge">{user}</span>
-            ))}
-            {usersFromFile.length > 5 && (
-              <span className="more-users">...และอีก {usersFromFile.length - 5} คน</span>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 };

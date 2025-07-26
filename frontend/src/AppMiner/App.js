@@ -284,6 +284,8 @@ function App() {
     loadConversations(selectedPage);
   };
 
+  
+
   // Message Sending Functions
   const sendMessagesBySelectedSets = async (messageSetIds) => {
     if (!Array.isArray(messageSetIds) || selectedConversationIds.length === 0) {
@@ -547,6 +549,7 @@ function App() {
     };
   }, []);
 
+  // รีเฟสหน้า 15 seconds
   useEffect(() => {
     if (selectedPage) {
       const interval = setInterval(() => {
@@ -555,7 +558,7 @@ function App() {
 
       return () => clearInterval(interval);
     }
-  }, [selectedPage]);
+  }, [selectedPage]); 
 
   useEffect(() => {
     if (inactivityUpdateTimerRef.current) {
@@ -574,6 +577,44 @@ function App() {
       }
     };
   }, [sendInactivityBatch]);
+
+  // 🆕 ฟังก์ชันสำหรับเพิ่ม users จาก file search
+  const handleAddUsersFromFile = useCallback((usersFromDatabase) => {
+    setConversations(prevConvs => {
+      // กรองเอาเฉพาะ users ที่ยังไม่มีในตาราง
+      const existingIds = new Set(prevConvs.map(c => c.conversation_id));
+      const newUsers = usersFromDatabase.filter(u => !existingIds.has(u.conversation_id));
+      
+      // รวม users ใหม่เข้ากับที่มีอยู่
+      const combined = [...prevConvs, ...newUsers];
+      
+      // เรียงลำดับตาม last_user_message_time
+      combined.sort((a, b) => {
+        const timeA = new Date(a.last_user_message_time || 0);
+        const timeB = new Date(b.last_user_message_time || 0);
+        return timeB - timeA;
+      });
+      
+      return combined;
+    });
+    
+    // อัพเดท allConversations ด้วย
+    setAllConversations(prevConvs => {
+      const existingIds = new Set(prevConvs.map(c => c.conversation_id));
+      const newUsers = usersFromDatabase.filter(u => !existingIds.has(u.conversation_id));
+      return [...prevConvs, ...newUsers];
+    });
+    
+    // อัพเดท filteredConversations ถ้ามีการกรองอยู่
+    setFilteredConversations(prevFiltered => {
+      if (prevFiltered.length > 0) {
+        const existingIds = new Set(prevFiltered.map(c => c.conversation_id));
+        const newUsers = usersFromDatabase.filter(u => !existingIds.has(u.conversation_id));
+        return [...prevFiltered, ...newUsers];
+      }
+      return prevFiltered;
+    });
+  }, []);
 
   // Render
   return (
@@ -599,15 +640,17 @@ function App() {
         />
         
         <FileUploadSection 
-          displayData={displayData}
-          onSelectUsers={(conversationIds) => {
-            setSelectedConversationIds(prev => {
-              const newIds = [...new Set([...prev, ...conversationIds])];
-              return newIds;
-            });
-          }}
-          onClearSelection={() => setSelectedConversationIds([])} 
-        />
+        displayData={displayData}
+        selectedPage={selectedPage}
+        onSelectUsers={(conversationIds) => {
+          setSelectedConversationIds(prev => {
+            const newIds = [...new Set([...prev, ...conversationIds])];
+            return newIds;
+          });
+        }}
+        onClearSelection={() => setSelectedConversationIds([])}
+        onAddUsersFromFile={handleAddUsersFromFile} // 🆕 เพิ่ม prop นี้
+      />
         
         <FilterSection
           showFilter={showFilter}
