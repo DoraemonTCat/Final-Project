@@ -1,4 +1,5 @@
-# backend/app/routes/facebook/file_search.py
+# ไว้ในการตรวจสอบและค้นหา customers จากรายชื่อในไฟล์ ใน database
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
