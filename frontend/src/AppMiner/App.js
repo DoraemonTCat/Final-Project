@@ -185,40 +185,53 @@ function App() {
   };
 
   const loadConversations = async (pageId, forceRefresh = false) => {
-    if (!pageId) return;
+  if (!pageId) return;
 
-    setLoading(true);
-    try {
-      const conversations = await fetchConversations(pageId);
-      console.log('📊 โหลดข้อมูลจาก database สำเร็จ');
-      console.log('📋 ข้อมูลที่ได้รับ (กรองแล้ว):', conversations);
-      
-      setConversations(conversations);
-      setAllConversations(conversations);
-      setLastUpdateTime(new Date());
-      
-      // Reset filters
-      setFilters({
-        disappearTime: "",
-        startDate: "",
-        endDate: "",
-        customerType: "",
-        platformType: "",
-        miningStatus: ""
-      });
-      setFilteredConversations([]);
-      setSelectedConversationIds([]);
-    } catch (err) {
-      console.error("❌ เกิดข้อผิดพลาด:", err);
-      if (err.response?.status === 400) {
-        alert("กรุณาเชื่อมต่อ Facebook Page ก่อนใช้งาน");
-      } else {
-        alert(`เกิดข้อผิดพลาด: ${err.message || err}`);
-      }
-    } finally {
-      setLoading(false);
+  // ถ้าไม่ใช่ force refresh และมี cache อยู่ ให้ใช้ cache
+  if (!forceRefresh) {
+    const cached = getCachedData(`conversations_${pageId}`, { current: {} });
+    if (cached) {
+      setConversations(cached);
+      setAllConversations(cached);
+      return;
     }
-  };
+  }
+
+  setLoading(true);
+  try {
+    const conversations = await fetchConversations(pageId);
+    console.log('📊 โหลดข้อมูลจาก database สำเร็จ');
+    console.log('📋 ข้อมูลที่ได้รับ (กรองแล้ว):', conversations);
+    
+    setConversations(conversations);
+    setAllConversations(conversations);
+    setLastUpdateTime(new Date());
+    
+    // Reset filters
+    setFilters({
+      disappearTime: "",
+      startDate: "",
+      endDate: "",
+      customerType: "",
+      platformType: "",
+      miningStatus: ""
+    });
+    setFilteredConversations([]);
+    setSelectedConversationIds([]);
+    
+    // Update cache
+    setCachedData(`conversations_${pageId}`, conversations, { current: {} });
+  } catch (err) {
+    console.error("❌ เกิดข้อผิดพลาด:", err);
+    if (err.response?.status === 400) {
+      alert("กรุณาเชื่อมต่อ Facebook Page ก่อนใช้งาน");
+    } else {
+      alert(`เกิดข้อผิดพลาด: ${err.message || err}`);
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   // 🆕 Callback สำหรับ real-time updates
   const handleRealtimeUpdate = useCallback((updates) => {
@@ -698,13 +711,40 @@ function App() {
     );
   };
 
-  // ฟังก์ชันโหลดข้อมูลแชท (ใส่แบบง่ายๆ ไปก่อน)
-  const handleloadConversations = async () => {
-    console.log("🔄 โหลดแชทใหม่...");
-    // TODO: ดึงข้อมูลแชทจาก backend
-  };
+  // ในไฟล์ App.js - แก้ไขฟังก์ชัน handleloadConversations
+// ค้นหาบรรทัดนี้และแทนที่ด้วย code ด้านล่าง:
 
-  // Render
+  // ฟังก์ชันโหลดข้อมูลแชท
+  const handleloadConversations = async () => {
+  console.log("🔄 เริ่มรีเฟรชข้อมูล...");
+  
+  if (!selectedPage) {
+    showNotification('warning', 'กรุณาเลือกเพจก่อนรีเฟรช');
+    return;
+  }
+  
+  // Disconnect SSE temporarily
+  if (disconnect) {
+    disconnect();
+  }
+  
+  try {
+    // Force refresh with true parameter
+    await loadConversations(selectedPage, true);
+    
+    // Reconnect SSE
+    if (reconnect) {
+      setTimeout(() => reconnect(), 1000);
+    }
+    
+    showNotification('success', 'รีเฟรชข้อมูลสำเร็จ', `โหลดข้อมูล ${conversations.length} รายการ`);
+  } catch (error) {
+    console.error("Error refreshing data:", error);
+    showNotification('error', 'รีเฟรชข้อมูลไม่สำเร็จ', error.message);
+  }
+};
+
+
   return (
     <div className="app-container">
       <Sidebar />
@@ -795,7 +835,7 @@ function App() {
           loading={loading}
           selectedPage={selectedPage}
           onOpenPopup={handleOpenPopup}
-          onRefresh={handleloadConversations}
+          onRefresh={handleloadConversations}  // <-- ตรวจสอบบรรทัดนี้
           canMineMore={canMineMore()}
           remainingMines={getRemainingMines()}
         />

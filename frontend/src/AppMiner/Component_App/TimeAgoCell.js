@@ -38,7 +38,7 @@ const TimeAgoCell = React.memo(({ lastMessageTime, updatedTime, userId, onInacti
 
       // Format display time
       if (diffSec < 0) {
-        setDisplayTime('0 วินาทีที่แล้ว');
+        setDisplayTime('ทักมาใหม่');
       } else if (diffSec < 60) {
         setDisplayTime(`${diffSec} วินาทีที่แล้ว`);
       } else {
