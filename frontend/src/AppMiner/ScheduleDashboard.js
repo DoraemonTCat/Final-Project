@@ -235,19 +235,7 @@ function ScheduleDashboard() {
     }
   };
 
-  const refreshStatus = async () => {
-    setRefreshing(true);
-    try {
-      await loadAllSchedules(selectedPage);
-      await loadActiveSchedules(selectedPage);
-      alert("รีเฟรชสถานะสำเร็จ!");
-    } catch (error) {
-      console.error('Error refreshing status:', error);
-      alert("เกิดข้อผิดพลาดในการรีเฟรช");
-    } finally {
-      setRefreshing(false);
-    }
-  };
+ 
 
   const getScheduleStatus = (schedule) => {
     const isActive = activeSchedules.includes(schedule.id);
@@ -400,13 +388,7 @@ function ScheduleDashboard() {
             <span className="title-icon">📊</span>
             Dashboard การส่งข้อความ
           </h1>
-          <button 
-            onClick={refreshStatus}
-            disabled={refreshing}
-            className="refresh-btn"
-          >
-            {refreshing ? '⏳ กำลังรีเฟรช...' : '🔄 รีเฟรชสถานะ'}
-          </button>
+          
         </div>
         
         <div className="stats-grid">
