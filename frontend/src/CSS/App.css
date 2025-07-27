@@ -2152,5 +2152,260 @@ body.no-animations * {
   background: #3182ce;
 }
 /* =====================================================
+   DATE ENTRY FILTER STYLES
+   ===================================================== */
+.date-entry-filter {
+  position: relative;
+  margin: 0 var(--spacing-sm);
+}
+
+.date-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-secondary);
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--gray-700);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  min-width: 150px;
+}
+
+.date-filter-btn:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.date-filter-btn.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.filter-icon {
+  font-size: 1rem;
+}
+
+.dropdown-arrow {
+  margin-left: auto;
+  font-size: 0.75rem;
+  transition: transform var(--transition-base);
+}
+
+.dropdown-arrow.open {
+  transform: rotate(180deg);
+  
+}
+
+/* Dropdown */
+.date-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: var(--spacing-sm);
+  background: var(--bg-secondary);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  width: 380px;
+  max-height: 500px;
+  overflow: hidden;
+  z-index: 100;
+  animation: slideDown var(--transition-base) ease-out;
+}
+
+.dropdown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md);
+  background: var(--gray-50);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.header-stats {
+  display: flex;
+  gap: var(--spacing-md);
+  font-size: 0.75rem;
+  color: var(--gray-600);
+  font-weight: 500;
+}
+
+.clear-btn {
+  padding: 4px 12px;
+  background: var(--danger-color);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.clear-btn:hover {
+  background: var(--danger-color);
+  transform: scale(1.05);
+}
+
+/* Date List */
+.date-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.date-item {
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--gray-100);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.date-item:hover {
+  background: var(--gray-50);
+}
+
+.date-item.selected {
+  background: rgba(102, 126, 234, 0.1);
+  border-left: 3px solid var(--primary-color);
+}
+
+.date-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.date-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.date-text {
+  font-weight: 600;
+  color: var(--gray-800);
+  font-size: 0.875rem;
+}
+
+.user-count {
+  background: var(--primary-gradient);
+  color: white;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* User Preview */
+.user-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  font-size: 0.75rem;
+  color: var(--gray-500);
+}
+
+.preview-user {
+  background: var(--gray-100);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.more-users {
+  color: var(--primary-color);
+  font-weight: 500;
+}
+
+/* Visual Bar */
+.date-visual {
+  margin-top: var(--spacing-sm);
+  height: 4px;
+  background: var(--gray-200);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.count-bar {
+  height: 100%;
+  background: var(--primary-gradient);
+  transition: width var(--transition-base);
+}
+
+/* Empty State */
+.empty-dates {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl);
+  color: var(--gray-500);
+}
+
+.empty-icon {
+  font-size: 2rem;
+  margin-bottom: var(--spacing-sm);
+  opacity: 0.5;
+}
+
+/* Custom Scrollbar for Date List */
+.date-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.date-list::-webkit-scrollbar-track {
+  background: var(--gray-100);
+}
+
+.date-list::-webkit-scrollbar-thumb {
+  background: var(--gray-400);
+  border-radius: var(--radius-sm);
+}
+
+.date-list::-webkit-scrollbar-thumb:hover {
+  background: var(--gray-500);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .date-dropdown {
+    width: 320px;
+  }
+  
+  .preview-user {
+    max-width: 100px;
+  }
+}
+
+@media (max-width: 480px) {
+  .date-dropdown {
+    width: 280px;
+    left: auto;
+    right: 0;
+  }
+  
+  .date-filter-btn {
+    min-width: auto;
+  }
+  
+  .filter-text {
+    display: none;
+  }
+  
+  .date-filter-btn.active .filter-text {
+    display: inline;
+  }
+}
+/* =====================================================
    END OF STYLESHEET
    ===================================================== */

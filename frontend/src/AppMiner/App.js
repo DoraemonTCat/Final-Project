@@ -10,6 +10,7 @@ import Sidebar from "./Sidebar";
 import Popup from "./Component_App/MinerPopup";
 import SyncCustomersButton from './Component_App/SyncCustomersButton';
 import DateFilterBadge from './Component_App/DateFilterBadge';
+import DateEntryFilter from './Component_App/DateEntryFilter';
 
 // Import component ย่อยที่แยกออกมา
 import TimeAgoCell from './Component_App/TimeAgoCell';
@@ -62,6 +63,9 @@ function App() {
   const [pendingUpdates, setPendingUpdates] = useState([]);
   const [lastUpdateId, setLastUpdateId] = useState(null);
   
+  // เพิ่ม state สำหรับ date filter (ใน function App())
+  const [dateEntryFilter, setDateEntryFilter] = useState(null);
+
   // Daily Mining Limit States
   const [dailyMiningLimit, setDailyMiningLimit] = useState(() => {
     const saved = localStorage.getItem('dailyMiningLimit');
@@ -313,6 +317,16 @@ function App() {
     let filtered = [...allConversations];
     const { disappearTime, customerType, platformType, miningStatus, startDate, endDate } = filters;
 
+    if (dateEntryFilter) {
+    filtered = filtered.filter(conv => {
+      const dateStr = conv.first_interaction_at || conv.created_time;
+      if (!dateStr) return false;
+      
+      const date = new Date(dateStr).toISOString().split('T')[0];
+      return date === dateEntryFilter;
+    });
+  }
+
     if (disappearTime) {
       const now = new Date();
       filtered = filtered.filter(conv => {
@@ -366,7 +380,24 @@ function App() {
     loadConversations(selectedPage);
   };
 
+  // เพิ่ม useEffect เพื่อ apply filters เมื่อ dateEntryFilter เปลี่ยน
+  useEffect(() => {
+    if (dateEntryFilter !== null) {
+      applyFilters();
+    } else {
+      setFilteredConversations([]);
+    }
+  }, [dateEntryFilter]);
+
+
+// Handler สำหรับ date entry filter
+const handleDateEntryFilterChange = (date) => {
+  setDateEntryFilter(date);
   
+  if (date === null) {
+    setFilteredConversations([]);
+  }
+};
 
   // Message Sending Functions
   const sendMessagesBySelectedSets = async (messageSetIds) => {
@@ -765,6 +796,10 @@ function App() {
           }}
           syncDateRange={syncDateRange}
           onClearDateFilter={handleClearDateFilter}
+          // เพิ่ม props สำหรับ DateEntryFilter
+          conversations={allConversations}
+          onDateEntryFilterChange={handleDateEntryFilterChange}
+          currentDateEntryFilter={dateEntryFilter}
         />
         
         <FileUploadSection 
@@ -780,24 +815,27 @@ function App() {
         onAddUsersFromFile={handleAddUsersFromFile} // 🆕 เพิ่ม prop นี้
       />
         
-        <FilterSection
-          showFilter={showFilter}
-          onToggleFilter={() => setShowFilter(prev => !prev)}
-          filters={filters}
-          onFilterChange={(newFilters) => setFilters(newFilters)}
-          onApplyFilters={applyFilters}
-          onClearFilters={() => {
-            setFilteredConversations([]);
-            setFilters({
-              disappearTime: "",
-              startDate: "",
-              endDate: "",
-              customerType: "",
-              platformType: "",
-              miningStatus: ""
-            });
-          }}
-        />
+      {/* Filter Section ที่มีอยู่เดิม */}
+      <FilterSection
+        showFilter={showFilter}
+        onToggleFilter={() => setShowFilter(prev => !prev)}
+        filters={filters}
+        onFilterChange={(newFilters) => setFilters(newFilters)}
+        onApplyFilters={applyFilters}
+        onClearFilters={() => {
+          setFilteredConversations([]);
+          setFilters({
+            disappearTime: "",
+            startDate: "",
+            endDate: "",
+            customerType: "",
+            platformType: "",
+            miningStatus: ""
+          });
+          setDateEntryFilter(null); // Clear date entry filter too
+        }}
+      />
+     
         
         <AlertMessages
           selectedPage={selectedPage}
