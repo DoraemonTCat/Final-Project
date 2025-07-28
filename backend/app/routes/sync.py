@@ -6,6 +6,7 @@ from app.service.auto_sync_service import auto_sync_service
 
 router = APIRouter()
 
+# API สำหรับเริ่มต้นการ sync ข้อมูลลูกค้า
 @router.get("/trigger-sync/{page_id}")
 def trigger_sync(page_id: str, background_tasks: BackgroundTasks):
     background_tasks.add_task(run_sync_customer_background, page_id)

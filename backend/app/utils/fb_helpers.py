@@ -6,13 +6,13 @@ from app.service.facebook_api import fb_get
 
 bangkok_tz = pytz.timezone("Asia/Bangkok")
 
-
+# ฟังก์ชันสำหรับแก้ไข ISO 8601 format ให้ถูกต้อง
 def fix_isoformat(dt_str: str) -> str:
     if dt_str[-5] in ['+', '-'] and dt_str[-3] != ':':
         dt_str = dt_str[:-2] + ':' + dt_str[-2:]
     return dt_str
 
-
+# ฟังก์ชันสำหรับแปลง ISO 8601 string เป็น datetime ที่เป็น timezone Asia/Bangkok
 def parse_datetime_bangkok(dt_str: str) -> datetime:
     """แปลง ISO 8601 string เป็น datetime ที่เป็น timezone Asia/Bangkok"""
     try:
@@ -22,7 +22,7 @@ def parse_datetime_bangkok(dt_str: str) -> datetime:
         print(f"⚠️ Error parsing datetime: {dt_str} - {e}")
         return None
 
-
+# ฟังก์ชันสำหรับประมวลผล conversation และดึงข้อมูลลูกค้า
 def process_conversation(convo, page_id, access_token, filter_start_date=None, filter_end_date=None):
     try:
         convo_id = convo.get("id")

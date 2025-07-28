@@ -3,6 +3,7 @@ import requests
 from app.database.crud import get_all_connected_pages
 from app.database.database import SessionLocal
 
+# ฟังก์ชันสำหรับรันการ sync ข้อมูลลูกค้าใน background
 def schedule_facebook_sync():
     db = SessionLocal()
     try:

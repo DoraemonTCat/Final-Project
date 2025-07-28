@@ -25,7 +25,7 @@ router = APIRouter()
 page_tokens: Dict[str, str] = {}
 page_names: Dict[str, str] = {}
 
-
+# API สำหรับเชื่อมต่อ Facebook Page
 @router.get("/connect", response_class=HTMLResponse)
 async def connect_facebook_page():
     """แสดงหน้าเชื่อมต่อ Facebook Page"""
@@ -65,7 +65,7 @@ async def connect_facebook_page():
     """
     return HTMLResponse(content=html_content)
 
-
+# API สำหรับจัดการ OAuth callback จาก Facebook
 @router.get("/facebook/callback")
 def facebook_callback(code: str, db: Session = Depends(get_db)):
     """จัดการ OAuth callback จาก Facebook"""
@@ -131,7 +131,7 @@ def facebook_callback(code: str, db: Session = Depends(get_db)):
     else:
         return RedirectResponse(url="http://localhost:3000/?error=no_pages")
 
-
+#  API สำหรับยกเลิกการเชื่อมต่อ Facebook Page
 @router.get("/pages")
 async def get_connected_pages():
     """ดึงรายการเพจที่เชื่อมต่อแล้ว"""

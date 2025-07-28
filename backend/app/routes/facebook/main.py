@@ -29,7 +29,7 @@ router.include_router(schedules_router, tags=["Facebook Schedules"])
 router.include_router(file_search_router, tags=["File Search"])
 router.include_router(sse_router, tags=["SSE"])
 
-# Debug endpoints
+# API สำหรับตรวจสอบว่า router ทำงานได้หรือไม่
 @router.get("/debug/tokens")
 async def debug_tokens():
     """ดู token ที่เก็บไว้ (สำหรับ debug)"""
@@ -44,7 +44,7 @@ async def debug_tokens():
         "page_names": page_names
     }
 
-
+# API สำหรับตรวจสอบข้อมูล conversations
 @router.get("/debug/conversations/{page_id}")
 async def debug_conversations(page_id: str):
     """Debug conversations data"""

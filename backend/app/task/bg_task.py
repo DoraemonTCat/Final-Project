@@ -2,6 +2,7 @@
 from app.database.database import SessionLocal
 import asyncio
 
+# API สำหรับรัน background task เพื่อ sync ข้อมูลลูกค้า
 def run_sync_customer_background(page_id: str):
     """รัน sync ใน background"""
     db = SessionLocal()

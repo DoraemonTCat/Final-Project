@@ -5,6 +5,7 @@ from app.database.database import get_db
 
 router = APIRouter()
 
+# API สำหรับจัดการ Facebook Pages
 @router.post("/pages/", response_model=schemas.FacebookPageOut)
 def create_page(page: schemas.FacebookPageCreate, db: Session = Depends(get_db)):
     result = crud.create_page(db, page)
@@ -12,6 +13,7 @@ def create_page(page: schemas.FacebookPageCreate, db: Session = Depends(get_db))
         raise HTTPException(status_code=400, detail="Page already exists")
     return result
 
+# API สำหรับดึงข้อมูล Facebook Pages ทั้งหมด
 @router.get("/pages/")
 def read_pages(db: Session = Depends(get_db)):
     pages = crud.get_pages(db)
@@ -28,6 +30,7 @@ def read_pages(db: Session = Depends(get_db)):
         })
     return result
 
+# API สำหรับดึงข้อมูล Facebook Page ตาม page_id
 @router.get("/pages/{page_id}", response_model=schemas.FacebookPageOut)
 def read_page(page_id: str, db: Session = Depends(get_db)):
     page = crud.get_page(db, page_id)
@@ -35,6 +38,7 @@ def read_page(page_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Page not found")
     return page
 
+# API สำหรับอัพเดตข้อมูล Facebook Page
 @router.put("/pages/{page_id}", response_model=schemas.FacebookPageOut)
 def update_page(page_id: str, page: dict, db: Session = Depends(get_db)):
     updated = crud.update_page(db, page_id, page)
@@ -42,6 +46,7 @@ def update_page(page_id: str, page: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Page not found")
     return updated
 
+# API สำหรับลบ Facebook Page
 @router.delete("/pages/{page_id}")
 def delete_page(page_id: str, db: Session = Depends(get_db)):
     deleted = crud.delete_page(db, page_id)

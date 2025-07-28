@@ -18,7 +18,7 @@ from .auth import get_page_tokens
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-
+# API สำหรับเปิดใช้งาน schedule
 @router.post("/schedule/activate")
 async def activate_schedule(request: Request):
     """เปิดใช้งาน schedule"""
@@ -52,7 +52,7 @@ async def activate_schedule(request: Request):
     # สำหรับ scheduled และ user-inactive จะรอให้ scheduler ทำงานตามเวลา
     return {"status": "success", "message": "Schedule activated"}
 
-
+# API สำหรับดู schedules ที่กำลังทำงาน
 @router.get("/active-schedules/{page_id}")
 async def get_active_schedules(page_id: str):
     """ดู schedules ที่กำลังทำงาน"""
@@ -63,7 +63,7 @@ async def get_active_schedules(page_id: str):
         "count": len(schedules)
     }
 
-
+# API สำหรับปิดใช้งาน schedule
 @router.post("/schedule/deactivate")
 async def deactivate_schedule(request: Request):
     """ปิดใช้งาน schedule"""
@@ -78,7 +78,7 @@ async def deactivate_schedule(request: Request):
     
     return {"status": "success", "message": "Schedule deactivated"}
 
-
+# API สำหรับทดสอบ user inactivity
 @router.get("/schedule/test-inactivity/{page_id}")
 async def test_user_inactivity(page_id: str, minutes: int = 1):
     """ทดสอบระบบตรวจสอบ user ที่หายไป
@@ -128,14 +128,14 @@ async def test_user_inactivity(page_id: str, minutes: int = 1):
         "count": len(sent_users)
     }
 
-
+# API สำหรับรีเซ็ต tracking ของ schedule
 @router.post("/schedule/reset-tracking/{schedule_id}")
 async def reset_schedule_tracking(schedule_id: str):
     """Reset tracking data ของ schedule"""
     message_scheduler.sent_tracking[schedule_id] = set()
     return {"status": "success", "message": f"Reset tracking for schedule {schedule_id}"}
 
-
+# API สำหรับดูสถานะของระบบ scheduler
 @router.get("/schedule/system-status")
 async def get_system_status():
     """ดูสถานะของระบบ scheduler"""
@@ -153,7 +153,7 @@ async def get_system_status():
         }
     }
 
-
+# API สำหรับอัพเดทข้อมูลระยะเวลาที่หายไปของ users
 @router.post("/update-user-inactivity/{page_id}")
 async def update_user_inactivity(page_id: str, request: Request):
     """อัพเดทข้อมูลระยะเวลาที่หายไปของ users จาก frontend"""

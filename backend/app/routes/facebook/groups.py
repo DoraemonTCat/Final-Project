@@ -34,7 +34,7 @@ class CustomerGroupUpdate(BaseModel):
     examples: Optional[List[str]] = None
     is_active: Optional[bool] = None
 
-
+# API สำหรับสร้างกลุ่มลูกค้าใหม่
 @router.post("/customer-groups")
 async def create_customer_group(
     group_data: CustomerGroupCreate,
@@ -68,7 +68,7 @@ async def create_customer_group(
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
-
+# API สำหรับดึงกลุ่มลูกค้าทั้งหมดของเพจ
 @router.get("/customer-groups/{page_id}")
 async def get_customer_groups(
     page_id: int,
@@ -102,7 +102,7 @@ async def get_customer_groups(
     
     return result
 
-
+# API สำหรับดึงข้อมูลกลุ่มลูกค้าตาม ID
 @router.get("/customer-group/{group_id}")
 async def get_customer_group(
     group_id: int,
@@ -129,7 +129,7 @@ async def get_customer_group(
         "customer_count": len(group.customers)
     }
 
-
+# API สำหรับอัพเดทข้อมูลกลุ่มลูกค้า
 @router.put("/customer-groups/{group_id}")
 async def update_customer_group(
     group_id: int,
@@ -171,7 +171,7 @@ async def update_customer_group(
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
-
+# API สำหรับลบกลุ่มลูกค้า
 @router.delete("/customer-groups/{group_id}")
 async def delete_customer_group(
     group_id: int,
@@ -200,7 +200,7 @@ async def delete_customer_group(
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
-
+# API สำหรับจัดกลุ่มลูกค้าอัตโนมัติ
 @router.post("/auto-group-customer")
 async def auto_group_customer(
     page_id: str,

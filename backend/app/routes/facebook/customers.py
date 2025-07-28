@@ -26,7 +26,7 @@ router = APIRouter()
 
 bangkok_tz = pytz.timezone("Asia/Bangkok")
 
-
+# API สำหรับจัดการข้อมูลลูกค้า Facebook
 @router.get("/customers/{page_id}")
 async def get_customers(
     page_id: str, 
@@ -66,7 +66,7 @@ async def get_customers(
         "page_id": page_id
     }
 
-
+# API สำหรับดึงข้อมูลลูกค้ารายคน
 @router.get("/customer/{page_id}/{psid}")
 async def get_customer_detail(
     page_id: str, 
@@ -100,7 +100,7 @@ async def get_customer_detail(
         "updated_at": customer.updated_at.isoformat()
     }
 
-
+# API สำหรับดึงข้อมูลลูกค้าตามช่วงเวลา
 @router.put("/customer/{page_id}/{psid}")
 async def update_customer(
     page_id: str, 
@@ -137,7 +137,7 @@ async def update_customer(
     
     return {"status": "success", "message": "อัพเดทข้อมูลสำเร็จ"}
 
-
+# API สำหรับซิงค์ข้อมูลลูกค้าจาก Facebook
 @router.post("/sync-customers/{page_id}")
 async def sync_facebook_customers_enhanced(
     page_id: str, 
@@ -233,6 +233,7 @@ async def sync_facebook_customers_enhanced(
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"เกิดข้อผิดพลาด: {str(e)}"})
 
+# API สำหรับดึงสถิติลูกค้าของเพจ
 @router.get("/customer-statistics/{page_id}")
 async def get_customer_statistics(
     page_id: str,

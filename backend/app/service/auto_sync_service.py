@@ -23,11 +23,13 @@ class AutoSyncService:
         # เก็บ message ID ล่าสุดที่เห็นของแต่ละ user
         self.last_seen_messages: Dict[str, str] = {}  # {user_id: last_message_id}
         
+    # API สำหรับอัพเดท page tokens   
     def set_page_tokens(self, tokens: Dict[str, str]):
         """อัพเดท page tokens"""
         self.page_tokens = tokens
         logger.info(f"📌 Updated page tokens for {len(tokens)} pages")
-        
+     
+    # API สำหรับแปลง datetime ให้มี timezone   
     def make_datetime_aware(self, dt: Optional[datetime]) -> Optional[datetime]:
         """แปลง datetime ให้มี timezone"""
         if dt is None:
@@ -44,6 +46,7 @@ class AutoSyncService:
             # ถ้า localize ไม่ได้ (อาจเป็นเวลาที่ซ้ำกัน) ให้ใช้ replace
             return dt.replace(tzinfo=bangkok_tz).astimezone(utc_tz)
     
+    # API สำหรับแปลงเวลาเป็น datetime with timezone
     def parse_facebook_time(self, time_str: str) -> Optional[datetime]:
         """แปลง Facebook timestamp เป็น datetime with timezone"""
         if not time_str:
@@ -68,7 +71,8 @@ class AutoSyncService:
         except Exception as e:
             logger.error(f"Error parsing time {time_str}: {e}")
             return None
-        
+   
+    # API สำหรับค้นหารายชื่อใน database    
     async def start_auto_sync(self):
         """เริ่มระบบ auto sync"""
         self.is_running = True
@@ -81,7 +85,8 @@ class AutoSyncService:
             except Exception as e:
                 logger.error(f"❌ Error in auto sync: {e}")
                 await asyncio.sleep(30)
-    
+                
+    # API สำหรับดึงข้อมูลลูกค้าแบบ real-time ผ่าน Server-Sent Events (SSE)
     async def sync_all_pages(self):
         """Sync ข้อมูลทุกเพจ"""
         for page_id, access_token in self.page_tokens.items():
@@ -90,6 +95,7 @@ class AutoSyncService:
             except Exception as e:
                 logger.error(f"❌ Error syncing page {page_id}: {e}")
                 
+    # API สำหรับ sync ข้อมูล conversations ของเพจเดียว     
     async def sync_page_conversations(self, page_id: str, access_token: str):
         """Sync conversations ของเพจเดียว (แบบ optimized)"""
         logger.info(f"🔄 กำลัง sync conversations สำหรับ page: {page_id}")
@@ -219,6 +225,7 @@ class AutoSyncService:
         finally:
             db.close()
     
+    # API สำหรับดึงข้อความแรกของ user (เฉพาะเมื่อจำเป็น)
     async def get_first_message_time(self, conversation_id: str, user_id: str, access_token: str) -> Optional[datetime]:
         """ดึงเวลาข้อความแรกของ user (เฉพาะเมื่อจำเป็น)"""
         try:

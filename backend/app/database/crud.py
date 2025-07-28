@@ -14,7 +14,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 # ฟังก์ชันเดิมทั้งหมด...
-
 def get_page_by_id(db: Session, id: int):
     return db.query(FacebookPage).filter(FacebookPage.ID == id).first()
 

@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 # Store active connections
 active_connections = {}
 
+# API สำหรับจัดการการเชื่อมต่อ SSE (Server-Sent Events)
 async def event_generator(page_id: str, db: Session) -> AsyncGenerator:
     """Generate SSE events for real-time updates"""
     client_id = f"{page_id}_{datetime.now().timestamp()}"
@@ -66,6 +67,7 @@ async def event_generator(page_id: str, db: Session) -> AsyncGenerator:
         active_connections.pop(client_id, None)
         logger.info(f"SSE connection closed for {client_id}")
 
+# API สำหรับเชื่อมต่อ SSE
 @router.get("/sse/customers/{page_id}")
 async def customer_updates_stream(
     page_id: str,

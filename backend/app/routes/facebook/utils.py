@@ -10,13 +10,14 @@ logger = logging.getLogger(__name__)
 
 bangkok_tz = pytz.timezone("Asia/Bangkok")
 
+# แก้ไข ISO format ให้ถูกต้อง
 def fix_isoformat(dt_str: str) -> str:
     """แก้ไข ISO format string ให้ถูกต้อง"""
     if dt_str[-5] in ['+', '-'] and dt_str[-3] != ':':
         dt_str = dt_str[:-2] + ':' + dt_str[-2:]
     return dt_str
 
-
+# ดึง PSIDs จาก conversations data
 def get_conversation_psids(conversations_data: list, page_id: str) -> list:
     """ดึง PSIDs จาก conversations data"""
     psids = []
@@ -28,7 +29,7 @@ def get_conversation_psids(conversations_data: list, page_id: str) -> list:
                 psids.append(pid)
     return psids
 
-
+# ฟอร์แมตข้อมูลลูกค้าให้เหมาะสมสำหรับ API response
 def format_customer_data(customer: Any) -> Dict[str, Any]:
     """Format customer data for API response"""
     return {
@@ -41,7 +42,7 @@ def format_customer_data(customer: Any) -> Dict[str, Any]:
         "source_type": customer.source_type
     }
 
-
+# Log API errors with context
 def log_api_error(endpoint: str, error: Any):
     """Log API errors with context"""
     logger.error(f"API Error at {endpoint}: {str(error)}")
@@ -50,7 +51,7 @@ def log_api_error(endpoint: str, error: Any):
     if hasattr(error, 'request'):
         logger.error(f"Request: {error.request}")
 
-
+# API สำหรับตรวจสอบสิทธิ์การเข้าถึง page
 def validate_page_access(page_id: str, page_tokens: Dict[str, str]) -> tuple[bool, str]:
     """ตรวจสอบสิทธิ์การเข้าถึง page"""
     if not page_id:
@@ -61,7 +62,7 @@ def validate_page_access(page_id: str, page_tokens: Dict[str, str]) -> tuple[boo
     
     return True, "OK"
 
-# utils_facebook.py (หรือใน module เดียวกันก็ได้)
+# API สำหรับคำนวณวันที่เริ่มต้นและสิ้นสุดตามช่วงเวลา
 def calculate_filter_dates(period: Optional[str], start_date: Optional[str], end_date: Optional[str]):
     now = datetime.now(bangkok_tz)
     if period:
@@ -81,7 +82,7 @@ def calculate_filter_dates(period: Optional[str], start_date: Optional[str], end
         )
     return None, None
 
-
+# API สำหรับแปลง ISO datetime string เป็น datetime object
 def parse_iso_datetime(date_str: str) -> Optional[datetime]:
     try:
         fixed_str = fix_isoformat(date_str.replace("Z", "+00:00"))
@@ -90,7 +91,7 @@ def parse_iso_datetime(date_str: str) -> Optional[datetime]:
         print(f"⚠️ แปลงเวลาไม่ได้: {date_str} - {e}")
         return None
 
-
+# API สำหรับสร้างข้อมูลลูกค้า
 def build_customer_data(participant_id, user_name, first_msg_time, last_msg_time, updated_time, installed_at, page_id, access_token, convo_id) -> Optional[dict]:
     first_interaction = parse_iso_datetime(first_msg_time) if first_msg_time else None
     last_interaction = parse_iso_datetime(last_msg_time) if last_msg_time else None
@@ -125,6 +126,7 @@ def build_customer_data(participant_id, user_name, first_msg_time, last_msg_time
         'source_type': source_type
     }
 
+# API สำหรับสร้างข้อมูลลูกค้าในกรณี sync ย้อนหลัง
 def build_historical_customer_data(
     participant_id: str,
     user_name: Optional[str],

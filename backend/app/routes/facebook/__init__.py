@@ -6,4 +6,5 @@ Export main router for easy import
 
 from .main import router
 
+# Export all routes
 __all__ = ['router']

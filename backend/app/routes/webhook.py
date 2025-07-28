@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 # Dictionary เก็บสถานะการแจ้งเตือน user ใหม่
 new_user_notifications = {}
 
+# API สำหรับยืนยัน webhook
 @router.get("/webhook")
 async def verify_webhook(request: Request):
     params = request.query_params
@@ -23,6 +24,7 @@ async def verify_webhook(request: Request):
         return PlainTextResponse(content=params.get("hub.challenge"), status_code=200)
     return PlainTextResponse(content="Verification failed", status_code=403)
 
+# ฟังก์ชันสำหรับ sync ข้อมูล user ใหม่แบบละเอียด
 async def sync_new_user_data(page_id: str, sender_id: str, page_db_id: int, db: Session):
     """ฟังก์ชันสำหรับ sync ข้อมูล user ใหม่แบบละเอียด"""
     try:
@@ -117,6 +119,7 @@ async def sync_new_user_data(page_id: str, sender_id: str, page_db_id: int, db: 
         logger.error(f"❌ Error syncing new user data: {e}")
         return None
 
+# ฟังก์ชันสำหรับจัดการการเชื่อมต่อ SSE
 @router.post("/webhook")
 async def webhook_post(
     request: Request, 
@@ -175,6 +178,7 @@ async def get_new_user_notifications(page_id: str):
         "count": len(notifications)
     }
 
+# ฟังก์ชันสำหรับ sync ข้อมูล user ใหม่แบบละเอียด พร้อมดึงข้อมูลเวลาที่ถูกต้อง
 async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: int, db: Session):
     """ฟังก์ชันสำหรับ sync ข้อมูล user ใหม่แบบละเอียด พร้อมดึงข้อมูลเวลาที่ถูกต้อง"""
     try:
@@ -295,6 +299,7 @@ async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: 
         logger.error(f"❌ Error syncing new user data: {e}")
         return None
 
+# API สำหรับตรวจสอบข้อความเพื่อจัดกลุ่มลูกค้าอัตโนมัติ
 def detect_customer_group(message_text, page_id):
     """ตรวจสอบข้อความเพื่อจัดกลุ่มลูกค้าอัตโนมัติ"""
     if not message_text:

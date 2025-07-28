@@ -6,6 +6,7 @@ from tempfile import NamedTemporaryFile
 
 FB_API_URL = "https://graph.facebook.com/v14.0"
 
+# API สำหรับแก้ไข URL ของภาพที่ซ้ำซ้อน
 def fix_nested_image_url(bad_url: str) -> str:
     # ตัดเอาเฉพาะชื่อไฟล์ภาพ
     filename = bad_url.split("/")[-1]
@@ -17,6 +18,7 @@ def fix_nested_image_url(bad_url: str) -> str:
 bad_url = "https://species-recognition-classification-offices.trycloudflare.com/images/http://localhost:8000/images/http://localhost:8000/images/363047604_602577392060963_682296264272086191_n.jpg"
 clean_url = fix_nested_image_url(bad_url)
 
+# API สำหรับส่ง POST request ไปยัง Facebook Graph API
 def fb_post(endpoint: str, payload: dict, access_token: str = None):
     url = f"{FB_API_URL}/{endpoint}"
     params = {"access_token": access_token}
@@ -25,6 +27,7 @@ def fb_post(endpoint: str, payload: dict, access_token: str = None):
     response = requests.post(url, params=params, json=payload)
     return response.json()
 
+# API สำหรับแก้ไขรูปแบบ ISO datetime ให้ถูกต้อง
 def fb_get(endpoint: str, params: dict = {}, access_token: str = None):
     params["access_token"] = access_token
     url = f"{FB_API_URL}/{endpoint}"
@@ -33,6 +36,7 @@ def fb_get(endpoint: str, params: dict = {}, access_token: str = None):
     response = requests.get(url, params=params)
     return response.json()
 
+# API สำหรับดึงข้อมูลผู้ใช้จาก PSID
 def send_image_file_from_db(recipient_id: str, image_binary: bytes, filename: str, access_token: str):
     url = f"https://graph.facebook.com/v14.0/me/messages"
     params = {
@@ -50,6 +54,7 @@ def send_image_file_from_db(recipient_id: str, image_binary: bytes, filename: st
     print(f"Response: {response.text}")
     return response.json()
 
+# API สำหรับส่งข้อความไปยังผู้ใช้
 def send_message(recipient_id: str, message_text: str, access_token: str = None):
     payload = {
         "messaging_type": "MESSAGE_TAG",
@@ -59,6 +64,7 @@ def send_message(recipient_id: str, message_text: str, access_token: str = None)
     }
     return fb_post("me/messages", payload, access_token)
 
+# API สำหรับส่งข้อความแบบ binary (image/video)
 def send_image_binary(recipient_id: str, filepath: str, access_token: str):
     prefix = "http://localhost:8000/images/"
     # ตัด prefix ออกหมดเลย (ถ้ามีซ้ำๆก็หมด)
@@ -99,6 +105,7 @@ def send_image_binary(recipient_id: str, filepath: str, access_token: str):
 
     return response.json()
 
+# API สำหรับส่งข้อความแบบ binary (image/video) โดยใช้ URL
 def send_image(recipient_id: str, filename: str, access_token: str):
     # ✅ แก้ให้ใช้ URL เดียว ไม่มีซ้ำ
     image_url = fix_nested_image_url(bad_url)
@@ -118,6 +125,7 @@ def send_image(recipient_id: str, filename: str, access_token: str):
     }
     return fb_post("me/messages", payload, access_token)
 
+# API สำหรับส่งวิดีโอแบบ binary
 def send_video_binary(recipient_id: str, filepath: str, access_token: str):
     prefix = "http://localhost:8000/videos/"
     # ตัด prefix ออกหมดเลย (ถ้ามี)
@@ -158,6 +166,7 @@ def send_video_binary(recipient_id: str, filepath: str, access_token: str):
 
     return response.json()
 
+# API สำหรับส่งวิดีโอแบบ URL
 def send_video(recipient_id: str, video_url: str, access_token: str):
     payload = {
         "messaging_type": "MESSAGE_TAG",
@@ -175,6 +184,7 @@ def send_video(recipient_id: str, video_url: str, access_token: str):
     }
     return fb_post("me/messages", payload, access_token)
 
+# API สำหรับส่งไฟล์แบบ binary (เช่น PDF)
 def send_media(recipient_id: str, media_type: str, media_url: str, access_token: str = None):
     payload = {
         "messaging_type": "MESSAGE_TAG",
@@ -189,6 +199,7 @@ def send_media(recipient_id: str, media_type: str, media_url: str, access_token:
     }
     return fb_post("me/messages", payload, access_token)
 
+# API สำหรับสร้างข้อมูลลูกค้า
 def send_quick_reply(recipient_id: str, access_token: str = None):
     payload = {
         "messaging_type": "MESSAGE_TAG",

@@ -3,6 +3,7 @@ import pytz
 
 bangkok_tz = pytz.timezone("Asia/Bangkok")
 
+# ฟังก์ชันสำหรับคำนวณช่วงวันที่ตาม period ที่กำหนด
 def calculate_date_range(period, start_date, end_date):
     now = datetime.now(bangkok_tz)
     if period:

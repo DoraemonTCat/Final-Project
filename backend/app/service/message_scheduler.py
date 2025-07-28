@@ -10,6 +10,8 @@ import json
 
 logger = logging.getLogger(__name__)
 
+# Message Scheduler Class
+# จัดการการส่งข้อความตามกำหนดเวลาและเงื่อนไขต่าง
 class MessageScheduler:
     def __init__(self):
         self.active_schedules: Dict[str, List[Dict[str, Any]]] = {}
@@ -20,12 +22,14 @@ class MessageScheduler:
         self.last_check_time: Dict[int, datetime] = {}  # {schedule_id: last_check_datetime}
         # เพิ่มตัวเก็บข้อมูลระยะเวลาที่หายไปของ users
         self.user_inactivity_data: Dict[str, Dict[str, Any]] = {}  # {page_id: {user_id: {last_message_time, inactivity_minutes}}}
-        
+    
+    # API สำหรับอัพเดท page tokens    
     def set_page_tokens(self, tokens: Dict[str, str]):
         """อัพเดท page tokens"""
         self.page_tokens = tokens
         logger.info(f"Updated page tokens for {len(tokens)} pages")
-        
+    
+    # API สำหรับอัพเดทข้อมูลระยะเวลาที่หายไปของ users    
     def update_user_inactivity_data(self, page_id: str, user_data: List[Dict[str, Any]]):
         """อัพเดทข้อมูลระยะเวลาที่หายไปของ users จาก frontend"""
         if page_id not in self.user_inactivity_data:
@@ -44,7 +48,8 @@ class MessageScheduler:
                 }
         
         logger.info(f"Updated inactivity data for {len(user_data)} users on page {page_id}")
-        
+    
+    # API สำหรับเพิ่ม schedule ใหม่    
     def add_schedule(self, page_id: str, schedule: Dict[str, Any]):
         """เพิ่ม schedule เข้าระบบ"""
         if page_id not in self.active_schedules:
@@ -63,7 +68,8 @@ class MessageScheduler:
             self.sent_tracking[str(schedule['id'])] = set()
             
         logger.info(f"Added schedule {schedule['id']} for page {page_id}")
-        
+    
+    # API สำหรับลบ schedule    
     def remove_schedule(self, page_id: str, schedule_id: int):
         """ลบ schedule ออกจากระบบ"""
         if page_id in self.active_schedules:
@@ -74,7 +80,8 @@ class MessageScheduler:
             self.sent_tracking.pop(str(schedule_id), None)
             self.last_check_time.pop(schedule_id, None)
             logger.info(f"Removed schedule {schedule_id} for page {page_id}")
-            
+    
+    # API สำหรับเริ่มระบบตรวจสอบ schedule        
     async def start_schedule_monitoring(self):
         """เริ่มระบบตรวจสอบ schedule"""
         self.is_running = True
@@ -88,7 +95,8 @@ class MessageScheduler:
             except Exception as e:
                 logger.error(f"Error in schedule monitoring: {e}")
                 await asyncio.sleep(30)
-                
+     
+     # API สำหรับตรวจสอบ schedule ทั้งหมด           
     async def check_all_schedules(self):
         """ตรวจสอบ schedule ทั้งหมด"""
         current_time = datetime.now()
@@ -100,7 +108,8 @@ class MessageScheduler:
                     await self.check_schedule(page_id, schedule, current_time)
                 except Exception as e:
                     logger.error(f"Error checking schedule {schedule['id']}: {e}")
-                    
+    
+    # API สำหรับตรวจสอบแต่ละ schedule                
     async def check_schedule(self, page_id: str, schedule: Dict[str, Any], current_time: datetime):
         """ตรวจสอบแต่ละ schedule"""
         schedule_type = schedule.get('type')
@@ -123,7 +132,8 @@ class MessageScheduler:
 
             self.last_check_time[schedule['id']] = current_time
             await self.check_user_inactivity_v2(page_id, schedule)
-            
+    
+    # API สำหรับตรวจสอบเวลาที่กำหนดใน schedule        
     async def check_scheduled_time(self, page_id: str, schedule: Dict[str, Any], current_time: datetime):
         """ตรวจสอบการส่งตามเวลาที่กำหนด"""
         schedule_date = schedule.get('date')
@@ -159,7 +169,8 @@ class MessageScheduler:
             
             # ตรวจสอบการทำซ้ำ
             await self.handle_repeat(page_id, schedule, current_time)
-            
+    
+    # API สำหรับตรวจสอบ user inactivity โดยใช้ข้อมูลจาก frontend        
     async def check_user_inactivity_v2(self, page_id: str, schedule: Dict[str, Any]):
         """ตรวจสอบ user ที่หายไปโดยใช้ข้อมูลจาก frontend"""
         try:
@@ -247,7 +258,8 @@ class MessageScheduler:
 
         except Exception as e:
             logger.error(f"Error checking user inactivity v2: {e}")
-
+            
+    # API สำหรับอัพเดทข้อมูล inactivity จาก conversations โดยตรง
     async def update_inactivity_from_conversations(self, page_id: str):
         """อัพเดทข้อมูล inactivity จาก conversations โดยตรง"""
         try:
@@ -297,6 +309,7 @@ class MessageScheduler:
         except Exception as e:
             logger.error(f"Error updating inactivity from conversations: {e}")
 
+    # API สำหรับประมวลผลและส่งข้อความตาม schedule
     async def process_schedule(self, page_id: str, schedule: Dict[str, Any]):
         """ประมวลผลและส่งข้อความตาม schedule"""
         try:
@@ -353,7 +366,8 @@ class MessageScheduler:
                 
         except Exception as e:
             logger.error(f"Error processing schedule: {e}")
-            
+    
+    # API สำหรับส่งข้อความไปยัง users        
     async def send_messages_to_users(self, page_id: str, psids: List[str], messages: List[Dict], access_token: str):
         """ส่งข้อความไปยัง users"""
         success_count = 0
@@ -403,7 +417,8 @@ class MessageScheduler:
                 fail_count += 1
                 
         logger.info(f"Sent messages complete: {success_count} success, {fail_count} failed")
-        
+     
+    # API สำหรับจัดการการทำซ้ำของ schedule   
     async def handle_repeat(self, page_id: str, schedule: Dict[str, Any], current_time: datetime):
         """จัดการการทำซ้ำของ schedule"""
         repeat_info = schedule.get('repeat', {})
@@ -445,11 +460,13 @@ class MessageScheduler:
         
         # Reset tracking สำหรับรอบใหม่
         self.sent_tracking[schedule_id] = set()
-        
+    
+    # API สำหรับดึง active schedules สำหรับ page    
     def get_active_schedules_for_page(self, page_id: str):
         """ดึง active schedules สำหรับ page"""
         return self.active_schedules.get(page_id, [])
-        
+    
+    # API สำหรับเริ่มระบบ scheduler    
     def stop(self):
         """หยุดระบบ scheduler"""
         self.is_running = False
