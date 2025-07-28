@@ -440,9 +440,9 @@ function SetDefault() {
                 saveMessageSequence();       // เรียกฟังก์ชันบันทึกก่อน
                 navigate("/manage-message-sets");  // แล้วค่อยย้อนกลับ
               }}
-              className="save-btn"
+              className="save-btn" style={{ width:"40%"}}
             >
-              💾 {isEditMode ? "บันทึกการแก้ไข" : "บันทึกทั้งหมด"}
+              💾 {isEditMode ? "บันทึกการแก้ไข" : "บันทึกทั้งหมด" }
             </button>
             </div>
 

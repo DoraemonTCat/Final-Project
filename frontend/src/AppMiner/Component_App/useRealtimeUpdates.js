@@ -40,15 +40,15 @@ export const useRealtimeUpdates = (pageId, onUpdate) => {
           break;
           
         case 'customer_type_update':
-          // Handle customer type updates
-          console.log('🏷️ Received customer type updates:', data.data);
+          // Handle customer type specific updates
+          console.log('🏷️ Received customer type update:', data.data);
           if (onUpdate) {
             onUpdate(data.data);
           }
           break;
           
         case 'heartbeat':
-          console.log('💓 Heartbeat received');
+          // console.log('💓 Heartbeat received');
           break;
           
         case 'error':

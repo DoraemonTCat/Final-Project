@@ -7,6 +7,8 @@ from app.database import crud
 from sqlalchemy.orm import Session
 from app.database.database import SessionLocal
 import json
+from app.routes.facebook.sse import send_customer_type_update
+from app.database import models
 
 logger = logging.getLogger(__name__)
 
@@ -375,11 +377,9 @@ class MessageScheduler:
         
         logger.info(f"Starting to send messages to {len(psids)} users")
         
-        # เปิด database session
         db = SessionLocal()
         
         try:
-            # ดึง page จาก database
             page = crud.get_page_by_page_id(db, page_id)
             if not page:
                 logger.error(f"Page {page_id} not found in database")
@@ -387,13 +387,11 @@ class MessageScheduler:
             
             for psid in psids:
                 try:
-                    # ส่งข้อความตามลำดับ
+                    # ส่งข้อความ (โค้ดเดิม)
                     for message in sorted(messages, key=lambda x: x.get('order', 0)):
                         message_type = message.get('type', 'text')
                         content = message.get('content', '')
-                        
                         logger.info(f"Sending {message_type} message to {psid}")
-                        
                         if message_type == 'text':
                             result = send_message(psid, content, access_token)
                         elif message_type == 'image':
@@ -408,7 +406,6 @@ class MessageScheduler:
                             result = send_video_binary(psid, video_path, access_token)
                         else:
                             continue
-                            
                         if 'error' in result:
                             logger.error(f"Error sending message to {psid}: {result}")
                             fail_count += 1
@@ -419,34 +416,34 @@ class MessageScheduler:
                     
                     # อัพเดท customer type ถ้าส่งสำเร็จ
                     if schedule and 'groups' in schedule and len(schedule['groups']) > 0:
-                        group_id = schedule['groups'][0]  # ใช้กลุ่มแรก
-                        
-                        # Debug log
-                        logger.info(f"Schedule groups: {schedule['groups']}")
-                        logger.info(f"Selected group_id: {group_id}")
-                        
-                        # ตรวจสอบว่าเป็น user group (ไม่ใช่ default group)
+                        group_id = schedule['groups'][0]
                         if not str(group_id).startswith('default_'):
                             try:
                                 # อัพเดท customer_type_custom_id
                                 customer = crud.get_customer_by_psid(db, page.ID, psid)
                                 if customer:
-                                    # แปลง group_id เป็น integer
                                     group_id_int = int(group_id) if isinstance(group_id, str) else group_id
-                                    
-                                    customer.customer_type_custom_id = group_id_int
-                                    customer.updated_at = datetime.now()
-                                    db.commit()
-                                    
-                                    # Verify update
-                                    db.refresh(customer)
-                                    logger.info(f"✅ Updated customer {psid} to group {group_id_int}")
-                                    logger.info(f"   Verified customer_type_custom_id: {customer.customer_type_custom_id}")
-                                    
+                                    # ดึงข้อมูลกลุ่ม
+                                    customer_group = db.query(models.CustomerTypeCustom).filter(
+                                        models.CustomerTypeCustom.id == group_id_int
+                                    ).first()
+                                    if customer_group:
+                                        customer.customer_type_custom_id = group_id_int
+                                        customer.updated_at = datetime.now()
+                                        db.commit()
+                                        db.refresh(customer)
+                                        logger.info(f"✅ Updated customer {psid} to group {group_id_int}")
+                                        # ส่ง SSE update
+                                        await send_customer_type_update(
+                                            page_id=page_id,
+                                            psid=psid,
+                                            customer_type_name=customer_group.type_name,
+                                            customer_type_custom_id=group_id_int
+                                        )
                             except Exception as e:
                                 logger.error(f"❌ Error updating customer type: {e}")
                                 db.rollback()
-                            
+                    
                     success_count += 1
                     await asyncio.sleep(1)
                     

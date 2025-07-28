@@ -62,6 +62,7 @@ function App() {
   const [userInactivityData, setUserInactivityData] = useState({});
   const [pendingUpdates, setPendingUpdates] = useState([]);
   const [lastUpdateId, setLastUpdateId] = useState(null);
+  const [recentlyUpdatedUsers, setRecentlyUpdatedUsers] = useState(new Set());
   
   // เพิ่ม state สำหรับ date filter (ใน function App())
   const [dateEntryFilter, setDateEntryFilter] = useState(null);
@@ -239,6 +240,99 @@ function App() {
 
   // 🆕 Callback สำหรับ real-time updates
   const handleRealtimeUpdate = useCallback((updates) => {
+    console.log('📊 Received updates:', updates);
+
+    // Handle customer type updates
+    if (Array.isArray(updates) && updates.length > 0) {
+      const firstUpdate = updates[0];
+
+      // ตรวจสอบว่าเป็น customer type update
+      if (firstUpdate.customer_type_name !== undefined || firstUpdate.customer_type_custom_id !== undefined) {
+        console.log('🏷️ Processing customer type updates');
+
+        // อัพเดท conversations
+        setConversations(prevConvs => {
+          return prevConvs.map(conv => {
+            const update = updates.find(u => u.psid === conv.raw_psid);
+            if (update) {
+              // เพิ่ม user ที่อัพเดทเข้า Set
+              if (update.customer_type_name !== undefined) {
+                setRecentlyUpdatedUsers(prev => {
+                  const newSet = new Set(prev);
+                  newSet.add(conv.raw_psid);
+
+                  setTimeout(() => {
+                    setRecentlyUpdatedUsers(current => {
+                      const updated = new Set(current);
+                      updated.delete(conv.raw_psid);
+                      return updated;
+                    });
+                  }, 3000);
+
+                  return newSet;
+                });
+              }
+
+              console.log(`Updating customer type for ${conv.user_name}:`, {
+                old: conv.customer_type_name,
+                new: update.customer_type_name
+              });
+
+              return {
+                ...conv,
+                customer_type_custom_id: update.customer_type_custom_id,
+                customer_type_name: update.customer_type_name,
+                updated_time: new Date().toISOString()
+              };
+            }
+            return conv;
+          });
+        });
+
+        // อัพเดท allConversations
+        setAllConversations(prevAll => {
+          return prevAll.map(conv => {
+            const update = updates.find(u => u.psid === conv.raw_psid);
+            if (update) {
+              return {
+                ...conv,
+                customer_type_custom_id: update.customer_type_custom_id,
+                customer_type_name: update.customer_type_name
+              };
+            }
+            return conv;
+          });
+        });
+
+        // อัพเดท filteredConversations ถ้ามี
+        setFilteredConversations(prevFiltered => {
+          if (prevFiltered.length > 0) {
+            return prevFiltered.map(conv => {
+              const update = updates.find(u => u.psid === conv.raw_psid);
+              if (update) {
+                return {
+                  ...conv,
+                  customer_type_custom_id: update.customer_type_custom_id,
+                  customer_type_name: update.customer_type_name
+                };
+              }
+              return conv;
+            });
+          }
+          return prevFiltered;
+        });
+
+        // แสดง notification
+        const updateCount = updates.filter(u => u.customer_type_name).length;
+        if (updateCount > 0) {
+          showNotification('info', `อัพเดทหมวดหมู่ลูกค้า ${updateCount} คน`);
+        }
+
+        return; // จบการประมวลผล customer type updates
+      }
+    }
+
+    // Handle normal customer updates (โค้ดเดิม)
     setPendingUpdates(prev => [...prev, ...updates]);
 
     setConversations(prevConvs => {
@@ -271,40 +365,40 @@ function App() {
           conversationMap.set(update.psid, newConv);
         }
       });
-      const updatedConvs = Array.from(conversationMap.values()).sort((a, b) => {
-        const timeA = new Date(a.last_user_message_time || 0);
-        const timeB = new Date(b.last_user_message_time || 0);
-        return timeB - timeA;
-      });
-      return updatedConvs;
+    const updatedConvs = Array.from(conversationMap.values()).sort((a, b) => {
+      const timeA = new Date(a.last_user_message_time || 0);
+      const timeB = new Date(b.last_user_message_time || 0);
+      return timeB - timeA;
     });
+    return updatedConvs;
+  });
 
-    setAllConversations(prevAll => {
-      const allMap = new Map(prevAll.map(c => [c.raw_psid, c]));
-      updates.forEach(update => {
-        const existing = allMap.get(update.psid);
-        if (existing) {
-          allMap.set(update.psid, {
-            ...existing,
-            user_name: update.name,
-            conversation_name: update.name,
-            last_user_message_time: update.last_interaction,
-            first_interaction_at: update.first_interaction,
-            source_type: update.source_type
-          });
-        }
-      });
-      return Array.from(allMap.values());
+  setAllConversations(prevAll => {
+    const allMap = new Map(prevAll.map(c => [c.raw_psid, c]));
+    updates.forEach(update => {
+      const existing = allMap.get(update.psid);
+      if (existing) {
+        allMap.set(update.psid, {
+          ...existing,
+          user_name: update.name,
+          conversation_name: update.name,
+          last_user_message_time: update.last_interaction,
+          first_interaction_at: update.first_interaction,
+          source_type: update.source_type
+        });
+      }
     });
+    return Array.from(allMap.values());
+  });
 
-    setLastUpdateId(prev => prev + 1);
-    setLastUpdateTime(new Date());
+  setLastUpdateId(prev => prev + 1);
+  setLastUpdateTime(new Date());
 
-    const newCustomers = updates.filter(u => u.action === 'new');
-    if (newCustomers.length > 0) {
-      showNotification('info', `มีลูกค้าใหม่ ${newCustomers.length} คน`);
-    }
-  }, []);
+  const newCustomers = updates.filter(u => u.action === 'new');
+  if (newCustomers.length > 0) {
+    showNotification('info', `มีลูกค้าใหม่ ${newCustomers.length} คน`);
+  }
+}, []);
 
   // 🆕 ใช้ real-time updates
   const { disconnect, reconnect } = useRealtimeUpdates(
@@ -863,6 +957,18 @@ const handleDateEntryFilterChange = (date) => {
                 }
               }}
               onInactivityChange={handleInactivityChange}
+              // ส่ง prop isRecentlyUpdated ไปยัง ConversationRow ผ่าน ConversationTable
+              renderRow={(conv, idx, isSelected, onToggleCheckbox, onInactivityChange) => (
+                <ConversationRow
+                  key={conv.conversation_id}
+                  conv={conv}
+                  idx={idx}
+                  isSelected={isSelected}
+                  onToggleCheckbox={onToggleCheckbox}
+                  onInactivityChange={onInactivityChange}
+                  isRecentlyUpdated={recentlyUpdatedUsers.has(conv.raw_psid)}
+                />
+              )}
             />
           )}
         </div>
