@@ -237,7 +237,7 @@ class MessageScheduler:
             # ส่งข้อความให้ users ที่ตรงเงื่อนไข
             if inactive_users:
                 logger.info(f"Found {len(inactive_users)} users matching inactivity condition for schedule {schedule['id']}")
-                await self.send_messages_to_users(page_id, inactive_users, schedule['messages'], access_token)
+                await self.send_messages_to_users(page_id, inactive_users, schedule['messages'], access_token, schedule)
 
                 # เพิ่ม users ที่ส่งแล้วเข้า tracking
                 self.sent_tracking[schedule_id].update(inactive_users)
@@ -356,66 +356,95 @@ class MessageScheduler:
                         
             if all_psids:
                 logger.info(f"Sending messages to {len(all_psids)} users")
-                # ส่งข้อความ
-                await self.send_messages_to_users(page_id, all_psids, messages, access_token)
-                
-                # เพิ่ม users ที่ส่งแล้วเข้า tracking
+                # ส่งข้อความพร้อม schedule data
+                await self.send_messages_to_users(page_id, all_psids, messages, access_token, schedule)
+            
+            # เพิ่ม users ที่ส่งแล้วเข้า tracking
                 self.sent_tracking[schedule_id].update(all_psids)
             else:
                 logger.warning("No users found to send messages")
-                
+            
         except Exception as e:
             logger.error(f"Error processing schedule: {e}")
     
     # API สำหรับส่งข้อความไปยัง users        
-    async def send_messages_to_users(self, page_id: str, psids: List[str], messages: List[Dict], access_token: str):
-        """ส่งข้อความไปยัง users"""
+    async def send_messages_to_users(self, page_id: str, psids: List[str], messages: List[Dict], access_token: str, schedule: Dict[str, Any] = None):
+        """ส่งข้อความไปยัง users พร้อมอัพเดท customer type"""
         success_count = 0
         fail_count = 0
         
         logger.info(f"Starting to send messages to {len(psids)} users")
         
-        for psid in psids:
-            try:
-                # ส่งข้อความตามลำดับ
-                for message in sorted(messages, key=lambda x: x.get('order', 0)):
-                    message_type = message.get('type', 'text')
-                    content = message.get('content', '')
-                    
-                    logger.info(f"Sending {message_type} message to {psid}")
-                    
-                    # 🔥 ส่งข้อความโดยตรงผ่าน facebook_api แทนการเรียก endpoint
-                    # เพื่อหลีกเลี่ยงการอัพเดท interaction time
-                    if message_type == 'text':
-                        result = send_message(psid, content, access_token)
-                    elif message_type == 'image':
-                        from app.config import image_dir
-                        clean_content = content.replace('[IMAGE] ', '')
-                        image_path = f"{image_dir}/{clean_content}"
-                        result = send_image_binary(psid, image_path, access_token)
-                    elif message_type == 'video':
-                        from app.config import vid_dir
-                        clean_content = content.replace('[VIDEO] ', '')
-                        video_path = f"{vid_dir}/{clean_content}"
-                        result = send_video_binary(psid, video_path, access_token)
-                    else:
-                        continue
+        # เปิด database session
+        db = SessionLocal()
+        
+        try:
+            # ดึง page จาก database
+            page = crud.get_page_by_page_id(db, page_id)
+            if not page:
+                logger.error(f"Page {page_id} not found in database")
+                return
+            
+            for psid in psids:
+                try:
+                    # ส่งข้อความตามลำดับ
+                    for message in sorted(messages, key=lambda x: x.get('order', 0)):
+                        message_type = message.get('type', 'text')
+                        content = message.get('content', '')
                         
-                    if 'error' in result:
-                        logger.error(f"Error sending message to {psid}: {result}")
-                        fail_count += 1
-                        break
-                    else:
-                        logger.info(f"Successfully sent message to {psid}")
-                        await asyncio.sleep(0.5)
+                        logger.info(f"Sending {message_type} message to {psid}")
                         
-                success_count += 1
-                await asyncio.sleep(1)
-                
-            except Exception as e:
-                logger.error(f"Error sending messages to {psid}: {e}")
-                fail_count += 1
-                
+                        if message_type == 'text':
+                            result = send_message(psid, content, access_token)
+                        elif message_type == 'image':
+                            from app.config import image_dir
+                            clean_content = content.replace('[IMAGE] ', '')
+                            image_path = f"{image_dir}/{clean_content}"
+                            result = send_image_binary(psid, image_path, access_token)
+                        elif message_type == 'video':
+                            from app.config import vid_dir
+                            clean_content = content.replace('[VIDEO] ', '')
+                            video_path = f"{vid_dir}/{clean_content}"
+                            result = send_video_binary(psid, video_path, access_token)
+                        else:
+                            continue
+                            
+                        if 'error' in result:
+                            logger.error(f"Error sending message to {psid}: {result}")
+                            fail_count += 1
+                            break
+                        else:
+                            logger.info(f"Successfully sent message to {psid}")
+                            await asyncio.sleep(0.5)
+                    
+                    # อัพเดท customer type ถ้าส่งสำเร็จ
+                    if schedule and 'groups' in schedule and len(schedule['groups']) > 0:
+                        group_id = schedule['groups'][0]  # ใช้กลุ่มแรก
+                        
+                        # ตรวจสอบว่าเป็น user group (ไม่ใช่ default group)
+                        if not str(group_id).startswith('default_'):
+                            try:
+                                # อัพเดท customer_type_custom_id
+                                customer = crud.get_customer_by_psid(db, page.ID, psid)
+                                if customer:
+                                    customer.customer_type_custom_id = int(group_id)
+                                    customer.updated_at = datetime.now()
+                                    db.commit()
+                                    logger.info(f"Updated customer type for {psid} to group {group_id}")
+                            except Exception as e:
+                                logger.error(f"Error updating customer type: {e}")
+                                db.rollback()
+                            
+                    success_count += 1
+                    await asyncio.sleep(1)
+                    
+                except Exception as e:
+                    logger.error(f"Error sending messages to {psid}: {e}")
+                    fail_count += 1
+                    
+        finally:
+            db.close()
+            
         logger.info(f"Sent messages complete: {success_count} success, {fail_count} failed")
      
     # API สำหรับจัดการการทำซ้ำของ schedule   

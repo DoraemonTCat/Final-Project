@@ -26,16 +26,30 @@ const ConversationRow = React.memo(({
     'มีการตอบกลับ': '#3182ce'
   };
 
-  // Customer type mapping
-  const customerTypeMap = {
-    newCM: { name: "ลูกค้าใหม่", color: "#667eea" },
-    intrestCM: { name: "สนใจสินค้าสูง", color: "#38b2ac" },
-    dealDoneCM: { name: "ใกล้ปิดการขาย", color: "#ecc94b" },
-    exCM: { name: "ลูกค้าเก่า", color: "#718096" }
+  // อัพเดท Customer type mapping สำหรับแสดงชื่อกลุ่ม
+  const getCustomerTypeDisplay = () => {
+    // ถ้ามี customer_type_name จาก backend ให้แสดง
+    if (conv.customer_type_name) {
+      return {
+        name: conv.customer_type_name,
+        color: "#667eea"
+      };
+    }
+    
+    // ถ้าไม่มี ใช้ mapping เดิม
+    const customerTypeMap = {
+      newCM: { name: "ลูกค้าใหม่", color: "#667eea" },
+      intrestCM: { name: "สนใจสินค้าสูง", color: "#38b2ac" },
+      dealDoneCM: { name: "ใกล้ปิดการขาย", color: "#ecc94b" },
+      exCM: { name: "ลูกค้าเก่า", color: "#718096" }
+    };
+    
+    return customerTypeMap[conv.customerType] || null;
   };
-  const customerTypeInfo = customerTypeMap[conv.customerType];
+  
+  const customerTypeInfo = getCustomerTypeDisplay();
 
-  // Platform mapping
+  // Platform mapping (โค้ดเดิม)
   const platformMap = {
     FB: {
       label: "Facebook",

@@ -28,32 +28,40 @@ export const useRealtimeUpdates = (pageId, onUpdate) => {
     };
 
     eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        
-        switch (data.type) {
-          case 'customer_update':
-            console.log('📊 Received customer updates:', data.data);
-            if (onUpdate) {
-              onUpdate(data.data);
-            }
-            break;
-            
-          case 'heartbeat':
-            console.log('💓 Heartbeat received');
-            break;
-            
-          case 'error':
-            console.error('❌ SSE Error:', data.message);
-            break;
-            
-          default:
-            console.log('📦 Unknown event type:', data.type);
-        }
-      } catch (error) {
-        console.error('Error parsing SSE data:', error);
+    try {
+      const data = JSON.parse(event.data);
+      
+      switch (data.type) {
+        case 'customer_update':
+          console.log('📊 Received customer updates:', data.data);
+          if (onUpdate) {
+            onUpdate(data.data);
+          }
+          break;
+          
+        case 'customer_type_update':
+          // Handle customer type updates
+          console.log('🏷️ Received customer type updates:', data.data);
+          if (onUpdate) {
+            onUpdate(data.data);
+          }
+          break;
+          
+        case 'heartbeat':
+          console.log('💓 Heartbeat received');
+          break;
+          
+        case 'error':
+          console.error('❌ SSE Error:', data.message);
+          break;
+          
+        default:
+          console.log('📦 Unknown event type:', data.type);
       }
-    };
+    } catch (error) {
+      console.error('Error parsing SSE data:', error);
+    }
+  };
 
     eventSource.onerror = (error) => {
       console.error('❌ SSE connection error:', error);
