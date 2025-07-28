@@ -46,18 +46,27 @@ export const fetchConversations = async (pageId) => {
   if (!pageId) return [];
 
   try {
-    // ดึงข้อมูลจาก database โดยตรง (backend จะ sync อัตโนมัติ)
     const res = await axios.get(`http://localhost:8000/fb-customers/by-page/${pageId}`);
 
     if (!res.data || res.data.error) {
       throw new Error(res.data?.error || "ไม่สามารถโหลดข้อมูลจาก backend");
     }
 
-    console.log("✅ Raw customer data from backend (filtered):", res.data);
-    console.log(`📊 จำนวนลูกค้าที่ผ่านการกรอง: ${res.data.length} คน`);
+    console.log("✅ Raw customer data from backend:", res.data);
+    
+    // Debug: ตรวจสอบข้อมูล customer type
+    res.data.forEach((customer, idx) => {
+      if (idx < 5) { // แสดง 5 คนแรก
+        console.log(`Customer ${idx + 1}:`, {
+          name: customer.name,
+          customer_type_custom_id: customer.customer_type_custom_id,
+          customer_type_name: customer.customer_type_name
+        });
+      }
+    });
 
     // Format ข้อมูลให้ตรงกับที่ frontend ต้องการ
-    const formattedConversations = (res.data || []).map((conv, idx) => ({
+    const formattedConversations = res.data.map((conv, idx) => ({
       id: idx + 1,
       updated_time: conv.updated_at,
       created_time: conv.created_at,
@@ -69,14 +78,15 @@ export const fetchConversations = async (pageId) => {
       user_name: conv.name,
       raw_psid: conv.customer_psid,
       source_type: conv.source_type,
-      // เพิ่ม customer type name จาก relationship
-      customer_type_name: conv.customer_type_custom?.type_name || null,
-      customer_type_custom_id: conv.customer_type_custom_id
+      // เพิ่มข้อมูล customer type
+      customer_type_custom_id: conv.customer_type_custom_id,
+      customer_type_name: conv.customer_type_name
     }));
 
     return formattedConversations;
 
   } catch (err) {
+    console.error("Error fetching conversations:", err);
     throw err;
   }
 };

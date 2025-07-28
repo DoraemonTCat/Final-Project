@@ -421,18 +421,30 @@ class MessageScheduler:
                     if schedule and 'groups' in schedule and len(schedule['groups']) > 0:
                         group_id = schedule['groups'][0]  # ใช้กลุ่มแรก
                         
+                        # Debug log
+                        logger.info(f"Schedule groups: {schedule['groups']}")
+                        logger.info(f"Selected group_id: {group_id}")
+                        
                         # ตรวจสอบว่าเป็น user group (ไม่ใช่ default group)
                         if not str(group_id).startswith('default_'):
                             try:
                                 # อัพเดท customer_type_custom_id
                                 customer = crud.get_customer_by_psid(db, page.ID, psid)
                                 if customer:
-                                    customer.customer_type_custom_id = int(group_id)
+                                    # แปลง group_id เป็น integer
+                                    group_id_int = int(group_id) if isinstance(group_id, str) else group_id
+                                    
+                                    customer.customer_type_custom_id = group_id_int
                                     customer.updated_at = datetime.now()
                                     db.commit()
-                                    logger.info(f"Updated customer type for {psid} to group {group_id}")
+                                    
+                                    # Verify update
+                                    db.refresh(customer)
+                                    logger.info(f"✅ Updated customer {psid} to group {group_id_int}")
+                                    logger.info(f"   Verified customer_type_custom_id: {customer.customer_type_custom_id}")
+                                    
                             except Exception as e:
-                                logger.error(f"Error updating customer type: {e}")
+                                logger.error(f"❌ Error updating customer type: {e}")
                                 db.rollback()
                             
                     success_count += 1

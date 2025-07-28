@@ -28,7 +28,13 @@ const ConversationRow = React.memo(({
 
   // อัพเดท Customer type mapping สำหรับแสดงชื่อกลุ่ม
   const getCustomerTypeDisplay = () => {
-    // ถ้ามี customer_type_name จาก backend ให้แสดง
+    // Debug log
+    console.log(`Row ${idx + 1} - Customer Type:`, {
+      name: conv.customer_type_name,
+      id: conv.customer_type_custom_id
+    });
+    
+    // ถ้ามีชื่อกลุ่มจาก backend
     if (conv.customer_type_name) {
       return {
         name: conv.customer_type_name,
@@ -36,15 +42,8 @@ const ConversationRow = React.memo(({
       };
     }
     
-    // ถ้าไม่มี ใช้ mapping เดิม
-    const customerTypeMap = {
-      newCM: { name: "ลูกค้าใหม่", color: "#667eea" },
-      intrestCM: { name: "สนใจสินค้าสูง", color: "#38b2ac" },
-      dealDoneCM: { name: "ใกล้ปิดการขาย", color: "#ecc94b" },
-      exCM: { name: "ลูกค้าเก่า", color: "#718096" }
-    };
-    
-    return customerTypeMap[conv.customerType] || null;
+    // ถ้าไม่มี ใช้ค่า default
+    return null;
   };
   
   const customerTypeInfo = getCustomerTypeDisplay();
@@ -150,7 +149,7 @@ const ConversationRow = React.memo(({
             fontSize: "13px",
             display: "inline-block"
           }}>
-            ยังไม่จัดกลุ่ม
+          ยังไม่จัดกลุ่ม
           </span>
         )}
       </td>
