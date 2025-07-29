@@ -18,7 +18,8 @@ const ConversationRow = React.memo(({
   idx, 
   isSelected, 
   onToggleCheckbox,
-  onInactivityChange 
+  onInactivityChange,
+  isRecentlyUpdated
 }) => {
   const statusColors = {
     'ขุดแล้ว': '#48bb78',
@@ -81,7 +82,7 @@ const ConversationRow = React.memo(({
   const miningStatusInfo = miningStatusMap[conv.miningStatus] || { label: "สถานะการขุด", color: "#a0aec0" };
 
   return (
-    <tr className={`table-row ${isSelected ? 'selected' : ''}`}>
+    <tr className={`table-row ${isSelected ? 'selected' : ''} ${isRecentlyUpdated ? 'recently-updated' : ''}`}>
       <td className="table-cell text-center">
         <div className="row-number">{idx + 1}</div>
       </td>
@@ -100,11 +101,15 @@ const ConversationRow = React.memo(({
       
       <td className="table-cell">
         <div className="date-display">
-          {conv.last_user_message_time
-            ? new Date(conv.last_user_message_time).toLocaleDateString("th-TH", {
-              year: 'numeric', month: 'short', day: 'numeric'
-            })
-            : "-"
+          {conv.first_interaction_at
+            ? new Date(conv.first_interaction_at).toLocaleDateString("th-TH", {
+                year: 'numeric', month: 'short', day: 'numeric'
+              })
+            : conv.created_time
+              ? new Date(conv.created_time).toLocaleDateString("th-TH", {
+                  year: 'numeric', month: 'short', day: 'numeric'
+                })
+              : "-"
           }
         </div>
       </td>
