@@ -273,15 +273,12 @@ function App() {
                 });
               }
 
-              console.log(`Updating customer type for ${conv.user_name}:`, {
-                old: conv.customer_type_name,
-                new: update.customer_type_name
-              });
-
+              // 🟢 เพิ่มการอัพเดทเวลา
               return {
                 ...conv,
                 customer_type_custom_id: update.customer_type_custom_id,
                 customer_type_name: update.customer_type_name,
+                last_user_message_time: update.last_interaction || conv.last_user_message_time,
                 updated_time: new Date().toISOString()
               };
             }
@@ -297,7 +294,9 @@ function App() {
               return {
                 ...conv,
                 customer_type_custom_id: update.customer_type_custom_id,
-                customer_type_name: update.customer_type_name
+                customer_type_name: update.customer_type_name,
+                last_user_message_time: update.last_interaction || conv.last_user_message_time,
+                updated_time: new Date().toISOString()
               };
             }
             return conv;
@@ -313,7 +312,9 @@ function App() {
                 return {
                   ...conv,
                   customer_type_custom_id: update.customer_type_custom_id,
-                  customer_type_name: update.customer_type_name
+                  customer_type_name: update.customer_type_name,
+                  last_user_message_time: update.last_interaction || conv.last_user_message_time,
+                  updated_time: new Date().toISOString()
                 };
               }
               return conv;
