@@ -48,6 +48,13 @@ const ConnectionStatusBar = ({
             {selectedPage ? `เชื่อมต่อแล้ว: ${selectedPageInfo?.name}` : 'ยังไม่ได้เชื่อมต่อ'}
           </span>
         </div>
+       
+        {selectedPage && (
+          <SyncCustomersButton 
+            selectedPage={selectedPage}
+            onSyncComplete={onSyncComplete}
+          />
+        )}
         
         
         {/* Date Entry Filter - เพิ่มตรงนี้ */}
