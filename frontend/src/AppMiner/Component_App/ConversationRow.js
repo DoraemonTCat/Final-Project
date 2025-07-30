@@ -121,9 +121,7 @@ const ConversationRow = React.memo(({
         onInactivityChange={onInactivityChange}
       />
       
-      <td className="table-cell">
-        <span className="product-tag">{conv.product_interest || "สินค้าที่สนใจ"}</span>
-      </td>
+     
       
       <td className="table-cell">
         <div className={`platform-badge ${platformInfo.className}`}>
