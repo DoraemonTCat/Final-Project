@@ -15,6 +15,7 @@ router = APIRouter()
 
 bangkok_tz = pytz.timezone("Asia/Bangkok")
 
+# API สำหรับดึงข้อมูลลูกค้าที่ถูกนำเข้ามาจาก Facebook
 @router.get("/sync/facebook/imported_customers/{page_id}")
 async def sync_imported_customers_by_years(
     page_id: str,

@@ -18,6 +18,7 @@ class FileSearchRequest(BaseModel):
     page_id: str
     user_names: List[str]
 
+# API สำหรับค้นหา customers จากรายชื่อในไฟล์
 @router.post("/search-customers-by-file")
 async def search_customers_by_file(
     request: FileSearchRequest,

@@ -17,7 +17,7 @@ from .auth import get_page_tokens
 
 router = APIRouter()
 
-
+# API สำหรับดึงข้อมูล conversations พร้อม PSIDs
 @router.get("/psids")
 async def get_user_psids(page_id: str):
     """ดึง PSID ทั้งหมดของผู้ใช้"""
@@ -48,7 +48,7 @@ async def get_user_psids(page_id: str):
             content={"error": "ไม่สามารถดึงข้อมูล conversation ได้"}
         )
 
-
+# API สำหรับดึงข้อมูล conversations พร้อม participants
 def get_conversations_with_participants(page_id, access_token: str = None):
     """ดึงข้อมูล conversations พร้อม participants"""
     endpoint = f"{page_id}/conversations"
@@ -64,7 +64,7 @@ def get_conversations_with_participants(page_id, access_token: str = None):
     print(f"✅ พบ conversations จำนวน: {len(result.get('data', []))}")
     return result
 
-
+# API สำหรับดึงข้อมูลผู้ใช้จาก PSID
 def get_user_info_from_psid(psid, access_token):
     """ดึงข้อมูลผู้ใช้จาก PSID"""
     methods = [
@@ -105,7 +105,7 @@ def get_user_info_from_psid(psid, access_token):
         "profile_pic": ""
     }
 
-
+# API สำหรับดึงชื่อจากข้อความใน conversation
 def get_name_from_messages(conversation_id, access_token, page_id):
     """ดึงชื่อผู้ใช้จากข้อความใน conversation"""
     try:
@@ -127,7 +127,7 @@ def get_name_from_messages(conversation_id, access_token, page_id):
         print(f"❌ Error getting name from messages: {e}")
         return None
 
-
+# API สำหรับดึงเวลาของข้อความแรกใน conversation
 def get_first_message_time(conversation_id, access_token):
     """ดึงเวลาของข้อความแรกใน conversation"""
     endpoint = f"{conversation_id}/messages"
@@ -141,7 +141,7 @@ def get_first_message_time(conversation_id, access_token):
         return result["data"][0].get("created_time")
     return None
 
-
+# API สำหรับแปลงข้อมูล conversations เป็นรูปแบบที่ frontend ต้องการ
 def extract_psids_with_conversation_id(conversations_data, access_token, page_id):
     """แปลงข้อมูล conversations เป็นรูปแบบที่ frontend ต้องการ"""
     result = []

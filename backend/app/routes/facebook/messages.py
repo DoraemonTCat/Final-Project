@@ -25,7 +25,7 @@ class SendMessageRequest(BaseModel):
     message: str
     type: Optional[str] = "text"  # "text", "image", or "video"
 
-
+# API สำหรับส่งข้อความไปยังผู้ใช้ผ่าน PSID
 @router.post("/send/{page_id}/{psid}")
 async def send_user_message_by_psid(
     page_id: str,

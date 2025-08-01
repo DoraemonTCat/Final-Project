@@ -65,9 +65,7 @@ class MessageScheduleResponse(BaseModel):
     class Config:
         orm_mode = True
         
-
-
-# API สำหรับเพิ่มข้อความให้กลุ่ม
+#  API สำหรับสร้างข้อความใหม่
 @router.post("/group-messages", response_model=GroupMessageResponse)
 async def create_group_message(
     message_data: GroupMessageCreate,
@@ -75,13 +73,24 @@ async def create_group_message(
 ):
     """สร้างข้อความใหม่สำหรับกลุ่มลูกค้า"""
     try:
-        # สร้างข้อความใหม่
+        # 🔥 เพิ่มการจัดการ dir สำหรับ image และ video
+        dir_path = ""
+        if message_data.message_type == "image":
+            # ตัดคำนำหน้า [IMAGE] ออกถ้ามี
+            filename = message_data.content.replace('[IMAGE] ', '')
+            dir_path = f"images/{filename}"
+        elif message_data.message_type == "video":
+            # ตัดคำนำหน้า [VIDEO] ออกถ้ามี
+            filename = message_data.content.replace('[VIDEO] ', '')
+            dir_path = f"videos/{filename}"
+        
+        # สร้างข้อความใหม่พร้อม dir
         db_message = models.CustomerTypeMessage(
             page_id=message_data.page_id,
             customer_type_custom_id=message_data.customer_type_custom_id,
             message_type=message_data.message_type,
             content=message_data.content,
-            dir=message_data.dir or "",
+            dir=dir_path,  # 🔥 บันทึก path ของไฟล์
             display_order=message_data.display_order
         )
         
@@ -89,7 +98,7 @@ async def create_group_message(
         db.commit()
         db.refresh(db_message)
         
-        logger.info(f"Created message for group {message_data.customer_type_custom_id}")
+        logger.info(f"Created message for group {message_data.customer_type_custom_id} with dir: {dir_path}")
         return db_message
         
     except Exception as e:
@@ -130,8 +139,29 @@ async def update_group_message(
     # อัพเดทเฉพาะฟิลด์ที่ส่งมา
     if update_data.message_type is not None:
         message.message_type = update_data.message_type
+        
+        # 🔥 อัพเดท dir ตาม message type ใหม่
+        if update_data.content:
+            if update_data.message_type == "image":
+                filename = update_data.content.replace('[IMAGE] ', '')
+                message.dir = f"images/{filename}"
+            elif update_data.message_type == "video":
+                filename = update_data.content.replace('[VIDEO] ', '')
+                message.dir = f"videos/{filename}"
+            else:
+                message.dir = ""
+                
     if update_data.content is not None:
         message.content = update_data.content
+        
+        # 🔥 อัพเดท dir ถ้าเป็น image หรือ video
+        if message.message_type == "image":
+            filename = update_data.content.replace('[IMAGE] ', '')
+            message.dir = f"images/{filename}"
+        elif message.message_type == "video":
+            filename = update_data.content.replace('[VIDEO] ', '')
+            message.dir = f"videos/{filename}"
+            
     if update_data.display_order is not None:
         message.display_order = update_data.display_order
     

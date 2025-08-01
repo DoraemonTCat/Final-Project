@@ -46,6 +46,7 @@ class FbCustomerInDB(FbCustomerBase):
     class Config:
         orm_mode = True
 
+
 class FbCustomerResponse(BaseModel):
     id: int
     psid: str
