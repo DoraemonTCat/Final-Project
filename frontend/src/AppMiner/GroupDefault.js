@@ -48,42 +48,37 @@ function GroupDefault() {
   };
 
   // ฟังก์ชันดึงข้อความจาก database
-const loadMessagesFromDatabase = async (pageId, groupId) => {
+  const loadMessagesFromDatabase = async (pageId, groupId) => {
     try {
-        setLoading(true);
-        const dbId = await getPageDbId(pageId);
-        if (!dbId) {
-            console.error('Cannot find page DB ID');
-            return;
-        }
+      setLoading(true);
+      const dbId = await getPageDbId(pageId);
+      if (!dbId) {
+        console.error('Cannot find page DB ID');
+        return;
+      }
 
-        const response = await fetch(`http://localhost:8000/group-messages/${dbId}/${groupId}`);
-        if (!response.ok) throw new Error('Failed to load messages');
-        
-        const messages = await response.json();
-        
-        // แปลงข้อมูลให้อยู่ในรูปแบบที่ component ใช้
-        const formattedMessages = messages.map(msg => ({
-            id: msg.id,
-            type: msg.message_type,
-            content: msg.content,
-            dir: msg.dir,  // 🔥 เพิ่ม dir
-            order: msg.display_order,
-            dbId: msg.id,
-            // 🔥 สร้าง preview URL ถ้าเป็น image หรือ video
-            preview: msg.dir && (msg.message_type === 'image' || msg.message_type === 'video') 
-                ? `http://localhost:8000/${msg.dir}` 
-                : null
-        }));
-        
-        setMessageSequence(formattedMessages);
+      const response = await fetch(`http://localhost:8000/group-messages/${dbId}/${groupId}`);
+      if (!response.ok) throw new Error('Failed to load messages');
+      
+      const messages = await response.json();
+      
+      // แปลงข้อมูลให้อยู่ในรูปแบบที่ component ใช้
+      const formattedMessages = messages.map(msg => ({
+        id: msg.id,
+        type: msg.message_type,
+        content: msg.content,
+        order: msg.display_order,
+        dbId: msg.id // เก็บ database ID ไว้สำหรับการอัพเดท/ลบ
+      }));
+      
+      setMessageSequence(formattedMessages);
     } catch (error) {
-        console.error('Error loading messages:', error);
-        setMessageSequence([]);
+      console.error('Error loading messages:', error);
+      setMessageSequence([]);
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-};
+  };
 
   // ฟังก์ชันดึงกลุ่มลูกค้าตาม page ID
   const getGroupsForPage = (pageId) => {
@@ -251,115 +246,104 @@ const loadMessagesFromDatabase = async (pageId, groupId) => {
   };
 
   // ฟังก์ชันเพิ่มข้อความและบันทึกลง database ทันที
-const addToSequence = async () => {
+  const addToSequence = async () => {
     if (currentInput.type === 'text' && !currentInput.content.trim()) {
-        alert("กรุณากรอกข้อความ");
-        return;
+      alert("กรุณากรอกข้อความ");
+      return;
     }
 
     if ((currentInput.type === 'image' || currentInput.type === 'video') && !currentInput.file) {
-        alert("กรุณาเลือกไฟล์");
-        return;
+      alert("กรุณาเลือกไฟล์");
+      return;
     }
 
     try {
-        setLoading(true);
-        
-        if (!selectedGroups || selectedGroups.length === 0) {
-            alert("กรุณาเลือกกลุ่มลูกค้า");
-            return;
-        }
-        
-        // สำหรับกลุ่มที่ไม่ใช่ default ให้บันทึกลง database ทันที
-        if (selectedGroupId && selectedGroups[0] && !selectedGroups[0].isDefault && pageDbId) {
-            // 🔥 เตรียมข้อมูลสำหรับบันทึก
-            let messageContent = currentInput.content;
-            let dirPath = "";
-            
-            if (currentInput.type === 'image' || currentInput.type === 'video') {
-                // ใช้ชื่อไฟล์จริง
-                messageContent = currentInput.file.name;
-                
-                // 🔥 สร้าง path สำหรับ dir
-                if (currentInput.type === 'image') {
-                    dirPath = `images/${currentInput.file.name}`;
-                } else if (currentInput.type === 'video') {
-                    dirPath = `videos/${currentInput.file.name}`;
-                }
-            }
-            
-            const messageData = {
-                page_id: pageDbId,
-                customer_type_custom_id: selectedGroupId,
-                message_type: currentInput.type,
-                content: messageContent,
-                dir: dirPath,  // 🔥 ส่ง path ไปด้วย
-                display_order: messageSequence.length
-            };
+      setLoading(true);
+      
+      // ตรวจสอบว่ามี selectedGroups หรือไม่
+      if (!selectedGroups || selectedGroups.length === 0) {
+        console.error('No selected groups found');
+        console.log('selectedGroups:', selectedGroups);
+        console.log('selectedGroupId:', selectedGroupId);
+        console.log('pageDbId:', pageDbId);
+        alert("กรุณาเลือกกลุ่มลูกค้า");
+        return;
+      }
+      
+      console.log('Adding message for group:', selectedGroups[0]);
+      
+      // สำหรับกลุ่มที่ไม่ใช่ default ให้บันทึกลง database ทันที
+      if (selectedGroupId && selectedGroups[0] && !selectedGroups[0].isDefault && pageDbId) {
+        const messageData = {
+          page_id: pageDbId,
+          customer_type_custom_id: selectedGroupId,
+          message_type: currentInput.type,
+          content: currentInput.content || currentInput.file?.name || '',
+          display_order: messageSequence.length
+        };
 
-            console.log('Saving message with file path:', messageData);
+        console.log('Saving message to database:', messageData);
 
-            const response = await fetch('http://localhost:8000/group-messages', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(messageData)
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                console.error('API Error:', errorData);
-                throw new Error('Failed to save message');
-            }
-            
-            const savedMessage = await response.json();
-            
-            // เพิ่มข้อความที่บันทึกแล้วเข้า sequence
-            const newItem = {
-                id: savedMessage.id,
-                type: savedMessage.message_type,
-                content: savedMessage.content,
-                dir: savedMessage.dir,  // 🔥 เก็บ dir path
-                order: savedMessage.display_order,
-                dbId: savedMessage.id,
-                preview: currentInput.preview  // เก็บ preview สำหรับแสดงใน UI
-            };
-
-            setMessageSequence(prev => [...prev, newItem]);
-            console.log('Message added successfully with dir:', savedMessage.dir);
-        } else {
-            // สำหรับ default group ใช้วิธีเดิม (localStorage)
-            const newItem = {
-                id: Date.now(),
-                type: currentInput.type,
-                content: currentInput.content || currentInput.file?.name || '',
-                file: currentInput.file,
-                preview: currentInput.preview,
-                order: messageSequence.length
-            };
-
-            setMessageSequence(prev => [...prev, newItem]);
-        }
-
-        // Reset input
-        if (currentInput.preview) {
-            URL.revokeObjectURL(currentInput.preview);
-        }
-        setCurrentInput({
-            type: 'text',
-            content: '',
-            file: null,
-            preview: null
+        const response = await fetch('http://localhost:8000/group-messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(messageData)
         });
 
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('API Error:', errorData);
+          throw new Error('Failed to save message');
+        }
+        
+        const savedMessage = await response.json();
+        
+        // เพิ่มข้อความที่บันทึกแล้วเข้า sequence
+        const newItem = {
+          id: savedMessage.id,
+          type: savedMessage.message_type,
+          content: savedMessage.content,
+          order: savedMessage.display_order,
+          dbId: savedMessage.id
+        };
+
+        setMessageSequence(prev => [...prev, newItem]);
+        console.log('Message added successfully');
+      } else {
+        // สำหรับ default group ใช้วิธีเดิม (localStorage)
+        const newItem = {
+          id: Date.now(),
+          type: currentInput.type,
+          content: currentInput.content || currentInput.file?.name || '',
+          file: currentInput.file,
+          preview: currentInput.preview,
+          order: messageSequence.length
+        };
+
+        setMessageSequence(prev => [...prev, newItem]);
+        console.log('Message added to localStorage');
+      }
+
+      // Reset input
+      if (currentInput.preview) {
+        URL.revokeObjectURL(currentInput.preview);
+      }
+      setCurrentInput({
+        type: 'text',
+        content: '',
+        file: null,
+        preview: null
+      });
+
     } catch (error) {
-        console.error('Error adding message:', error);
-        alert('เกิดข้อผิดพลาดในการเพิ่มข้อความ: ' + error.message);
+      console.error('Error adding message:', error);
+      alert('เกิดข้อผิดพลาดในการเพิ่มข้อความ: ' + error.message);
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-};
+  };
 
   // ฟังก์ชันลบข้อความจาก database
   const removeFromSequence = async (id) => {
@@ -704,35 +688,12 @@ const addToSequence = async () => {
                     </div>
 
                     <div className="sequence-content">
-                        <div className="sequence-type">
-                            {item.type === 'text' ? 'ข้อความ' : item.type === 'image' ? 'รูปภาพ' : 'วิดีโอ'}
-                            {item.dir && (
-                                <span style={{ 
-                                    fontSize: '11px', 
-                                    color: '#718096', 
-                                    marginLeft: '8px' 
-                                }}>
-                                    ({item.dir})
-                                </span>
-                            )}
-                        </div>
-                        <div className="sequence-text">
-                            {item.content}
-                        </div>
-                        {/* แสดง preview ถ้ามี */}
-                        {item.preview && item.type === 'image' && (
-                            <img 
-                                src={item.preview} 
-                                alt="Preview" 
-                                style={{ 
-                                    width: '100px', 
-                                    height: '100px', 
-                                    objectFit: 'cover',
-                                    marginTop: '8px',
-                                    borderRadius: '4px'
-                                }} 
-                            />
-                        )}
+                      <div className="sequence-type">
+                        {item.type === 'text' ? 'ข้อความ' : item.type === 'image' ? 'รูปภาพ' : 'วิดีโอ'}
+                      </div>
+                      <div className="sequence-text">
+                        {item.content}
+                      </div>
                     </div>
 
                     <button
