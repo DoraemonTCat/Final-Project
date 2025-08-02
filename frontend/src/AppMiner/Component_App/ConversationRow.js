@@ -75,11 +75,23 @@ const ConversationRow = React.memo(({
 
   // Mining status mapping
   const miningStatusMap = {
-    Mining: { label: "ขุดแล้ว", color: statusColors['ขุดแล้ว'] },
-    "0Mining": { label: "ยังไม่ขุด", color: statusColors['ยังไม่ขุด'] },
-    returnCM: { label: "มีการตอบกลับ", color: statusColors['มีการตอบกลับ'] }
+    'not_mined': { 
+      label: "ยังไม่ขุด", 
+      color: "#e53e3e",
+      icon: "⭕"
+    },
+    'mined': { 
+      label: "ขุดแล้ว", 
+      color: "#48bb78",
+      icon: "✅"
+    },
+    'responded': { 
+      label: "มีการตอบกลับ", 
+      color: "#3182ce",
+      icon: "💬"
+    }
   };
-  const miningStatusInfo = miningStatusMap[conv.miningStatus] || { label: "สถานะการขุด", color: "#a0aec0" };
+  const miningStatusInfo = miningStatusMap[conv.miningStatus] || miningStatusMap['not_mined'];
 
   return (
     <tr className={`table-row ${isSelected ? 'selected' : ''} ${isRecentlyUpdated ? 'recently-updated' : ''}`}>
@@ -159,6 +171,7 @@ const ConversationRow = React.memo(({
       
       <td className="table-cell">
         <div className="status-indicator" style={{ '--status-color': miningStatusInfo.color }}>
+          <span className="status-icon">{miningStatusInfo.icon}</span>
           <span className="customer-type new">{miningStatusInfo.label}</span>
         </div>
       </td>
