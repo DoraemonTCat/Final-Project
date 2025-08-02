@@ -120,11 +120,20 @@ class FbCustomer(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     source_type = Column(Text, server_default="new", nullable=False)
-
+    
+    # เพิ่ม column ใหม่
+    mining_status = Column(String(20), server_default="not_mined", nullable=False)
+    last_mined_at = Column(TIMESTAMP(timezone=True), nullable=True)  # เก็บเวลาที่ขุดล่าสุด
+    
     __table_args__ = (
         CheckConstraint(
             "source_type IN ('new', 'imported')",
             name="fb_customers_source_type_check"
+        ),
+        # เพิ่ม constraint สำหรับ mining_status
+        CheckConstraint(
+            "mining_status IN ('not_mined', 'mined', 'responded')",
+            name="fb_customers_mining_status_check"
         ),
     )
     
