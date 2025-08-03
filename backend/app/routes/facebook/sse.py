@@ -1,3 +1,4 @@
+# backend/app/routes/facebook/sse.py
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -18,7 +19,6 @@ active_connections = {}
 # เพิ่ม queue สำหรับ customer type updates
 customer_type_update_queue = asyncio.Queue()
 
-# API สำหรับจัดการการเชื่อมต่อ SSE (Server-Sent Events)
 async def event_generator(page_id: str, db: Session) -> AsyncGenerator:
     """Generate SSE events for real-time updates"""
     client_id = f"{page_id}_{datetime.now().timestamp()}"
@@ -29,48 +29,56 @@ async def event_generator(page_id: str, db: Session) -> AsyncGenerator:
         
         while active_connections.get(client_id, False):
             try:
-                # Check for customer type updates from queue
+                # ใช้ try-except และ rollback เมื่อเกิด error
                 try:
-                    # ตรวจสอบ queue สำหรับ customer type updates
-                    update = await asyncio.wait_for(
-                        customer_type_update_queue.get(), 
-                        timeout=1.0
-                    )
-                    
-                    # ส่งเฉพาะ updates ที่เกี่ยวกับ page นี้
-                    if update.get('page_id') == page_id:
-                        yield f"data: {json.dumps({'type': 'customer_type_update', 'data': [update]})}\n\n"
-                        logger.info(f"Sent customer type update for {update['psid']}")
+                    # Check for customer type updates from queue
+                    try:
+                        update = await asyncio.wait_for(
+                            customer_type_update_queue.get(), 
+                            timeout=1.0
+                        )
                         
-                except asyncio.TimeoutError:
-                    pass
-                
-                # Check for new/updated customers (โค้ดเดิม)
-                page = crud.get_page_by_page_id(db, page_id)
-                if page:
-                    customers = crud.get_customers_updated_after(
-                        db, page.ID, last_check
-                    )
+                        if update.get('page_id') == page_id:
+                            yield f"data: {json.dumps({'type': 'customer_type_update', 'data': [update]})}\n\n"
+                            logger.info(f"Sent customer type update for {update['psid']}")
+                            
+                    except asyncio.TimeoutError:
+                        pass
                     
-                    if customers:
-                        updates = []
-                        for customer in customers:
-                            # รวม customer type data
-                            update_data = {
-                                'id': customer.id,
-                                'psid': customer.customer_psid,
-                                'name': customer.name or f"User...{customer.customer_psid[-8:]}",
-                                'first_interaction': customer.first_interaction_at.isoformat() if customer.first_interaction_at else None,
-                                'last_interaction': customer.last_interaction_at.isoformat() if customer.last_interaction_at else None,
-                                'source_type': customer.source_type,
-                                'customer_type_custom_id': customer.customer_type_custom_id,
-                                'customer_type_name': customer.customer_type_custom.type_name if customer.customer_type_custom else None,
-                                'action': 'update'
-                            }
-                            updates.append(update_data)
+                    # Check for new/updated customers
+                    page = crud.get_page_by_page_id(db, page_id)
+                    if page:
+                        customers = crud.get_customers_updated_after(
+                            db, page.ID, last_check
+                        )
                         
-                        yield f"data: {json.dumps({'type': 'customer_update', 'data': updates})}\n\n"
-                        last_check = datetime.now()
+                        if customers:
+                            updates = []
+                            for customer in customers:
+                                update_data = {
+                                    'id': customer.id,
+                                    'psid': customer.customer_psid,
+                                    'name': customer.name or f"User...{customer.customer_psid[-8:]}",
+                                    'first_interaction': customer.first_interaction_at.isoformat() if customer.first_interaction_at else None,
+                                    'last_interaction': customer.last_interaction_at.isoformat() if customer.last_interaction_at else None,
+                                    'source_type': customer.source_type,
+                                    'customer_type_custom_id': customer.customer_type_custom_id,
+                                    'customer_type_name': customer.customer_type_custom.type_name if customer.customer_type_custom else None,
+                                    'action': 'update'
+                                }
+                                updates.append(update_data)
+                            
+                            yield f"data: {json.dumps({'type': 'customer_update', 'data': updates})}\n\n"
+                            last_check = datetime.now()
+                    
+                    # ทำ commit เพื่อ clear transaction
+                    db.commit()
+                    
+                except Exception as e:
+                    # Rollback transaction เมื่อเกิด error
+                    db.rollback()
+                    logger.error(f"Database error in SSE: {e}")
+                    # Continue loop แทนที่จะ raise error
                 
                 # Send heartbeat
                 yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': datetime.now().isoformat()})}\n\n"
@@ -79,12 +87,23 @@ async def event_generator(page_id: str, db: Session) -> AsyncGenerator:
                 
             except Exception as e:
                 logger.error(f"Error in SSE generator: {e}")
-                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+                # Rollback และ continue
+                try:
+                    db.rollback()
+                except:
+                    pass
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Connection error'})}\n\n"
+                await asyncio.sleep(5)
                 
     finally:
         active_connections.pop(client_id, None)
         logger.info(f"SSE connection closed for {client_id}")
-        
+        # ทำ rollback สุดท้ายก่อนปิด connection
+        try:
+            db.rollback()
+        except:
+            pass
+
 # Helper function สำหรับส่ง customer type update
 async def send_customer_type_update(page_id: str, psid: str, customer_type_name: str, customer_type_custom_id: int):
     """ส่ง customer type update ผ่าน SSE"""
@@ -99,7 +118,6 @@ async def send_customer_type_update(page_id: str, psid: str, customer_type_name:
     await customer_type_update_queue.put(update)
     logger.info(f"Queued customer type update for {psid}")
 
-# API สำหรับเชื่อมต่อ SSE
 @router.get("/sse/customers/{page_id}")
 async def customer_updates_stream(
     page_id: str,
@@ -108,18 +126,29 @@ async def customer_updates_stream(
 ):
     """SSE endpoint for real-time customer updates"""
     
-    async def event_stream():
-        async for event in event_generator(page_id, db):
-            if await request.is_disconnected():
-                break
-            yield event
+    # สร้าง generator function ใหม่ที่จัดการ db session อย่างถูกต้อง
+    async def safe_event_stream():
+        try:
+            async for event in event_generator(page_id, db):
+                if await request.is_disconnected():
+                    break
+                yield event
+        except Exception as e:
+            logger.error(f"SSE stream error: {e}")
+        finally:
+            # ทำ cleanup
+            try:
+                db.rollback()
+                db.close()
+            except:
+                pass
     
     return StreamingResponse(
-        event_stream(),
+        safe_event_stream(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"  # Disable Nginx buffering
+            "X-Accel-Buffering": "no"
         }
     )
