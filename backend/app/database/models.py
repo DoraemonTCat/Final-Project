@@ -170,9 +170,7 @@ class PageCustomerTypeKnowledge(Base):
     id = Column(Integer, primary_key=True, index=True)
     page_id = Column(String, ForeignKey("facebook_pages.page_id", ondelete="CASCADE"), nullable=False)
     customer_type_knowledge_id = Column(Integer, ForeignKey("customer_type_knowledge.id", ondelete="SET NULL"), nullable=True)
-    is_active = Column(Boolean, server_default="true")
-    content = Column(Text, nullable=False)
-    display_order = Column(Integer, nullable=False)
+    is_enabled = Column(Boolean, server_default="true")  
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
@@ -180,3 +178,26 @@ class PageCustomerTypeKnowledge(Base):
     page = relationship("FacebookPage", back_populates="page_customer_type_knowledge", foreign_keys=[page_id])
     customer_type_knowledge = relationship("CustomerTypeKnowledge", back_populates="page_customer_type_knowledge")
     customer_type_messages = relationship("CustomerTypeMessage", back_populates="page_customer_type_knowledge_rel")
+    
+class RetargetTierConfig(Base):
+    tablename = "retarget_tiers_config"
+
+    id = Column(Integer, primary_key=True, index=True)
+    page_id = Column(Integer, ForeignKey("facebook_pages.ID", ondelete="CASCADE"), nullable=False)
+    tier_name = Column(String(50), nullable=False)
+    days_since_last_contact = Column(Integer, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    page = relationship("FacebookPage", back_populates="messages", foreign_keys=[page_id])
+
+    table_args = (
+        CheckConstraint(
+            "tier_name IN ('หาย', 'หายนาน', 'หายนานมากๆ')",
+            name="retarget_tiers_config_tier_name_check"
+        ),
+        CheckConstraint(
+            "days_since_last_contact > 0",
+            name="retarget_tiers_config_days_since_last_contact_check"
+        ),
+    )
