@@ -61,8 +61,9 @@ async def send_user_message_by_psid(
         if "error" in result:
             return {"error": result["error"], "details": result}
         else:
-            # อัพเดท interaction time ถ้าไม่ใช่ system message
-            if not request.json().get('is_system_message', False):
+           # อัพเดท interaction time ถ้าไม่ใช่ system message
+            body = await request.json()
+            if not body.get('is_system_message', False):
                 page = crud.get_page_by_page_id(db, page_id)
                 if page:
                     crud.update_customer_interaction(db, page.ID, psid)

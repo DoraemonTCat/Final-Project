@@ -17,7 +17,7 @@ class FacebookPage(Base):
     customer_type_messages = relationship("CustomerTypeMessage", back_populates="page", cascade="all, delete-orphan")
     customers = relationship("FbCustomer", back_populates="page", cascade="all, delete-orphan")
     page_customer_type_knowledge = relationship("PageCustomerTypeKnowledge", back_populates="page", cascade="all, delete-orphan")
-
+    retarget_tiers_config = relationship("RetargetTierConfig", back_populates="page", cascade="all, delete-orphan")
 
 class CustomerTypeCustom(Base):
     __tablename__ = "customer_type_custom"
@@ -180,7 +180,7 @@ class PageCustomerTypeKnowledge(Base):
     customer_type_messages = relationship("CustomerTypeMessage", back_populates="page_customer_type_knowledge_rel")
     
 class RetargetTierConfig(Base):
-    tablename = "retarget_tiers_config"
+    __tablename__ = "retarget_tiers_config"
 
     id = Column(Integer, primary_key=True, index=True)
     page_id = Column(Integer, ForeignKey("facebook_pages.ID", ondelete="CASCADE"), nullable=False)
@@ -189,15 +189,15 @@ class RetargetTierConfig(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
-    page = relationship("FacebookPage", back_populates="messages", foreign_keys=[page_id])
+    page = relationship("FacebookPage", back_populates="retarget_tiers_config", foreign_keys=[page_id])
 
-    table_args = (
+    __table_args__ = (
         CheckConstraint(
             "tier_name IN ('หาย', 'หายนาน', 'หายนานมากๆ')",
-            name="retarget_tiers_config_tier_name_check"
+            name="chk_tier_name"
         ),
         CheckConstraint(
             "days_since_last_contact > 0",
-            name="retarget_tiers_config_days_since_last_contact_check"
+            name="chk_days_contact"
         ),
     )
