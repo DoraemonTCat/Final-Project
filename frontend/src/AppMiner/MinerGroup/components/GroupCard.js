@@ -26,18 +26,25 @@ const GroupCard = ({
 }) => {
   const isKnowledge = group.isKnowledge;
   const isDefault = group.isDefault;
+  const isDisabled = isKnowledge && group.is_enabled === false; // เช็คว่าถูกปิดใช้งานหรือไม่
   
   return (
-    <div className={`group-card ${isKnowledge ? 'knowledge-group' : ''} ${isDefault ? 'default-group' : ''} ${isSelected ? 'selected' : ''}`}>
-      {isKnowledge && <div className="knowledge-badge">กลุ่มพื้นฐาน</div>}
+    <div className={`group-card ${isKnowledge ? 'knowledge-group' : ''} ${isDefault ? 'default-group' : ''} ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled-group' : ''}`}>
+      {isKnowledge && (
+        <div className="knowledge-badge">
+          กลุ่มพื้นฐาน
+          {isDisabled && <span className="disabled-indicator"> (ปิดใช้งาน)</span>}
+        </div>
+      )}
       {isDefault && <div className="default-badge">พื้นฐาน</div>}
       
       <div className="group-checkbox">
         <input
           type="checkbox"
           id={`group-${group.id}`}
-          checked={isSelected }
-          onChange={() => onToggleSelect(group.id)}
+          checked={isSelected}
+          onChange={() => !isDisabled && onToggleSelect(group.id)} // ป้องกันการเลือกถ้าปิดใช้งาน
+          disabled={isDisabled}
         />
         <label htmlFor={`group-${group.id}`}></label>
       </div>
@@ -45,7 +52,7 @@ const GroupCard = ({
       <div className="group-content">
         <div className="group-icon">{group.icon || '👥'}</div>
         
-        {isEditing ? (
+        {isEditing && !isDisabled ? (
           <EditGroupForm 
             group={group}
             onSave={onSaveEdit}
@@ -57,10 +64,10 @@ const GroupCard = ({
           </>
         )}
         
-        {scheduleCount > 0 &&  (
+        {scheduleCount > 0 && !isDisabled && (
           <div className="schedule-info" onClick={(e) => {
             e.stopPropagation();
-            onViewSchedules(group);
+            if (!isDisabled) onViewSchedules(group);
           }}>
             <span>⏰ มีการตั้งเวลา {scheduleCount} รายการ</span>
           </div>
@@ -73,31 +80,43 @@ const GroupCard = ({
         </div>
         
         <div className="group-actions">
-        
+          {!isDisabled && (
             <button onClick={(e) => {
-                e.stopPropagation();
-                onStartEdit(group);
-              }} className="action-btn edit-name-btn">
-                ✏️ แก้ไข
+              e.stopPropagation();
+              onStartEdit(group);
+            }} className="action-btn edit-name-btn">
+              ✏️ แก้ไข
             </button>
+          )}
           
+          {!isDisabled && (
             <button onClick={(e) => {
-                e.stopPropagation();
-                onEditMessages(group.id);
-              }} className="action-btn edit-message-btn">
-                💬 ข้อความ
+              e.stopPropagation();
+              onEditMessages(group.id);
+            }} className="action-btn edit-message-btn">
+              💬 ข้อความ
             </button>
-
+          )}
+          
+          {!isDisabled && (
             <button onClick={(e) => {
-                e.stopPropagation();
-                onViewDetails(group);
-              }} className="action-btn detail-btn" style={{ width: isKnowledge ? '100%' : '190px' }}>
-                📋 รายละเอียด
+              e.stopPropagation();
+              onViewDetails(group);
+            }} className="action-btn detail-btn" style={{ width: isKnowledge && isDisabled ? '100%' : '190px' }}>
+              📋 รายละเอียด
             </button>
+          )}
+          
+          {/* แสดงข้อความแทนปุ่มเมื่อปิดใช้งาน */}
+          {isDisabled && (
+            <div className="disabled-message">
+             Disable
+            </div>
+          )}
         </div>
       </div>
       
-      {!isKnowledge && !isDefault && (
+      {!isKnowledge && !isDefault && !isDisabled && (
         <button
           onClick={(e) => {
             e.stopPropagation();

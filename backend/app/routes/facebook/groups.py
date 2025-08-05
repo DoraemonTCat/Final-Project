@@ -304,8 +304,8 @@ async def get_page_customer_type_knowledge(
         
         # ดึง records จากตาราง page_customer_type_knowledge
         page_knowledge_records = db.query(models.PageCustomerTypeKnowledge).filter(
-            models.PageCustomerTypeKnowledge.page_id == page_db_id,
-            models.PageCustomerTypeKnowledge.is_enabled == True
+            models.PageCustomerTypeKnowledge.page_id == page_db_id
+            # ลบบรรทัด models.PageCustomerTypeKnowledge.is_enabled == True ออก
         ).all()
         
         logger.info(f"Found {len(page_knowledge_records)} page_knowledge records for page {page_id}")
@@ -347,7 +347,7 @@ async def get_page_customer_type_knowledge(
                 result.append({
                     "id": f"knowledge_{kt.id}",
                     "knowledge_id": kt.id,
-                    "page_knowledge_id": pk_record.id,  # ID ของ record ใน page_customer_type_knowledge
+                    "page_knowledge_id": pk_record.id,
                     "type_name": kt.type_name,
                     "rule_description": kt.rule_description,
                     "examples": kt.examples,
@@ -356,7 +356,8 @@ async def get_page_customer_type_knowledge(
                     "supports_image": kt.supports_image,
                     "image_label_keywords": kt.image_label_keywords,
                     "is_knowledge": True,
-                    "is_enabled": pk_record.is_enabled,
+                    "is_enabled": pk_record.is_enabled,  # ส่งสถานะไปด้วย
+                    "is_active": True,  # แสดงเสมอ ไม่สนใจ is_enabled
                     "created_at": pk_record.created_at.isoformat() if pk_record.created_at else None
                 })
                 

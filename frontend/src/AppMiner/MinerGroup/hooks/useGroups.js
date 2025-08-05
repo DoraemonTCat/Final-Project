@@ -130,13 +130,22 @@ export const useGroups = (selectedPage) => {
   };
 
   const toggleGroupSelection = (groupId) => {
-    setSelectedGroups(prev => {
-      if (prev.includes(groupId)) {
-        return prev.filter(id => id !== groupId);
-      }
-      return [...prev, groupId];
-    });
-  };
+  // หาข้อมูลกลุ่ม
+  const group = customerGroups.find(g => g.id === groupId);
+  
+  // ถ้าเป็น knowledge group ที่ปิดใช้งาน ไม่ให้เลือก
+  if (group && group.isKnowledge && group.is_enabled === false) {
+    alert('กลุ่มนี้ถูกปิดใช้งาน ไม่สามารถเลือกได้');
+    return;
+  }
+  
+  setSelectedGroups(prev => {
+    if (prev.includes(groupId)) {
+      return prev.filter(id => id !== groupId);
+    }
+    return [...prev, groupId];
+  });
+};
 
   useEffect(() => {
     if (selectedPage) {

@@ -981,3 +981,116 @@
   border-radius: 20px;
   white-space: nowrap;
 }
+/* Control Buttons Container */
+.control-buttons {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* Knowledge Settings Button */
+.knowledge-settings-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #38b2ac 0%, #319795 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(56, 178, 172, 0.2);
+}
+
+.knowledge-settings-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(56, 178, 172, 0.3);
+  background: linear-gradient(135deg, #319795 0%, #2c7a7b 100%);
+}
+
+.knowledge-settings-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(56, 178, 172, 0.2);
+}
+
+.knowledge-settings-btn .btn-icon {
+  font-size: 18px;
+}
+
+/* Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Modal Content */
+.modal-content {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* Disabled Group Styling */
+.group-card.disabled-group {
+  opacity: 0.7;
+  position: relative;
+}
+
+.group-card.disabled-group::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.2);
+  pointer-events: none;
+  border-radius: 16px;
+}
+
+.disabled-indicator {
+  color: #e53e3e;
+  font-weight: normal;
+  font-size: 12px;
+}
+
+/* Disabled group checkbox - ไม่ให้เลือกได้ถ้าปิดการใช้งาน */
+.group-card.disabled-group .group-checkbox {
+  pointer-events: none;
+  opacity: 0.5;
+}
+.disabled-message {
+  margin-right: 20px;
+  font-size: 20px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* ฟอนต์สวยและอ่านง่าย */
+  color: #ff0000;
+  font-weight: 500;
+}

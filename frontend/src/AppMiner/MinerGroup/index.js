@@ -15,6 +15,7 @@ import ActionBar from './components/ActionBar';
 import EmptyState from './components/EmptyState';
 import ScheduleModal from './components/ScheduleModal';
 import GroupDetailModal from './components/GroupDetailModal';  // เพิ่ม import
+import KnowledgeSettingsModal from './components/KnowledgeSettingsModal';
 
 import '../../CSS/MinerGroup.css';
 
@@ -38,6 +39,7 @@ function MinerGroup() {
   const [showAddGroupForm, setShowAddGroupForm] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);  // เพิ่ม state สำหรับ detail modal
   const [selectedGroupDetail, setSelectedGroupDetail] = useState(null);  // เพิ่ม state สำหรับเก็บข้อมูลกลุ่มที่เลือก
+  const [showKnowledgeSettings, setShowKnowledgeSettings] = useState(false);
 
   // Custom Hooks
   const {
@@ -340,15 +342,27 @@ function MinerGroup() {
             onSearchChange={setSearchTerm}
             disabled={!selectedPage}
           />
-          <button 
-            onClick={() => setShowAddGroupForm(true)}
-            className="add-group-btn"
-            disabled={!selectedPage}
-            style={{ opacity: selectedPage ? 1 : 0.5 }}
-          >
-            <span className="btn-icon">➕</span>
-            เพิ่มกลุ่มใหม่
-          </button>
+          <div className="control-buttons">
+            {selectedPage && (
+              <button 
+                onClick={() => setShowKnowledgeSettings(true)}
+                className="knowledge-settings-btn"
+                title="ตั้งค่ากลุ่มพื้นฐาน"
+              >
+                <span className="btn-icon">⚙️</span>
+                กลุ่มพื้นฐาน
+              </button>
+            )}
+            <button 
+              onClick={() => setShowAddGroupForm(true)}
+              className="add-group-btn"
+              disabled={!selectedPage}
+              style={{ opacity: selectedPage ? 1 : 0.5 }}
+            >
+              <span className="btn-icon">➕</span>
+              เพิ่มกลุ่มใหม่
+            </button>
+          </div>
         </div>
 
         <GroupFormModal 
@@ -388,6 +402,14 @@ function MinerGroup() {
                 selectedCount={selectedGroups.length}
                 onProceed={handleProceed}
                 disabled={selectedGroups.length === 0}
+              />
+
+              <KnowledgeSettingsModal 
+                show={showKnowledgeSettings}
+                onClose={() => setShowKnowledgeSettings(false)}
+                pageId={selectedPage}
+                knowledgeGroups={customerGroups.filter(g => g.isKnowledge)}
+                onToggle={() => fetchCustomerGroups(selectedPage)}
               />
             </>
           )}
