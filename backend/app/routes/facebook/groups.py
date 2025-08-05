@@ -12,12 +12,15 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel
-
+import logging
 from app.database import crud, models
 from app.database.database import get_db
+from app.routes.group_messages import GroupMessageCreate
 
 router = APIRouter()
 
+# สร้าง logger instance
+logger = logging.getLogger(__name__)
 
 class CustomerGroupCreate(BaseModel):
     page_id: int
@@ -251,3 +254,152 @@ async def auto_group_customer(
         "status": "no_match",
         "message": "No keywords matched"
     }
+
+# เพิ่ม API สำหรับดึงข้อมูล customer_type_knowledge
+@router.get("/customer-type-knowledge")
+async def get_all_customer_type_knowledge(
+    db: Session = Depends(get_db)
+):
+    """ดึงข้อมูล customer type knowledge ทั้งหมด"""
+    try:
+        knowledge_types = db.query(models.CustomerTypeKnowledge).all()
+        
+        result = []
+        for kt in knowledge_types:
+            result.append({
+                "id": f"knowledge_{kt.id}",  # ใช้ prefix เพื่อแยกจาก user groups
+                "knowledge_id": kt.id,
+                "type_name": kt.type_name,
+                "rule_description": kt.rule_description,
+                "examples": kt.examples,
+                "keywords": kt.keywords,
+                "logic": kt.logic,
+                "supports_image": kt.supports_image,
+                "image_label_keywords": kt.image_label_keywords,
+                "is_knowledge": True  # flag เพื่อระบุว่าเป็น knowledge type
+            })
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error fetching customer type knowledge: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# เพิ่ม API สำหรับดึง page_customer_type_knowledge (ความสัมพันธ์ระหว่าง page และ knowledge types)
+@router.get("/page-customer-type-knowledge/{page_id}")
+async def get_page_customer_type_knowledge(
+    page_id: str,
+    db: Session = Depends(get_db)
+):
+    """ดึง knowledge types ที่ enabled สำหรับ page นี้"""
+    try:
+        # ไม่ต้องหา page ใน database ก่อน เพราะ page_customer_type_knowledge ใช้ string page_id
+        
+        # ดึง knowledge types ที่ enabled สำหรับ page นี้โดยตรง
+        page_knowledge = db.query(models.PageCustomerTypeKnowledge).filter(
+            models.PageCustomerTypeKnowledge.page_id == page_id,  # ใช้ string page_id โดยตรง
+            models.PageCustomerTypeKnowledge.is_enabled == True
+        ).all()
+        
+        result = []
+        for pk in page_knowledge:
+            if pk.customer_type_knowledge:
+                kt = pk.customer_type_knowledge
+                result.append({
+                    "id": f"knowledge_{kt.id}",
+                    "knowledge_id": kt.id,
+                    "type_name": kt.type_name,
+                    "rule_description": kt.rule_description,
+                    "examples": kt.examples,
+                    "keywords": kt.keywords,
+                    "logic": kt.logic,
+                    "supports_image": kt.supports_image,
+                    "image_label_keywords": kt.image_label_keywords,
+                    "is_knowledge": True,
+                    "is_enabled": pk.is_enabled
+                })
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error fetching page customer type knowledge: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# เพิ่ม API สำหรับดึงข้อความของ knowledge groups
+@router.get("/knowledge-group-messages/{page_id}/{knowledge_id}")
+async def get_knowledge_group_messages(
+    page_id: str,
+    knowledge_id: int,
+    db: Session = Depends(get_db)
+):
+    """ดึงข้อความของ knowledge group"""
+    try:
+        # หา page_customer_type_knowledge record
+        page_knowledge = db.query(models.PageCustomerTypeKnowledge).filter(
+            models.PageCustomerTypeKnowledge.page_id == page_id,
+            models.PageCustomerTypeKnowledge.customer_type_knowledge_id == knowledge_id
+        ).first()
+        
+        if not page_knowledge:
+            return []
+        
+        # ดึงข้อความที่เชื่อมกับ page_customer_type_knowledge นี้
+        messages = db.query(models.CustomerTypeMessage).filter(
+            models.CustomerTypeMessage.page_customer_type_knowledge_id == page_knowledge.id
+        ).order_by(models.CustomerTypeMessage.display_order).all()
+        
+        return messages
+        
+    except Exception as e:
+        logger.error(f"Error fetching knowledge group messages: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# เพิ่ม API สำหรับบันทึกข้อความให้ knowledge groups
+@router.post("/knowledge-group-messages")
+async def create_knowledge_group_message(
+    message_data: GroupMessageCreate,
+    db: Session = Depends(get_db)
+):
+    """สร้างข้อความใหม่สำหรับ knowledge group"""
+    try:
+        # ดึง knowledge_id จาก group id ที่ส่งมา (format: knowledge_123)
+        if not message_data.customer_type_custom_id.startswith('knowledge_'):
+            raise HTTPException(status_code=400, detail="Invalid knowledge group ID")
+        
+        knowledge_id = int(message_data.customer_type_custom_id.replace('knowledge_', ''))
+        
+        # หา page record จาก page_id string
+        page = crud.get_page_by_page_id(db, str(message_data.page_id))
+        if not page:
+            raise HTTPException(status_code=404, detail="Page not found")
+        
+        # หา page_customer_type_knowledge record
+        page_knowledge = db.query(models.PageCustomerTypeKnowledge).filter(
+            models.PageCustomerTypeKnowledge.page_id == str(message_data.page_id),
+            models.PageCustomerTypeKnowledge.customer_type_knowledge_id == knowledge_id
+        ).first()
+        
+        if not page_knowledge:
+            raise HTTPException(status_code=404, detail="Knowledge group not found for this page")
+        
+        # สร้างข้อความใหม่
+        db_message = models.CustomerTypeMessage(
+            page_id=page.ID,  # ใช้ integer ID สำหรับ page_id ใน CustomerTypeMessage
+            page_customer_type_knowledge_id=page_knowledge.id,
+            message_type=message_data.message_type,
+            content=message_data.content,
+            dir=message_data.dir or "",
+            display_order=message_data.display_order
+        )
+        
+        db.add(db_message)
+        db.commit()
+        db.refresh(db_message)
+        
+        logger.info(f"Created message for knowledge group {knowledge_id}")
+        return db_message
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating knowledge group message: {e}")
+        raise HTTPException(status_code=400, detail=str(e))

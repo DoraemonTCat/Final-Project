@@ -47,10 +47,39 @@ function GroupDefault() {
     }
   };
 
+  //  ฟังก์ชันกำหนด icon สำหรับ knowledge types
+  const isKnowledgeGroup = (groupId) => {
+  return groupId && groupId.toString().startsWith('knowledge_');
+};
+
+
   // ฟังก์ชันดึงข้อความจาก database
   const loadMessagesFromDatabase = async (pageId, groupId) => {
-    try {
-      setLoading(true);
+  try {
+    setLoading(true);
+    
+    // ตรวจสอบว่าเป็น knowledge group หรือไม่
+    if (isKnowledgeGroup(groupId)) {
+      // ดึง knowledge_id จาก group id
+      const knowledgeId = groupId.replace('knowledge_', '');
+      
+      const response = await fetch(`http://localhost:8000/knowledge-group-messages/${pageId}/${knowledgeId}`);
+      if (!response.ok) throw new Error('Failed to load messages');
+      
+      const messages = await response.json();
+      
+      // แปลงข้อมูลให้อยู่ในรูปแบบที่ component ใช้
+      const formattedMessages = messages.map(msg => ({
+        id: msg.id,
+        type: msg.message_type,
+        content: msg.content,
+        order: msg.display_order,
+        dbId: msg.id
+      }));
+      
+      setMessageSequence(formattedMessages);
+    } else {
+      // สำหรับ user groups ใช้วิธีเดิม
       const dbId = await getPageDbId(pageId);
       if (!dbId) {
         console.error('Cannot find page DB ID');
@@ -62,23 +91,23 @@ function GroupDefault() {
       
       const messages = await response.json();
       
-      // แปลงข้อมูลให้อยู่ในรูปแบบที่ component ใช้
       const formattedMessages = messages.map(msg => ({
         id: msg.id,
         type: msg.message_type,
         content: msg.content,
         order: msg.display_order,
-        dbId: msg.id // เก็บ database ID ไว้สำหรับการอัพเดท/ลบ
+        dbId: msg.id
       }));
       
       setMessageSequence(formattedMessages);
-    } catch (error) {
-      console.error('Error loading messages:', error);
-      setMessageSequence([]);
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (error) {
+    console.error('Error loading messages:', error);
+    setMessageSequence([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ฟังก์ชันดึงกลุ่มลูกค้าตาม page ID
   const getGroupsForPage = (pageId) => {
@@ -247,103 +276,133 @@ function GroupDefault() {
 
   // ฟังก์ชันเพิ่มข้อความและบันทึกลง database ทันที
   const addToSequence = async () => {
-    if (currentInput.type === 'text' && !currentInput.content.trim()) {
-      alert("กรุณากรอกข้อความ");
+  if (currentInput.type === 'text' && !currentInput.content.trim()) {
+    alert("กรุณากรอกข้อความ");
+    return;
+  }
+
+  if ((currentInput.type === 'image' || currentInput.type === 'video') && !currentInput.file) {
+    alert("กรุณาเลือกไฟล์");
+    return;
+  }
+
+  try {
+    setLoading(true);
+    
+    if (!selectedGroups || selectedGroups.length === 0) {
+      console.error('No selected groups found');
+      alert("กรุณาเลือกกลุ่มลูกค้า");
       return;
     }
+    
+    const groupId = selectedGroups[0].id || selectedGroupId;
+    
+    // ตรวจสอบว่าเป็น knowledge group หรือไม่
+    if (isKnowledgeGroup(groupId) && pageDbId) {
+      const messageData = {
+        page_id: selectedPage,  // ส่ง page_id เป็น string
+        customer_type_custom_id: groupId,  // ส่ง knowledge_xxx format
+        message_type: currentInput.type,
+        content: currentInput.content || currentInput.file?.name || '',
+        display_order: messageSequence.length
+      };
 
-    if ((currentInput.type === 'image' || currentInput.type === 'video') && !currentInput.file) {
-      alert("กรุณาเลือกไฟล์");
-      return;
-    }
+      console.log('Saving knowledge group message:', messageData);
 
-    try {
-      setLoading(true);
-      
-      // ตรวจสอบว่ามี selectedGroups หรือไม่
-      if (!selectedGroups || selectedGroups.length === 0) {
-        console.error('No selected groups found');
-        console.log('selectedGroups:', selectedGroups);
-        console.log('selectedGroupId:', selectedGroupId);
-        console.log('pageDbId:', pageDbId);
-        alert("กรุณาเลือกกลุ่มลูกค้า");
-        return;
-      }
-      
-      console.log('Adding message for group:', selectedGroups[0]);
-      
-      // สำหรับกลุ่มที่ไม่ใช่ default ให้บันทึกลง database ทันที
-      if (selectedGroupId && selectedGroups[0] && !selectedGroups[0].isDefault && pageDbId) {
-        const messageData = {
-          page_id: pageDbId,
-          customer_type_custom_id: selectedGroupId,
-          message_type: currentInput.type,
-          content: currentInput.content || currentInput.file?.name || '',
-          display_order: messageSequence.length
-        };
-
-        console.log('Saving message to database:', messageData);
-
-        const response = await fetch('http://localhost:8000/group-messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(messageData)
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error('API Error:', errorData);
-          throw new Error('Failed to save message');
-        }
-        
-        const savedMessage = await response.json();
-        
-        // เพิ่มข้อความที่บันทึกแล้วเข้า sequence
-        const newItem = {
-          id: savedMessage.id,
-          type: savedMessage.message_type,
-          content: savedMessage.content,
-          order: savedMessage.display_order,
-          dbId: savedMessage.id
-        };
-
-        setMessageSequence(prev => [...prev, newItem]);
-        console.log('Message added successfully');
-      } else {
-        // สำหรับ default group ใช้วิธีเดิม (localStorage)
-        const newItem = {
-          id: Date.now(),
-          type: currentInput.type,
-          content: currentInput.content || currentInput.file?.name || '',
-          file: currentInput.file,
-          preview: currentInput.preview,
-          order: messageSequence.length
-        };
-
-        setMessageSequence(prev => [...prev, newItem]);
-        console.log('Message added to localStorage');
-      }
-
-      // Reset input
-      if (currentInput.preview) {
-        URL.revokeObjectURL(currentInput.preview);
-      }
-      setCurrentInput({
-        type: 'text',
-        content: '',
-        file: null,
-        preview: null
+      const response = await fetch('http://localhost:8000/knowledge-group-messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(messageData)
       });
 
-    } catch (error) {
-      console.error('Error adding message:', error);
-      alert('เกิดข้อผิดพลาดในการเพิ่มข้อความ: ' + error.message);
-    } finally {
-      setLoading(false);
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('API Error:', errorData);
+        throw new Error('Failed to save message');
+      }
+      
+      const savedMessage = await response.json();
+      
+      const newItem = {
+        id: savedMessage.id,
+        type: savedMessage.message_type,
+        content: savedMessage.content,
+        order: savedMessage.display_order,
+        dbId: savedMessage.id
+      };
+
+      setMessageSequence(prev => [...prev, newItem]);
+      console.log('Knowledge group message added successfully');
+      
+    } else if (selectedGroupId && selectedGroups[0] && !selectedGroups[0].isDefault && pageDbId) {
+      // สำหรับ user groups ใช้วิธีเดิม
+      const messageData = {
+        page_id: pageDbId,
+        customer_type_custom_id: selectedGroupId,
+        message_type: currentInput.type,
+        content: currentInput.content || currentInput.file?.name || '',
+        display_order: messageSequence.length
+      };
+
+      const response = await fetch('http://localhost:8000/group-messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(messageData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('API Error:', errorData);
+        throw new Error('Failed to save message');
+      }
+      
+      const savedMessage = await response.json();
+      
+      const newItem = {
+        id: savedMessage.id,
+        type: savedMessage.message_type,
+        content: savedMessage.content,
+        order: savedMessage.display_order,
+        dbId: savedMessage.id
+      };
+
+      setMessageSequence(prev => [...prev, newItem]);
+    } else {
+      // สำหรับ default group ใช้วิธีเดิม (localStorage)
+      const newItem = {
+        id: Date.now(),
+        type: currentInput.type,
+        content: currentInput.content || currentInput.file?.name || '',
+        file: currentInput.file,
+        preview: currentInput.preview,
+        order: messageSequence.length
+      };
+
+      setMessageSequence(prev => [...prev, newItem]);
     }
-  };
+
+    // Reset input
+    if (currentInput.preview) {
+      URL.revokeObjectURL(currentInput.preview);
+    }
+    setCurrentInput({
+      type: 'text',
+      content: '',
+      file: null,
+      preview: null
+    });
+
+  } catch (error) {
+    console.error('Error adding message:', error);
+    alert('เกิดข้อผิดพลาดในการเพิ่มข้อความ: ' + error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ฟังก์ชันลบข้อความจาก database
   const removeFromSequence = async (id) => {

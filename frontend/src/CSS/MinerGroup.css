@@ -911,3 +911,65 @@
     justify-content: center;
   }
 }
+/* Knowledge Groups Styles */
+.knowledge-groups-section {
+  margin-bottom: 40px;
+}
+
+.group-card.knowledge-group {
+  background: linear-gradient(135deg, #f0f4f8 0%, #e8f4fd 100%);
+  border: 3px solid #4299e1;
+  position: relative;
+}
+
+.group-card.knowledge-group:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(66, 153, 225, 0.15);
+}
+
+.group-card.knowledge-group.selected {
+  border-color: #2b6cb0;
+  background: linear-gradient(to bottom, rgba(66, 153, 225, 0.1), rgba(66, 153, 225, 0.05));
+}
+
+.knowledge-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* Knowledge Groups Section Title */
+.knowledge-groups-section .section-title {
+  color: #2b6cb0;
+}
+
+/* ปรับปรุง divider สำหรับแยกระหว่าง knowledge และ user groups */
+.groups-divider {
+  display: flex;
+  align-items: center;
+  margin: 40px 0;
+  gap: 20px;
+}
+
+.divider-line {
+  flex: 1;
+  height: 2px;
+  background: linear-gradient(to right, transparent, #cbd5e0, transparent);
+}
+
+.divider-text {
+  color: #718096;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 20px;
+  background-color: #f5f7fa;
+  border-radius: 20px;
+  white-space: nowrap;
+}

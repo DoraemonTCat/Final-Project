@@ -5,7 +5,7 @@ import EditGroupForm from './EditGroupForm';
 /**
  * GroupCard Component
  * แสดงข้อมูลกลุ่มลูกค้าในรูปแบบการ์ด
- * - รองรับทั้ง default group และ user group
+ * - รองรับทั้ง knowledge group และ user group
  * - มี checkbox สำหรับเลือก
  * - แสดงจำนวน schedule
  * - มีปุ่มแก้ไข, ข้อความ, รายละเอียด และลบ
@@ -22,12 +22,14 @@ const GroupCard = ({
   onViewSchedules,
   onSaveEdit,
   onCancelEdit,
-  onViewDetails  // เพิ่ม prop ใหม่สำหรับดูรายละเอียด
+  onViewDetails
 }) => {
+  const isKnowledge = group.isKnowledge;
   const isDefault = group.isDefault;
   
   return (
-    <div className={`group-card ${isDefault ? 'default-group' : ''} ${isSelected ? 'selected' : ''}`}>
+    <div className={`group-card ${isKnowledge ? 'knowledge-group' : ''} ${isDefault ? 'default-group' : ''} ${isSelected ? 'selected' : ''}`}>
+      {isKnowledge && <div className="knowledge-badge">จาก Knowledge Base</div>}
       {isDefault && <div className="default-badge">พื้นฐาน</div>}
       
       <div className="group-checkbox">
@@ -43,7 +45,7 @@ const GroupCard = ({
       <div className="group-content">
         <div className="group-icon">{group.icon || '👥'}</div>
         
-        {isEditing ? (
+        {isEditing && !isKnowledge ? (
           <EditGroupForm 
             group={group}
             onSave={onSaveEdit}
@@ -71,30 +73,30 @@ const GroupCard = ({
         </div>
         
         <div className="group-actions">
-          <button onClick={(e) => {
-            e.stopPropagation();
-            onStartEdit(group);
-          }} className="action-btn edit-name-btn">
-            ✏️ {isDefault ? 'แก้ไขชื่อ' : 'แก้ไข'}
-          </button>
+          {!isKnowledge && (
+            <button onClick={(e) => {
+              e.stopPropagation();
+              onStartEdit(group);
+            }} className="action-btn edit-name-btn">
+              ✏️ แก้ไข
+            </button>
+          )}
           <button onClick={(e) => {
             e.stopPropagation();
             onEditMessages(group.id);
           }} className="action-btn edit-message-btn">
-            💬 {isDefault ? 'แก้ไขข้อความ' : 'ข้อความ'}
+            💬 ข้อความ
           </button>
-          {!isDefault && (
-            <button onClick={(e) => {
-              e.stopPropagation();
-              onViewDetails(group);
-            }} className="action-btn detail-btn" style={{ width: '190px' }}>
-              📋 รายละเอียด
-            </button>
-          )}
+          <button onClick={(e) => {
+            e.stopPropagation();
+            onViewDetails(group);
+          }} className="action-btn detail-btn" style={{ width: '190px' }}>
+            📋 รายละเอียด
+          </button>
         </div>
       </div>
       
-      {!isDefault && (
+      {!isKnowledge && !isDefault && (
         <button
           onClick={(e) => {
             e.stopPropagation();

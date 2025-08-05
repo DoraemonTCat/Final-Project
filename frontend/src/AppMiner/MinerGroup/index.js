@@ -274,15 +274,23 @@ function MinerGroup() {
   // Computed values
   const selectedPageInfo = selectedPage ? pages.find(p => p.id === selectedPage) : null;
   const defaultGroups = customerGroups.filter(g => g.isDefault);
-  const userGroups = customerGroups.filter(g => !g.isDefault);
+
+  // แยก knowledge groups และ user groups
+  const knowledgeGroups = customerGroups.filter(g => g.isKnowledge);
+  const userGroups = customerGroups.filter(g => !g.isKnowledge && !g.isDefault);
+
+  // กรองตามคำค้นหา
+  const filteredKnowledgeGroups = knowledgeGroups.filter(group =>
+    (group.type_name || group.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
   
   const filteredDefaultGroups = defaultGroups.filter(group =>
     (group.type_name || group.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
   
   const filteredUserGroups = userGroups.filter(group =>
-    (group.type_name || group.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  (group.type_name || group.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+);
 
   // Render
   return (
@@ -361,7 +369,7 @@ function MinerGroup() {
           ) : (
             <>
               <GroupsGrid
-                defaultGroups={filteredDefaultGroups}
+                defaultGroups={filteredKnowledgeGroups} // ส่ง knowledge groups แทน default groups
                 userGroups={filteredUserGroups}
                 selectedGroups={selectedGroups}
                 editingGroupId={editingGroupId}
@@ -373,7 +381,7 @@ function MinerGroup() {
                 onViewSchedules={handleViewSchedules}
                 onSaveEdit={handleSaveEdit}
                 onCancelEdit={() => setEditingGroupId(null)}
-                onViewDetails={handleViewDetails}  // เพิ่ม prop สำหรับดูรายละเอียด
+                onViewDetails={handleViewDetails}
               />
 
               <ActionBar

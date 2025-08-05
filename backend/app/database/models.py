@@ -168,7 +168,7 @@ class PageCustomerTypeKnowledge(Base):
     __tablename__ = "page_customer_type_knowledge"
 
     id = Column(Integer, primary_key=True, index=True)
-    page_id = Column(String, ForeignKey("facebook_pages.page_id", ondelete="CASCADE"), nullable=False)
+    page_id = Column(Integer, ForeignKey("facebook_pages.ID", ondelete="CASCADE"), nullable=False)
     customer_type_knowledge_id = Column(Integer, ForeignKey("customer_type_knowledge.id", ondelete="SET NULL"), nullable=True)
     is_enabled = Column(Boolean, server_default="true")  
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())

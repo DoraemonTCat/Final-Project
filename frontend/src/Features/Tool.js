@@ -312,3 +312,16 @@ export async function createBatchSchedules(schedules) {
   if (!res.ok) throw new Error("ไม่สามารถสร้าง schedules แบบ batch ได้");
   return res.json();
 }
+
+// เพิ่มฟังก์ชันสำหรับดึง customer type knowledge
+export async function getCustomerTypeKnowledge() {
+  const res = await fetch("http://localhost:8000/customer-type-knowledge");
+  if (!res.ok) throw new Error("ไม่สามารถโหลด customer type knowledge ได้");
+  return res.json();
+}
+
+export async function getPageCustomerTypeKnowledge(pageId) {
+  const res = await fetch(`http://localhost:8000/page-customer-type-knowledge/${pageId}`);
+  if (!res.ok) throw new Error("ไม่สามารถโหลด page customer type knowledge ได้");
+  return res.json();
+}
