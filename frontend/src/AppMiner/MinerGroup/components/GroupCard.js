@@ -29,14 +29,14 @@ const GroupCard = ({
   
   return (
     <div className={`group-card ${isKnowledge ? 'knowledge-group' : ''} ${isDefault ? 'default-group' : ''} ${isSelected ? 'selected' : ''}`}>
-      {isKnowledge && <div className="knowledge-badge">จาก Knowledge Base</div>}
+      {isKnowledge && <div className="knowledge-badge">กลุ่มพื้นฐาน</div>}
       {isDefault && <div className="default-badge">พื้นฐาน</div>}
       
       <div className="group-checkbox">
         <input
           type="checkbox"
           id={`group-${group.id}`}
-          checked={isSelected}
+          checked={isSelected }
           onChange={() => onToggleSelect(group.id)}
         />
         <label htmlFor={`group-${group.id}`}></label>
@@ -45,7 +45,7 @@ const GroupCard = ({
       <div className="group-content">
         <div className="group-icon">{group.icon || '👥'}</div>
         
-        {isEditing && !isKnowledge ? (
+        {isEditing ? (
           <EditGroupForm 
             group={group}
             onSave={onSaveEdit}
@@ -57,7 +57,7 @@ const GroupCard = ({
           </>
         )}
         
-        {scheduleCount > 0 && (
+        {scheduleCount > 0 &&  (
           <div className="schedule-info" onClick={(e) => {
             e.stopPropagation();
             onViewSchedules(group);
@@ -73,20 +73,22 @@ const GroupCard = ({
         </div>
         
         <div className="group-actions">
-          {!isKnowledge && (
+         
             <button onClick={(e) => {
               e.stopPropagation();
               onStartEdit(group);
             }} className="action-btn edit-name-btn">
               ✏️ แก้ไข
             </button>
-          )}
+      
+         
           <button onClick={(e) => {
             e.stopPropagation();
             onEditMessages(group.id);
           }} className="action-btn edit-message-btn">
             💬 ข้อความ
           </button>
+       
           <button onClick={(e) => {
             e.stopPropagation();
             onViewDetails(group);

@@ -30,19 +30,28 @@ export const useGroups = (selectedPage) => {
       let knowledgeTypes = [];
       try {
         const knowledgeData = await getPageCustomerTypeKnowledge(pageId);
+        console.log('Knowledge data received:', knowledgeData); // เพิ่ม debug log
+        
         knowledgeTypes = knowledgeData.map(kt => ({
           ...kt,
+          id: kt.id || `knowledge_${kt.knowledge_id}`, // ตรวจสอบว่ามี id format ที่ถูกต้อง
+          type_name: kt.type_name,
+          name: kt.type_name, // เพิ่ม name field
           isKnowledge: true,
-          icon: getKnowledgeIcon(kt.type_name), // ฟังก์ชันสำหรับกำหนด icon
-          created_at: new Date().toISOString(), // ใช้วันที่ปัจจุบัน
-          customer_count: 0, // จะต้องนับจาก database
-          is_active: true,
-          message_count: 0
+          icon: getKnowledgeIcon(kt.type_name),
+          created_at: kt.created_at || new Date().toISOString(),
+          customer_count: kt.customer_count || 0,
+          is_active: kt.is_enabled !== false,
+          message_count: 0,
+          rule_description: kt.rule_description || '',
+          keywords: kt.keywords || '',
+          examples: kt.examples || ''
         }));
+        
+        console.log('Formatted knowledge types:', knowledgeTypes); // เพิ่ม debug log
         setKnowledgeGroups(knowledgeTypes);
       } catch (error) {
         console.error('Error fetching knowledge types:', error);
-        // ถ้าดึง knowledge types ไม่ได้ ให้ใช้ array ว่าง
         knowledgeTypes = [];
       }
 
@@ -87,6 +96,10 @@ export const useGroups = (selectedPage) => {
   // ฟังก์ชันกำหนด icon ตาม type name
   const getKnowledgeIcon = (typeName) => {
     const iconMap = {
+      'หักแล้งหาย': '💔',
+      'หักแล้วคืนดี': '❤️',
+      'หักแล้วคืนไม่ดี': '💢',
+      'หักแล้วลืม': '😌',
       'สอบถามข้อมูล': '❓',
       'สนใจสินค้า': '🛒',
       'ต้องการติดต่อ': '📞',

@@ -288,7 +288,7 @@ async def get_all_customer_type_knowledge(
 # เพิ่ม API สำหรับดึง page_customer_type_knowledge (ความสัมพันธ์ระหว่าง page และ knowledge types)
 @router.get("/page-customer-type-knowledge/{page_id}")
 async def get_page_customer_type_knowledge(
-    page_id: int,
+    page_id: str,  # เปลี่ยนจาก int เป็น str เพื่อรับ Facebook page ID
     db: Session = Depends(get_db)
 ):
     """ดึง knowledge types ที่ enabled สำหรับ page นี้"""
@@ -297,16 +297,54 @@ async def get_page_customer_type_knowledge(
         page = crud.get_page_by_page_id(db, page_id)
         if not page:
             logger.warning(f"Page not found for page_id: {page_id}")
-            return []
+            # ถ้าไม่มี page ให้ return knowledge types ทั้งหมดแทน
+            all_knowledge_types = db.query(models.CustomerTypeKnowledge).all()
+            result = []
+            for kt in all_knowledge_types:
+                result.append({
+                    "id": f"knowledge_{kt.id}",
+                    "knowledge_id": kt.id,
+                    "type_name": kt.type_name,
+                    "rule_description": kt.rule_description,
+                    "examples": kt.examples,
+                    "keywords": kt.keywords,
+                    "logic": kt.logic,
+                    "supports_image": kt.supports_image,
+                    "image_label_keywords": kt.image_label_keywords,
+                    "is_knowledge": True,
+                    "is_enabled": True  # default to enabled
+                })
+            return result
         
         # ใช้ integer ID จาก database
         page_db_id = page.ID
         
         # ดึง knowledge types ที่ enabled สำหรับ page นี้
         page_knowledge = db.query(models.PageCustomerTypeKnowledge).filter(
-            models.PageCustomerTypeKnowledge.page_id == page_db_id,  # ใช้ integer ID
+            models.PageCustomerTypeKnowledge.page_id == page_db_id,
             models.PageCustomerTypeKnowledge.is_enabled == True
         ).all()
+        
+        # ถ้าไม่มี page_customer_type_knowledge records ให้ใช้ knowledge types ทั้งหมด
+        if not page_knowledge:
+            logger.info(f"No page_customer_type_knowledge found for page {page_id}, returning all knowledge types")
+            all_knowledge_types = db.query(models.CustomerTypeKnowledge).all()
+            result = []
+            for kt in all_knowledge_types:
+                result.append({
+                    "id": f"knowledge_{kt.id}",
+                    "knowledge_id": kt.id,
+                    "type_name": kt.type_name,
+                    "rule_description": kt.rule_description,
+                    "examples": kt.examples,
+                    "keywords": kt.keywords,
+                    "logic": kt.logic,
+                    "supports_image": kt.supports_image,
+                    "image_label_keywords": kt.image_label_keywords,
+                    "is_knowledge": True,
+                    "is_enabled": True
+                })
+            return result
         
         logger.info(f"Found {len(page_knowledge)} knowledge types for page {page_id} (DB ID: {page_db_id})")
         
@@ -414,3 +452,25 @@ async def create_knowledge_group_message(
         db.rollback()
         logger.error(f"Error creating knowledge group message: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+    
+# เพิ่ม API สำหรับ debug
+@router.get("/debug/knowledge-types")
+async def debug_knowledge_types(db: Session = Depends(get_db)):
+    """Debug endpoint สำหรับดู knowledge types ทั้งหมด"""
+    try:
+        knowledge_types = db.query(models.CustomerTypeKnowledge).all()
+        result = []
+        for kt in knowledge_types:
+            result.append({
+                "id": kt.id,
+                "type_name": kt.type_name,
+                "rule_description": kt.rule_description,
+                "keywords": kt.keywords,
+                "examples": kt.examples
+            })
+        return {
+            "total": len(result),
+            "knowledge_types": result
+        }
+    except Exception as e:
+        return {"error": str(e)}

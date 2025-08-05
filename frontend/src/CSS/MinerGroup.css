@@ -289,6 +289,14 @@
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 24px;
   margin-bottom: 30px;
+ 
+}
+
+.groups-grid_D {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(282px, 1fr));
+  gap: 24px;
+  margin-bottom: 30px;
 }
 
 /* Group Card */
@@ -375,7 +383,7 @@
 }
 
 .group-content {
-  padding-left: 40px;
+  padding-left: 25px;
 }
 
 .group-icon {
@@ -386,10 +394,10 @@
 }
 
 .group-name {
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 600;
   color: #2d3748;
-  margin-bottom: 12px;
+  white-space: nowrap;
   text-align: center;
   padding-right: 20px;
 }

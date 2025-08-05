@@ -43,9 +43,9 @@ const GroupsGrid = ({
         <div className="knowledge-groups-section">
           <h3 className="section-title">
             <span className="section-icon">🧠</span>
-            กลุ่มจาก Knowledge Base
+            กลุ่มพื้นฐาน
           </h3>
-          <div className="groups-grid">
+          <div className="groups-grid_D">
             {knowledgeGroups.map((group) => (
               <GroupCard
                 key={group.id}
