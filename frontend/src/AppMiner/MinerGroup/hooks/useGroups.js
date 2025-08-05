@@ -18,80 +18,83 @@ export const useGroups = (selectedPage) => {
   const [knowledgeGroups, setKnowledgeGroups] = useState([]); // เพิ่ม state สำหรับ knowledge groups
 
   const fetchCustomerGroups = async (pageId) => {
-    setLoading(true);
-    try {
-      const dbId = await getPageDbId(pageId);
-      if (!dbId) {
-        setCustomerGroups([]);
-        return;
-      }
+  setLoading(true);
+  try {
+    const dbId = await getPageDbId(pageId);
+    if (!dbId) {
+      setCustomerGroups([]);
+      return;
+    }
 
       // 1. ดึง knowledge types สำหรับ page นี้
       let knowledgeTypes = [];
-      try {
-        const knowledgeData = await getPageCustomerTypeKnowledge(pageId);
-        console.log('Knowledge data received:', knowledgeData); // เพิ่ม debug log
-        
-        knowledgeTypes = knowledgeData.map(kt => ({
-          ...kt,
-          id: kt.id || `knowledge_${kt.knowledge_id}`, // ตรวจสอบว่ามี id format ที่ถูกต้อง
-          type_name: kt.type_name,
-          name: kt.type_name, // เพิ่ม name field
-          isKnowledge: true,
-          icon: getKnowledgeIcon(kt.type_name),
-          created_at: kt.created_at || new Date().toISOString(),
-          customer_count: kt.customer_count || 0,
-          is_active: kt.is_enabled !== false,
-          message_count: 0,
-          rule_description: kt.rule_description || '',
-          keywords: kt.keywords || '',
-          examples: kt.examples || ''
-        }));
-        
-        console.log('Formatted knowledge types:', knowledgeTypes); // เพิ่ม debug log
-        setKnowledgeGroups(knowledgeTypes);
-      } catch (error) {
-        console.error('Error fetching knowledge types:', error);
-        knowledgeTypes = [];
-      }
+    try {
+      const knowledgeData = await getPageCustomerTypeKnowledge(pageId);
+      console.log('Knowledge data from page_customer_type_knowledge:', knowledgeData);
+      
+      knowledgeTypes = knowledgeData.map(kt => ({
+        ...kt,
+        id: kt.id || `knowledge_${kt.knowledge_id}`,
+        type_name: kt.type_name,
+        name: kt.type_name,
+        isKnowledge: true,
+        isDefault: false, // ไม่ใช่ default group แบบเดิม
+        icon: getKnowledgeIcon(kt.type_name),
+        created_at: kt.created_at || new Date().toISOString(),
+        customer_count: kt.customer_count || 0,
+        is_active: kt.is_enabled !== false,
+        message_count: 0,
+        rule_description: kt.rule_description || '',
+        keywords: kt.keywords || '',
+        examples: kt.examples || '',
+        page_knowledge_id: kt.page_knowledge_id // เก็บ ID สำหรับ toggle
+      }));
+      
+      console.log('Formatted knowledge types:', knowledgeTypes);
+      setKnowledgeGroups(knowledgeTypes);
+    } catch (error) {
+      console.error('Error fetching knowledge types:', error);
+      knowledgeTypes = [];
+    }
 
       // 2. ดึง user groups (คงเดิม)
       const response = await fetch(`http://localhost:8000/customer-groups/${dbId}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch customer groups');
-      }
+    if (!response.ok) {
+      throw new Error('Failed to fetch customer groups');
+    }
+    
+    const data = await response.json();
+    
+    const formattedGroups = await Promise.all(data.map(async group => {
+      const messageCount = await getGroupMessageCount(pageId, group.id);
       
-      const data = await response.json();
-      
-      const formattedGroups = await Promise.all(data.map(async group => {
-        const messageCount = await getGroupMessageCount(pageId, group.id);
-        
-        return {
-          id: group.id,
-          type_name: group.type_name,
-          isDefault: false,
-          isKnowledge: false, // ระบุว่าไม่ใช่ knowledge type
-          rule_description: group.rule_description || '',
-          keywords: Array.isArray(group.keywords) ? group.keywords.join(', ') : group.keywords || '',
-          examples: Array.isArray(group.examples) ? group.examples.join('\n') : group.examples || '',
-          created_at: group.created_at,
-          customer_count: group.customer_count || 0,
-          is_active: group.is_active !== false,
-          message_count: messageCount
-        };
-      }));
+      return {
+        id: group.id,
+        type_name: group.type_name,
+        name: group.type_name, // เพิ่ม name
+        isDefault: false,
+        isKnowledge: false,
+        rule_description: group.rule_description || '',
+        keywords: Array.isArray(group.keywords) ? group.keywords.join(', ') : group.keywords || '',
+        examples: Array.isArray(group.examples) ? group.examples.join('\n') : group.examples || '',
+        created_at: group.created_at,
+        customer_count: group.customer_count || 0,
+        is_active: group.is_active !== false,
+        message_count: messageCount
+      };
+    }));
       
       // 3. รวม knowledge types และ user groups
       const allGroups = [...knowledgeTypes, ...formattedGroups];
-      setCustomerGroups(allGroups);
-      
-    } catch (error) {
-      console.error('Error fetching customer groups:', error);
-      setCustomerGroups([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    setCustomerGroups(allGroups);
+    
+  } catch (error) {
+    console.error('Error fetching customer groups:', error);
+    setCustomerGroups([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ฟังก์ชันกำหนด icon ตาม type name
   const getKnowledgeIcon = (typeName) => {

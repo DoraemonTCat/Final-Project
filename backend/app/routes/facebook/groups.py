@@ -288,73 +288,66 @@ async def get_all_customer_type_knowledge(
 # เพิ่ม API สำหรับดึง page_customer_type_knowledge (ความสัมพันธ์ระหว่าง page และ knowledge types)
 @router.get("/page-customer-type-knowledge/{page_id}")
 async def get_page_customer_type_knowledge(
-    page_id: str,  # เปลี่ยนจาก int เป็น str เพื่อรับ Facebook page ID
+    page_id: str,
     db: Session = Depends(get_db)
 ):
     """ดึง knowledge types ที่ enabled สำหรับ page นี้"""
     try:
-        # หา page จาก Facebook page ID เพื่อได้ database ID
+        # หา page จาก Facebook page ID
         page = crud.get_page_by_page_id(db, page_id)
         if not page:
             logger.warning(f"Page not found for page_id: {page_id}")
-            # ถ้าไม่มี page ให้ return knowledge types ทั้งหมดแทน
-            all_knowledge_types = db.query(models.CustomerTypeKnowledge).all()
-            result = []
-            for kt in all_knowledge_types:
-                result.append({
-                    "id": f"knowledge_{kt.id}",
-                    "knowledge_id": kt.id,
-                    "type_name": kt.type_name,
-                    "rule_description": kt.rule_description,
-                    "examples": kt.examples,
-                    "keywords": kt.keywords,
-                    "logic": kt.logic,
-                    "supports_image": kt.supports_image,
-                    "image_label_keywords": kt.image_label_keywords,
-                    "is_knowledge": True,
-                    "is_enabled": True  # default to enabled
-                })
-            return result
+            return []
         
         # ใช้ integer ID จาก database
         page_db_id = page.ID
         
-        # ดึง knowledge types ที่ enabled สำหรับ page นี้
-        page_knowledge = db.query(models.PageCustomerTypeKnowledge).filter(
+        # ดึง records จากตาราง page_customer_type_knowledge
+        page_knowledge_records = db.query(models.PageCustomerTypeKnowledge).filter(
             models.PageCustomerTypeKnowledge.page_id == page_db_id,
             models.PageCustomerTypeKnowledge.is_enabled == True
         ).all()
         
-        # ถ้าไม่มี page_customer_type_knowledge records ให้ใช้ knowledge types ทั้งหมด
-        if not page_knowledge:
-            logger.info(f"No page_customer_type_knowledge found for page {page_id}, returning all knowledge types")
+        logger.info(f"Found {len(page_knowledge_records)} page_knowledge records for page {page_id}")
+        
+        # ถ้าไม่มี records สำหรับ page นี้ ให้สร้างขึ้นมาใหม่จาก knowledge types ทั้งหมด
+        if not page_knowledge_records:
+            logger.info(f"No page_customer_type_knowledge found, creating default records")
+            
+            # ดึง knowledge types ทั้งหมด
             all_knowledge_types = db.query(models.CustomerTypeKnowledge).all()
-            result = []
+            
+            # สร้าง page_customer_type_knowledge records สำหรับ page นี้
             for kt in all_knowledge_types:
-                result.append({
-                    "id": f"knowledge_{kt.id}",
-                    "knowledge_id": kt.id,
-                    "type_name": kt.type_name,
-                    "rule_description": kt.rule_description,
-                    "examples": kt.examples,
-                    "keywords": kt.keywords,
-                    "logic": kt.logic,
-                    "supports_image": kt.supports_image,
-                    "image_label_keywords": kt.image_label_keywords,
-                    "is_knowledge": True,
-                    "is_enabled": True
-                })
-            return result
+                new_record = models.PageCustomerTypeKnowledge(
+                    page_id=page_db_id,
+                    customer_type_knowledge_id=kt.id,
+                    is_enabled=True
+                )
+                db.add(new_record)
+            
+            try:
+                db.commit()
+                logger.info(f"Created {len(all_knowledge_types)} page_knowledge records")
+                
+                # ดึง records ที่เพิ่งสร้างใหม่
+                page_knowledge_records = db.query(models.PageCustomerTypeKnowledge).filter(
+                    models.PageCustomerTypeKnowledge.page_id == page_db_id
+                ).all()
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Error creating page_knowledge records: {e}")
+                return []
         
-        logger.info(f"Found {len(page_knowledge)} knowledge types for page {page_id} (DB ID: {page_db_id})")
-        
+        # สร้าง response
         result = []
-        for pk in page_knowledge:
-            if pk.customer_type_knowledge:
-                kt = pk.customer_type_knowledge
+        for pk_record in page_knowledge_records:
+            if pk_record.customer_type_knowledge:
+                kt = pk_record.customer_type_knowledge
                 result.append({
                     "id": f"knowledge_{kt.id}",
                     "knowledge_id": kt.id,
+                    "page_knowledge_id": pk_record.id,  # ID ของ record ใน page_customer_type_knowledge
                     "type_name": kt.type_name,
                     "rule_description": kt.rule_description,
                     "examples": kt.examples,
@@ -363,7 +356,8 @@ async def get_page_customer_type_knowledge(
                     "supports_image": kt.supports_image,
                     "image_label_keywords": kt.image_label_keywords,
                     "is_knowledge": True,
-                    "is_enabled": pk.is_enabled
+                    "is_enabled": pk_record.is_enabled,
+                    "created_at": pk_record.created_at.isoformat() if pk_record.created_at else None
                 })
                 
                 logger.debug(f"Added knowledge type: {kt.type_name} (ID: {kt.id})")
@@ -372,6 +366,7 @@ async def get_page_customer_type_knowledge(
         
     except Exception as e:
         logger.error(f"Error fetching page customer type knowledge: {e}")
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     
 # เพิ่ม API สำหรับดึงข้อความของ knowledge groups
@@ -474,3 +469,34 @@ async def debug_knowledge_types(db: Session = Depends(get_db)):
         }
     except Exception as e:
         return {"error": str(e)}
+    
+# เพิ่ม API สำหรับเปิด/ปิด knowledge type สำหรับ page
+@router.put("/page-customer-type-knowledge/{page_id}/{knowledge_id}/toggle")
+async def toggle_page_knowledge_type(
+    page_id: str,
+    knowledge_id: int,
+    db: Session = Depends(get_db)
+):
+    """เปิด/ปิด knowledge type สำหรับ page"""
+    try:
+        page = crud.get_page_by_page_id(db, page_id)
+        if not page:
+            raise HTTPException(status_code=404, detail="Page not found")
+        
+        pk_record = db.query(models.PageCustomerTypeKnowledge).filter(
+            models.PageCustomerTypeKnowledge.page_id == page.ID,
+            models.PageCustomerTypeKnowledge.customer_type_knowledge_id == knowledge_id
+        ).first()
+        
+        if not pk_record:
+            raise HTTPException(status_code=404, detail="Record not found")
+        
+        pk_record.is_enabled = not pk_record.is_enabled
+        pk_record.updated_at = datetime.now()
+        db.commit()
+        
+        return {"status": "success", "is_enabled": pk_record.is_enabled}
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))

@@ -73,28 +73,27 @@ const GroupCard = ({
         </div>
         
         <div className="group-actions">
-         
+        
             <button onClick={(e) => {
-              e.stopPropagation();
-              onStartEdit(group);
-            }} className="action-btn edit-name-btn">
-              ✏️ แก้ไข
+                e.stopPropagation();
+                onStartEdit(group);
+              }} className="action-btn edit-name-btn">
+                ✏️ แก้ไข
             </button>
-      
-         
-          <button onClick={(e) => {
-            e.stopPropagation();
-            onEditMessages(group.id);
-          }} className="action-btn edit-message-btn">
-            💬 ข้อความ
-          </button>
-       
-          <button onClick={(e) => {
-            e.stopPropagation();
-            onViewDetails(group);
-          }} className="action-btn detail-btn" style={{ width: '190px' }}>
-            📋 รายละเอียด
-          </button>
+          
+            <button onClick={(e) => {
+                e.stopPropagation();
+                onEditMessages(group.id);
+              }} className="action-btn edit-message-btn">
+                💬 ข้อความ
+            </button>
+
+            <button onClick={(e) => {
+                e.stopPropagation();
+                onViewDetails(group);
+              }} className="action-btn detail-btn" style={{ width: isKnowledge ? '100%' : '190px' }}>
+                📋 รายละเอียด
+            </button>
         </div>
       </div>
       
