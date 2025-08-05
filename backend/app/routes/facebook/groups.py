@@ -288,18 +288,27 @@ async def get_all_customer_type_knowledge(
 # เพิ่ม API สำหรับดึง page_customer_type_knowledge (ความสัมพันธ์ระหว่าง page และ knowledge types)
 @router.get("/page-customer-type-knowledge/{page_id}")
 async def get_page_customer_type_knowledge(
-    page_id: str,
+    page_id: int,
     db: Session = Depends(get_db)
 ):
     """ดึง knowledge types ที่ enabled สำหรับ page นี้"""
     try:
-        # ไม่ต้องหา page ใน database ก่อน เพราะ page_customer_type_knowledge ใช้ string page_id
+        # หา page จาก Facebook page ID เพื่อได้ database ID
+        page = crud.get_page_by_page_id(db, page_id)
+        if not page:
+            logger.warning(f"Page not found for page_id: {page_id}")
+            return []
         
-        # ดึง knowledge types ที่ enabled สำหรับ page นี้โดยตรง
+        # ใช้ integer ID จาก database
+        page_db_id = page.ID
+        
+        # ดึง knowledge types ที่ enabled สำหรับ page นี้
         page_knowledge = db.query(models.PageCustomerTypeKnowledge).filter(
-            models.PageCustomerTypeKnowledge.page_id == page_id,  # ใช้ string page_id โดยตรง
+            models.PageCustomerTypeKnowledge.page_id == page_db_id,  # ใช้ integer ID
             models.PageCustomerTypeKnowledge.is_enabled == True
         ).all()
+        
+        logger.info(f"Found {len(page_knowledge)} knowledge types for page {page_id} (DB ID: {page_db_id})")
         
         result = []
         for pk in page_knowledge:
@@ -318,6 +327,8 @@ async def get_page_customer_type_knowledge(
                     "is_knowledge": True,
                     "is_enabled": pk.is_enabled
                 })
+                
+                logger.debug(f"Added knowledge type: {kt.type_name} (ID: {kt.id})")
         
         return result
         
