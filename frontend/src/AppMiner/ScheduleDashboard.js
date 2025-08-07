@@ -118,78 +118,112 @@ function ScheduleDashboard() {
 
   // โหลด schedules จาก database สำหรับ user groups
   const loadDatabaseSchedules = async (dbId) => {
-    if (!dbId) return [];
+  if (!dbId) return [];
 
-    try {
-      // 1. ดึงกลุ่มทั้งหมดของ page
-      const groupsResponse = await fetch(`http://localhost:8000/customer-groups/${dbId}`);
-      if (!groupsResponse.ok) return [];
-      const groups = await groupsResponse.json();
+  try {
+    // 1. ดึงกลุ่มทั้งหมดของ page (รวม knowledge groups)
+    const groupsResponse = await fetch(`http://localhost:8000/customer-groups/${dbId}`);
+    const knowledgeResponse = await fetch(`http://localhost:8000/page-customer-type-knowledge/${selectedPage}`);
+    
+    let allGroups = [];
+    
+    // เพิ่ม user groups
+    if (groupsResponse.ok) {
+      const userGroups = await groupsResponse.json();
+      allGroups = [...userGroups];
+    }
+    
+    // เพิ่ม knowledge groups
+    if (knowledgeResponse.ok) {
+      const knowledgeGroups = await knowledgeResponse.json();
+      const formattedKnowledgeGroups = knowledgeGroups
+        .filter(kg => kg.is_enabled !== false)
+        .map(kg => ({
+          id: `knowledge_${kg.knowledge_id}`,
+          type_name: kg.type_name,
+          isKnowledge: true
+        }));
+      allGroups = [...allGroups, ...formattedKnowledgeGroups];
+    }
 
-      // 2. ดึง schedules ของแต่ละกลุ่ม
-      const allSchedules = [];
-      
-      for (const group of groups) {
-        try {
-          const schedulesResponse = await fetch(`http://localhost:8000/message-schedules/group/${dbId}/${group.id}`);
-          if (schedulesResponse.ok) {
-            const groupSchedules = await schedulesResponse.json();
+    // 2. ดึง schedules ของแต่ละกลุ่ม
+    const allSchedules = [];
+    
+    for (const group of allGroups) {
+      try {
+        // สร้าง group ID สำหรับค้นหา schedules
+        const searchGroupId = group.isKnowledge ? 
+          `group_knowledge_${group.id.replace('knowledge_', '')}` : 
+          group.id;
+        
+        const schedulesResponse = await fetch(`http://localhost:8000/message-schedules/group/${dbId}/${searchGroupId}`);
+        if (schedulesResponse.ok) {
+          const groupSchedules = await schedulesResponse.json();
+          
+          if (groupSchedules.length > 0) {
+            const firstSchedule = groupSchedules[0];
             
-            // ถ้ามี schedules หลายอันในกลุ่ม ให้ใช้อันแรกเป็นตัวแทน
-            if (groupSchedules.length > 0) {
-              const firstSchedule = groupSchedules[0];
-              
-              // นับจำนวนข้อความทั้งหมดในกลุ่ม
-              const messagesResponse = await fetch(`http://localhost:8000/group-messages/${dbId}/${group.id}`);
-              let messageCount = 0;
-              let messages = [];
-              
+            // ดึงข้อความของกลุ่ม
+            let messages = [];
+            let messageCount = 0;
+            
+            if (group.isKnowledge) {
+              const knowledgeId = group.id.replace('knowledge_', '');
+              const messagesResponse = await fetch(`http://localhost:8000/knowledge-group-messages/${selectedPage}/${knowledgeId}`);
               if (messagesResponse.ok) {
                 messages = await messagesResponse.json();
                 messageCount = messages.length;
               }
-              
-              // แปลงรูปแบบข้อมูลให้ตรงกับ frontend
-              const formattedSchedule = {
-                id: `group_${group.id}`, // ใช้ group ID เป็น schedule ID
-                type: convertScheduleType(firstSchedule.send_type),
-                groups: [group.id],
-                groupNames: [group.type_name],
-                messages: messages.map(msg => ({
-                  type: msg.message_type,
-                  content: msg.content,
-                  order: msg.display_order
-                })),
-                messageCount: messageCount,
-                date: firstSchedule.scheduled_at ? new Date(firstSchedule.scheduled_at).toISOString().split('T')[0] : null,
-                time: firstSchedule.scheduled_at ? new Date(firstSchedule.scheduled_at).toTimeString().slice(0, 5) : null,
-                inactivityPeriod: extractInactivityPeriod(firstSchedule.send_after_inactive),
-                inactivityUnit: extractInactivityUnit(firstSchedule.send_after_inactive),
-                repeat: {
-                  type: firstSchedule.frequency || 'once',
-                  endDate: null
-                },
-                createdAt: firstSchedule.created_at,
-                updatedAt: firstSchedule.updated_at,
-                source: 'database',
-                dbScheduleIds: groupSchedules.map(s => s.id), // เก็บ schedule IDs ทั้งหมด
-                groupId: group.id
-              };
-              
-              allSchedules.push(formattedSchedule);
+            } else {
+              const messagesResponse = await fetch(`http://localhost:8000/group-messages/${dbId}/${group.id}`);
+              if (messagesResponse.ok) {
+                messages = await messagesResponse.json();
+                messageCount = messages.length;
+              }
             }
+            
+            // แปลงรูปแบบข้อมูล
+            const formattedSchedule = {
+              id: `group_${searchGroupId}`,
+              type: convertScheduleType(firstSchedule.send_type),
+              groups: [group.id],
+              groupNames: [group.type_name],
+              messages: messages.map(msg => ({
+                type: msg.message_type,
+                content: msg.content,
+                order: msg.display_order
+              })),
+              messageCount: messageCount,
+              date: firstSchedule.scheduled_at ? new Date(firstSchedule.scheduled_at).toISOString().split('T')[0] : null,
+              time: firstSchedule.scheduled_at ? new Date(firstSchedule.scheduled_at).toTimeString().slice(0, 5) : null,
+              inactivityPeriod: extractInactivityPeriod(firstSchedule.send_after_inactive),
+              inactivityUnit: extractInactivityUnit(firstSchedule.send_after_inactive),
+              repeat: {
+                type: firstSchedule.frequency || 'once',
+                endDate: null
+              },
+              createdAt: firstSchedule.created_at,
+              updatedAt: firstSchedule.updated_at,
+              source: 'database',
+              dbScheduleIds: groupSchedules.map(s => s.id),
+              groupId: group.id,
+              isKnowledge: group.isKnowledge || false
+            };
+            
+            allSchedules.push(formattedSchedule);
           }
-        } catch (error) {
-          console.error(`Error loading schedules for group ${group.id}:`, error);
         }
+      } catch (error) {
+        console.error(`Error loading schedules for group ${group.id}:`, error);
       }
-
-      return allSchedules;
-    } catch (error) {
-      console.error('Error loading database schedules:', error);
-      return [];
     }
-  };
+
+    return allSchedules;
+  } catch (error) {
+    console.error('Error loading database schedules:', error);
+    return [];
+  }
+};
 
   // แปลง schedule type จาก database เป็น frontend format
   const convertScheduleType = (dbType) => {
@@ -378,6 +412,11 @@ function ScheduleDashboard() {
     return schedule.messageCount || 0;
   };
 
+  // เพิ่มฟังก์ชันตรวจสอบ knowledge group
+  const isKnowledgeGroup = (groupId) => {
+    return groupId && (groupId.toString().startsWith('knowledge_') || groupId.toString().includes('knowledge'));
+  };
+
   return (
     <div className="app-container">
       <Sidebar />
@@ -462,13 +501,17 @@ function ScheduleDashboard() {
                 {schedules.map((schedule, index) => {
                   const status = getScheduleStatus(schedule);
                   const isDefault = isDefaultGroup(schedule.groups || []);
+                  const isKnowledge = schedule.isKnowledge || isKnowledgeGroup(schedule.groupId);
                   
                   return (
-                    <tr key={`${schedule.source}-${schedule.id}`} className={isDefault ? 'default-schedule-row' : ''}>
+                    <tr key={`${schedule.source}-${schedule.id}`} className={isKnowledge ? 'knowledge-schedule-row' : isDefault ? 'default-schedule-row' : ''}>
                       <td>
                         <div className="group-names-cell">
                           {schedule.groupNames?.join(', ') || 'ไม่ระบุ'}
-                          {isDefault && (
+                          {isKnowledge && (
+                            <span className="knowledge-badge-small">พื้นฐาน</span>
+                          )}
+                          {isDefault && !isKnowledge && (
                             <span className="default-badge-small">พื้นฐาน</span>
                           )}
                         </div>

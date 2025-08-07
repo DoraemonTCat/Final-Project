@@ -25,38 +25,47 @@ export const useSchedules = (customerGroups, selectedPage) => {
 
   // ฟังก์ชันสำหรับดึง schedules จาก database
   const getDatabaseSchedules = async (groupId) => {
-    try {
-      const dbId = await getPageDbId(selectedPage);
-      if (!dbId) return [];
-      
-      const response = await fetch(`http://localhost:8000/message-schedules/group/${dbId}/${groupId}`);
-      if (!response.ok) return [];
-      
-      const schedules = await response.json();
-      
-      // แปลงข้อมูลจาก database format เป็น frontend format
-      return schedules.map(schedule => ({
-        id: schedule.id,
-        type: schedule.send_type === 'immediate' ? 'immediate' : 
-              schedule.send_type === 'scheduled' ? 'scheduled' : 'user-inactive',
-        date: schedule.scheduled_at ? new Date(schedule.scheduled_at).toISOString().split('T')[0] : null,
-        time: schedule.scheduled_at ? new Date(schedule.scheduled_at).toTimeString().substr(0, 5) : null,
-        inactivityPeriod: schedule.send_after_inactive ? 
-          parseInt(schedule.send_after_inactive.split(' ')[0]) : null,
-        inactivityUnit: schedule.send_after_inactive ? 
-          schedule.send_after_inactive.split(' ')[1].replace(/s$/, '') : null,
-        repeat: {
-          type: schedule.frequency || 'once',
-          endDate: null // ถ้ามีฟิลด์นี้ใน database ให้เพิ่มตรงนี้
-        },
-        groups: [groupId],
-        groupId: groupId
-      }));
-    } catch (error) {
-      console.error('Error fetching database schedules:', error);
-      return [];
-    }
-  };
+  try {
+    const dbId = await getPageDbId(selectedPage);
+    if (!dbId) return [];
+    
+    // ตรวจสอบว่าเป็น knowledge group หรือไม่
+    const isKnowledge = groupId && groupId.toString().startsWith('knowledge_');
+    
+    // สร้าง search ID ที่ถูกต้อง
+    const searchGroupId = isKnowledge ? 
+      `group_knowledge_${groupId.replace('knowledge_', '')}` : 
+      groupId;
+    
+    const response = await fetch(`http://localhost:8000/message-schedules/group/${dbId}/${searchGroupId}`);
+    if (!response.ok) return [];
+    
+    const schedules = await response.json();
+    
+    // แปลงข้อมูลจาก database format เป็น frontend format
+    return schedules.map(schedule => ({
+      id: schedule.id,
+      type: schedule.send_type === 'immediate' ? 'immediate' : 
+            schedule.send_type === 'scheduled' ? 'scheduled' : 'user-inactive',
+      date: schedule.scheduled_at ? new Date(schedule.scheduled_at).toISOString().split('T')[0] : null,
+      time: schedule.scheduled_at ? new Date(schedule.scheduled_at).toTimeString().substr(0, 5) : null,
+      inactivityPeriod: schedule.send_after_inactive ? 
+        parseInt(schedule.send_after_inactive.split(' ')[0]) : null,
+      inactivityUnit: schedule.send_after_inactive ? 
+        schedule.send_after_inactive.split(' ')[1].replace(/s$/, '') : null,
+      repeat: {
+        type: schedule.frequency || 'once',
+        endDate: null
+      },
+      groups: [groupId],
+      groupId: groupId,
+      isKnowledge: isKnowledge
+    }));
+  } catch (error) {
+    console.error('Error fetching database schedules:', error);
+    return [];
+  }
+};
 
   const getGroupSchedules = async (groupId) => {
     try {
@@ -99,54 +108,53 @@ export const useSchedules = (customerGroups, selectedPage) => {
   };
 
   const handleDeleteSchedule = async (scheduleId) => {
-    if (window.confirm("คุณต้องการลบตารางเวลานี้หรือไม่?")) {
-      try {
-        // หา group ที่กำลังดู
-        const currentGroupId = viewingGroupSchedules[0]?.groups?.[0] || viewingGroupSchedules[0]?.groupId;
+  if (window.confirm("คุณต้องการลบตารางเวลานี้หรือไม่?")) {
+    try {
+      const currentGroupId = viewingGroupSchedules[0]?.groups?.[0] || viewingGroupSchedules[0]?.groupId;
+      
+      // ตรวจสอบประเภทกลุ่ม
+      const isKnowledge = currentGroupId && currentGroupId.toString().startsWith('knowledge_');
+      const isDefault = currentGroupId && currentGroupId.toString().startsWith('default_');
+      
+      if (isDefault) {
+        // จัดการ localStorage สำหรับ default groups
+        const miningSchedules = JSON.parse(localStorage.getItem(`miningSchedules_${selectedPage}`) || '[]');
+        const updatedSchedules = miningSchedules.filter(s => s.id !== scheduleId);
+        localStorage.setItem(`miningSchedules_${selectedPage}`, JSON.stringify(updatedSchedules));
         
-        if (currentGroupId && currentGroupId.toString().startsWith('default_')) {
-          // ลบจาก localStorage สำหรับ default groups
-          const miningSchedules = JSON.parse(localStorage.getItem(`miningSchedules_${selectedPage}`) || '[]');
-          const updatedSchedules = miningSchedules.filter(s => s.id !== scheduleId);
-          localStorage.setItem(`miningSchedules_${selectedPage}`, JSON.stringify(updatedSchedules));
-          
-          // อัพเดทการแสดงผล
-          const groupSchedules = updatedSchedules.filter(s => 
-            s.groups && s.groups.includes(currentGroupId)
-          );
-          setViewingGroupSchedules(groupSchedules);
-          
-          if (groupSchedules.length === 0) {
-            setShowScheduleModal(false);
-          }
-          
-          // อัพเดท counts
-          await loadScheduleCounts();
-        } else {
-          // ลบจาก database สำหรับ user groups
-          const response = await fetch(`http://localhost:8000/message-schedules/${scheduleId}`, {
-            method: 'DELETE'
-          });
-          
-          if (!response.ok) throw new Error('Failed to delete schedule');
-          
-          // อัพเดทการแสดงผล
-          const schedules = await getGroupSchedules(currentGroupId);
-          setViewingGroupSchedules(schedules);
-          
-          if (schedules.length === 0) {
-            setShowScheduleModal(false);
-          }
-          
-          // อัพเดท counts
-          await loadScheduleCounts();
+        const groupSchedules = updatedSchedules.filter(s => 
+          s.groups && s.groups.includes(currentGroupId)
+        );
+        setViewingGroupSchedules(groupSchedules);
+        
+        if (groupSchedules.length === 0) {
+          setShowScheduleModal(false);
         }
-      } catch (error) {
-        console.error('Error deleting schedule:', error);
-        alert('เกิดข้อผิดพลาดในการลบตารางเวลา');
+        
+        await loadScheduleCounts();
+      } else {
+        // ลบจาก database สำหรับทั้ง user groups และ knowledge groups
+        const response = await fetch(`http://localhost:8000/message-schedules/${scheduleId}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Failed to delete schedule');
+        
+        const schedules = await getGroupSchedules(currentGroupId);
+        setViewingGroupSchedules(schedules);
+        
+        if (schedules.length === 0) {
+          setShowScheduleModal(false);
+        }
+        
+        await loadScheduleCounts();
       }
+    } catch (error) {
+      console.error('Error deleting schedule:', error);
+      alert('เกิดข้อผิดพลาดในการลบตารางเวลา');
     }
-  };
+  }
+};
 
   useEffect(() => {
     if (customerGroups.length > 0 && selectedPage) {

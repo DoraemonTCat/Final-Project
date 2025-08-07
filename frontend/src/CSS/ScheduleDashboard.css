@@ -402,3 +402,23 @@ tr:hover {
 .modal-btn:hover {
   background: #3182ce;
 }
+.knowledge-schedule-row {
+    background: #e6f3ff !important;
+  }
+  
+  .knowledge-schedule-row:hover {
+    background: #d1e7ff !important;
+  }
+  
+  .knowledge-badge-small {
+    background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-left: 8px;
+    display: inline-block;
+  }
