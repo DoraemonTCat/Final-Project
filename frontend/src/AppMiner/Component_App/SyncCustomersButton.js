@@ -160,7 +160,7 @@ export default function SyncCustomersButton({ selectedPage, onSyncComplete }) {
         }}
       >
         <span className={syncing ? 'spinning' : ''}>🔄</span>
-        {syncing ? 'กำลัง Sync...' : 'Sync ข้อมูลจาก Facebook'}
+        {syncing ? 'กำลัง Sync...' : 'ดึงข้อมูลลูกค้าเก่า'}
         {!syncing && <span style={{ fontSize: '12px', marginLeft: '4px' }}>▼</span>}
       </button>
 

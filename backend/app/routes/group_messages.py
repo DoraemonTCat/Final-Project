@@ -1,35 +1,50 @@
+# backend/app/routes/group_messages.py
+"""
+Group Messages Component
+จัดการ:
+- ข้อความสำหรับกลุ่มลูกค้า (User Groups & Knowledge Groups)
+- Universal API สำหรับข้อความทุกประเภท
+- Message schedules และเงื่อนไขการส่ง
+- Batch operations สำหรับข้อความและ schedules
+"""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.database.database import get_db
-from app.database import models
+from typing import List, Optional, Union
+from datetime import datetime, timedelta
 from pydantic import BaseModel
-from typing import List, Optional
 import logging
-from datetime import datetime, date
-from datetime import  timedelta
 
-from app.database.models import MessageSchedule
+from app.database import models, crud
+from app.database.database import get_db
 
+# ==================== Configuration ====================
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# ==================== Pydantic Models - Messages ====================
 class GroupMessageCreate(BaseModel):
-    page_id: int
-    customer_type_custom_id: Optional[int] = None
+    """Model สำหรับสร้างข้อความใหม่"""
+    page_id: Union[int, str]  # รองรับทั้ง int และ string
+    customer_type_custom_id: Optional[Union[int, str]] = None  # รองรับ "knowledge_123" format
+    page_customer_type_knowledge_id: Optional[int] = None
     message_type: str
     content: str
     dir: Optional[str] = ""
     display_order: int
 
 class GroupMessageUpdate(BaseModel):
+    """Model สำหรับอัพเดทข้อความ"""
     message_type: Optional[str] = None
     content: Optional[str] = None
     display_order: Optional[int] = None
 
 class GroupMessageResponse(BaseModel):
+    """Model สำหรับ response ของข้อความ"""
     id: int
     page_id: int
     customer_type_custom_id: Optional[int]
+    page_customer_type_knowledge_id: Optional[int]
     message_type: str
     content: str
     dir: Optional[str]
@@ -37,9 +52,10 @@ class GroupMessageResponse(BaseModel):
     
     class Config:
         orm_mode = True
-        
-# เพิ่ม Pydantic Models
+
+# ==================== Pydantic Models - Schedules ====================
 class MessageScheduleCreate(BaseModel):
+    """Model สำหรับสร้าง schedule ใหม่"""
     customer_type_message_id: int
     send_type: str  # immediate, scheduled, after_inactive
     scheduled_at: Optional[datetime] = None
@@ -47,12 +63,14 @@ class MessageScheduleCreate(BaseModel):
     frequency: Optional[str] = "once"  # once, daily, weekly, monthly
 
 class MessageScheduleUpdate(BaseModel):
+    """Model สำหรับอัพเดท schedule"""
     send_type: Optional[str] = None
     scheduled_at: Optional[datetime] = None
     send_after_inactive: Optional[str] = None
     frequency: Optional[str] = None
 
 class MessageScheduleResponse(BaseModel):
+    """Model สำหรับ response ของ schedule"""
     id: int
     customer_type_message_id: int
     send_type: str
@@ -64,18 +82,16 @@ class MessageScheduleResponse(BaseModel):
     
     class Config:
         orm_mode = True
-        
 
+# ==================== User Groups Messages APIs ====================
 
-# API สำหรับเพิ่มข้อความให้กลุ่ม
 @router.post("/group-messages", response_model=GroupMessageResponse)
 async def create_group_message(
     message_data: GroupMessageCreate,
     db: Session = Depends(get_db)
 ):
-    """สร้างข้อความใหม่สำหรับกลุ่มลูกค้า"""
+    """สร้างข้อความใหม่สำหรับ user group"""
     try:
-        # สร้างข้อความใหม่
         db_message = models.CustomerTypeMessage(
             page_id=message_data.page_id,
             customer_type_custom_id=message_data.customer_type_custom_id,
@@ -97,14 +113,13 @@ async def create_group_message(
         logger.error(f"Error creating group message: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-# API สำหรับดึงข้อความของกลุ่ม
 @router.get("/group-messages/{page_id}/{group_id}", response_model=List[GroupMessageResponse])
 async def get_group_messages(
     page_id: int,
     group_id: int,
     db: Session = Depends(get_db)
 ):
-    """ดึงข้อความทั้งหมดของกลุ่มลูกค้า"""
+    """ดึงข้อความทั้งหมดของ user group"""
     messages = db.query(models.CustomerTypeMessage).filter(
         models.CustomerTypeMessage.page_id == page_id,
         models.CustomerTypeMessage.customer_type_custom_id == group_id
@@ -112,14 +127,13 @@ async def get_group_messages(
     
     return messages
 
-# API สำหรับอัพเดทข้อความ
 @router.put("/group-messages/{message_id}", response_model=GroupMessageResponse)
 async def update_group_message(
     message_id: int,
     update_data: GroupMessageUpdate,
     db: Session = Depends(get_db)
 ):
-    """อัพเดทข้อความของกลุ่ม"""
+    """อัพเดทข้อความของ user group"""
     message = db.query(models.CustomerTypeMessage).filter(
         models.CustomerTypeMessage.id == message_id
     ).first()
@@ -140,13 +154,12 @@ async def update_group_message(
     
     return message
 
-# API สำหรับลบข้อความ
 @router.delete("/group-messages/{message_id}")
 async def delete_group_message(
     message_id: int,
     db: Session = Depends(get_db)
 ):
-    """ลบข้อความของกลุ่ม"""
+    """ลบข้อความของ user group"""
     message = db.query(models.CustomerTypeMessage).filter(
         models.CustomerTypeMessage.id == message_id
     ).first()
@@ -159,7 +172,154 @@ async def delete_group_message(
     
     return {"status": "success", "message": "Message deleted"}
 
-# API สำหรับบันทึกข้อความหลายรายการพร้อมกัน
+# ==================== Knowledge Groups Messages APIs ====================
+
+@router.post("/knowledge-group-messages")
+async def create_knowledge_group_message(
+    message_data: GroupMessageCreate,
+    db: Session = Depends(get_db)
+):
+    """สร้างข้อความใหม่สำหรับ knowledge group"""
+    try:
+        # ตรวจสอบและแปลง customer_type_custom_id
+        group_id_str = str(message_data.customer_type_custom_id)
+        
+        if not group_id_str.startswith('knowledge_'):
+            raise HTTPException(status_code=400, detail="Invalid knowledge group ID format")
+        
+        # ดึง knowledge_id จาก string
+        knowledge_id = int(group_id_str.replace('knowledge_', ''))
+        
+        # แปลง page_id เป็น string เสมอ
+        page_id_str = str(message_data.page_id)
+        
+        # หา page record
+        page = crud.get_page_by_page_id(db, page_id_str)
+        if not page:
+            raise HTTPException(status_code=404, detail=f"Page not found: {page_id_str}")
+        
+        # หาหรือสร้าง page_customer_type_knowledge record
+        page_knowledge = await _get_or_create_page_knowledge(
+            db, page.ID, knowledge_id
+        )
+        
+        # สร้างข้อความใหม่
+        db_message = models.CustomerTypeMessage(
+            page_id=page.ID,
+            page_customer_type_knowledge_id=page_knowledge.id,
+            customer_type_custom_id=None,  # ไม่ใส่ค่าสำหรับ knowledge groups
+            message_type=message_data.message_type,
+            content=message_data.content,
+            dir=message_data.dir or "",
+            display_order=message_data.display_order
+        )
+        
+        db.add(db_message)
+        db.commit()
+        db.refresh(db_message)
+        
+        logger.info(f"Created message ID {db_message.id} for knowledge group {knowledge_id}")
+        
+        return {
+            "id": db_message.id,
+            "page_id": db_message.page_id,
+            "page_customer_type_knowledge_id": db_message.page_customer_type_knowledge_id,
+            "message_type": db_message.message_type,
+            "content": db_message.content,
+            "dir": db_message.dir,
+            "display_order": db_message.display_order
+        }
+        
+    except ValueError as e:
+        logger.error(f"ValueError: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid knowledge ID format: {str(e)}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating knowledge group message: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/knowledge-group-messages/{page_id}/{knowledge_id}")
+async def get_knowledge_group_messages(
+    page_id: str,
+    knowledge_id: Union[int, str],
+    db: Session = Depends(get_db)
+):
+    """ดึงข้อความของ knowledge group"""
+    try:
+        # แปลง knowledge_id เป็น int
+        if isinstance(knowledge_id, str):
+            knowledge_id = int(knowledge_id)
+        
+        # หา page record
+        page = crud.get_page_by_page_id(db, page_id)
+        if not page:
+            logger.warning(f"Page not found: {page_id}")
+            return []
+        
+        # หา page_customer_type_knowledge record
+        page_knowledge = db.query(models.PageCustomerTypeKnowledge).filter(
+            models.PageCustomerTypeKnowledge.page_id == page.ID,
+            models.PageCustomerTypeKnowledge.customer_type_knowledge_id == knowledge_id
+        ).first()
+        
+        if not page_knowledge:
+            logger.info(f"No page_customer_type_knowledge found for page {page.ID} and knowledge {knowledge_id}")
+            return []
+        
+        # ดึงข้อความที่เชื่อมกับ page_customer_type_knowledge นี้
+        messages = db.query(models.CustomerTypeMessage).filter(
+            models.CustomerTypeMessage.page_customer_type_knowledge_id == page_knowledge.id
+        ).order_by(models.CustomerTypeMessage.display_order).all()
+        
+        logger.info(f"Found {len(messages)} messages for knowledge group {knowledge_id}")
+        
+        # Format response
+        result = []
+        for msg in messages:
+            result.append({
+                "id": msg.id,
+                "page_id": msg.page_id,
+                "page_customer_type_knowledge_id": msg.page_customer_type_knowledge_id,
+                "message_type": msg.message_type,
+                "content": msg.content,
+                "dir": msg.dir,
+                "display_order": msg.display_order
+            })
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error fetching knowledge group messages: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/knowledge-group-messages/{message_id}")
+async def delete_knowledge_group_message(
+    message_id: int,
+    db: Session = Depends(get_db)
+):
+    """ลบข้อความของ knowledge group"""
+    try:
+        message = db.query(models.CustomerTypeMessage).filter(
+            models.CustomerTypeMessage.id == message_id
+        ).first()
+        
+        if not message:
+            raise HTTPException(status_code=404, detail="Message not found")
+        
+        db.delete(message)
+        db.commit()
+        
+        logger.info(f"Deleted message ID {message_id}")
+        
+        return {"status": "success", "message": "Message deleted"}
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting knowledge group message: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+# ==================== Batch Operations APIs ====================
+
 @router.post("/group-messages/batch")
 async def create_batch_group_messages(
     messages: List[GroupMessageCreate],
@@ -182,6 +342,7 @@ async def create_batch_group_messages(
         db.add_all(db_messages)
         db.commit()
         
+        logger.info(f"Created {len(db_messages)} messages in batch")
         return {"status": "success", "count": len(db_messages)}
         
     except Exception as e:
@@ -189,7 +350,6 @@ async def create_batch_group_messages(
         logger.error(f"Error creating batch messages: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-# API สำหรับลบข้อความทั้งหมดของกลุ่ม
 @router.delete("/group-messages/{page_id}/{group_id}/all")
 async def delete_all_group_messages(
     page_id: int,
@@ -204,38 +364,20 @@ async def delete_all_group_messages(
     
     db.commit()
     
+    logger.info(f"Deleted {deleted} messages for group {group_id}")
     return {"status": "success", "deleted_count": deleted}
 
+# ==================== Message Schedules APIs ====================
 
-########################## ไว้จัดการเงื่อนไขระยะเวลา ################################
-
-# API สำหรับสร้าง schedule ใหม่
 @router.post("/message-schedules", response_model=MessageScheduleResponse)
 async def create_message_schedule(
     schedule_data: MessageScheduleCreate,
     db: Session = Depends(get_db)
 ):
-    """สร้าง schedule ใหม่สำหรับข้อความกลุ่ม"""
+    """สร้าง schedule ใหม่สำหรับข้อความ"""
     try:
         # แปลง string เป็น interval สำหรับ PostgreSQL
-        interval_value = None
-        if schedule_data.send_after_inactive:
-            # Parse string เช่น "1 days", "2 hours"
-            parts = schedule_data.send_after_inactive.split()
-            if len(parts) == 2:
-                value = int(parts[0])
-                unit = parts[1].lower()
-                
-                if unit in ['minute', 'minutes']:
-                    interval_value = timedelta(minutes=value)
-                elif unit in ['hour', 'hours']:
-                    interval_value = timedelta(hours=value)
-                elif unit in ['day', 'days']:
-                    interval_value = timedelta(days=value)
-                elif unit in ['week', 'weeks']:
-                    interval_value = timedelta(weeks=value)
-                elif unit in ['month', 'months']:
-                    interval_value = timedelta(days=value * 30)  # โดยประมาณ
+        interval_value = _parse_interval_string(schedule_data.send_after_inactive)
         
         db_schedule = models.MessageSchedule(
             customer_type_message_id=schedule_data.customer_type_message_id,
@@ -268,20 +410,17 @@ async def create_message_schedule(
         logger.error(f"Error creating message schedule: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-# API สำหรับดึง schedules ของกลุ่ม
 @router.get("/message-schedules/group/{page_id}/{group_id}")
 async def get_group_schedules(
     page_id: int,
-    group_id: str,  # เปลี่ยนจาก int เป็น str เพื่อรองรับทั้ง ID ตัวเลขและ default_x
+    group_id: str,  # รองรับทั้ง ID ตัวเลขและ default_x
     db: Session = Depends(get_db)
 ):
     """ดึง schedules ทั้งหมดของกลุ่มลูกค้า"""
     try:
         # ตรวจสอบว่าเป็น default group หรือไม่
         if group_id.startswith('default_'):
-            # สำหรับ default groups ให้ return array ว่าง หรือดึงจาก localStorage
-            # เพราะ default groups ไม่ได้เก็บใน database
-            return []
+            return []  # default groups ไม่มี schedules ใน database
         
         # แปลง group_id เป็น integer สำหรับ user groups
         try:
@@ -316,25 +455,8 @@ async def get_group_schedules(
                 "frequency": schedule.frequency,
                 "created_at": schedule.created_at,
                 "updated_at": schedule.updated_at,
-                "send_after_inactive": None
+                "send_after_inactive": _format_interval_to_string(schedule.send_after_inactive)
             }
-            
-            # แปลง interval เป็น string
-            if schedule.send_after_inactive:
-                total_seconds = schedule.send_after_inactive.total_seconds()
-                if total_seconds < 3600:  # น้อยกว่า 1 ชั่วโมง
-                    minutes = int(total_seconds / 60)
-                    schedule_dict["send_after_inactive"] = f"{minutes} minutes"
-                elif total_seconds < 86400:  # น้อยกว่า 1 วัน
-                    hours = int(total_seconds / 3600)
-                    schedule_dict["send_after_inactive"] = f"{hours} hours"
-                elif total_seconds < 604800:  # น้อยกว่า 1 สัปดาห์
-                    days = int(total_seconds / 86400)
-                    schedule_dict["send_after_inactive"] = f"{days} days"
-                else:
-                    weeks = int(total_seconds / 604800)
-                    schedule_dict["send_after_inactive"] = f"{weeks} weeks"
-            
             result.append(schedule_dict)
         
         return result
@@ -345,7 +467,6 @@ async def get_group_schedules(
         logger.error(f"Error getting group schedules: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# API สำหรับอัพเดท schedule
 @router.put("/message-schedules/{schedule_id}", response_model=MessageScheduleResponse)
 async def update_message_schedule(
     schedule_id: int,
@@ -370,19 +491,7 @@ async def update_message_schedule(
     
     # แปลง string เป็น interval
     if update_data.send_after_inactive is not None:
-        parts = update_data.send_after_inactive.split()
-        if len(parts) == 2:
-            value = int(parts[0])
-            unit = parts[1].lower()
-            
-            if unit in ['minute', 'minutes']:
-                schedule.send_after_inactive = timedelta(minutes=value)
-            elif unit in ['hour', 'hours']:
-                schedule.send_after_inactive = timedelta(hours=value)
-            elif unit in ['day', 'days']:
-                schedule.send_after_inactive = timedelta(days=value)
-            elif unit in ['week', 'weeks']:
-                schedule.send_after_inactive = timedelta(weeks=value)
+        schedule.send_after_inactive = _parse_interval_string(update_data.send_after_inactive)
     
     schedule.updated_at = datetime.now()
     db.commit()
@@ -402,7 +511,6 @@ async def update_message_schedule(
     
     return response_data
 
-# API สำหรับลบ schedule
 @router.delete("/message-schedules/{schedule_id}")
 async def delete_message_schedule(
     schedule_id: int,
@@ -421,7 +529,8 @@ async def delete_message_schedule(
     
     return {"status": "success", "message": "Schedule deleted"}
 
-# API สำหรับบันทึก schedule หลายรายการพร้อมกัน
+# ==================== Batch Schedule Operations ====================
+
 @router.post("/message-schedules/batch")
 async def create_batch_schedules(
     schedules: List[MessageScheduleCreate],
@@ -431,22 +540,7 @@ async def create_batch_schedules(
     try:
         db_schedules = []
         for schedule_data in schedules:
-            # แปลง string เป็น interval
-            interval_value = None
-            if schedule_data.send_after_inactive:
-                parts = schedule_data.send_after_inactive.split()
-                if len(parts) == 2:
-                    value = int(parts[0])
-                    unit = parts[1].lower()
-                    
-                    if unit in ['minute', 'minutes']:
-                        interval_value = timedelta(minutes=value)
-                    elif unit in ['hour', 'hours']:
-                        interval_value = timedelta(hours=value)
-                    elif unit in ['day', 'days']:
-                        interval_value = timedelta(days=value)
-                    elif unit in ['week', 'weeks']:
-                        interval_value = timedelta(weeks=value)
+            interval_value = _parse_interval_string(schedule_data.send_after_inactive)
             
             db_schedule = models.MessageSchedule(
                 customer_type_message_id=schedule_data.customer_type_message_id,
@@ -460,14 +554,14 @@ async def create_batch_schedules(
         db.add_all(db_schedules)
         db.commit()
         
+        logger.info(f"Created {len(db_schedules)} schedules in batch")
         return {"status": "success", "count": len(db_schedules)}
         
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating batch schedules: {e}")
         raise HTTPException(status_code=400, detail=str(e))
-    
-# API สำหรับลบ schedule ทั้งหมดของกลุ่ม
+
 @router.delete("/group-schedule/{page_id}/{group_id}")
 async def delete_group_schedule(
     page_id: int,
@@ -489,6 +583,7 @@ async def delete_group_schedule(
             
             db.commit()
             
+            logger.info(f"Deleted {deleted} schedules for group {group_id}")
             return {
                 "status": "success",
                 "deleted_count": deleted
@@ -503,8 +598,7 @@ async def delete_group_schedule(
         db.rollback()
         logger.error(f"Error deleting group schedule: {e}")
         raise HTTPException(status_code=400, detail=str(e))
-    
-# API สำหรับบันทึก schedule เดียวสำหรับทั้งกลุ่ม
+
 @router.post("/group-schedule/{page_id}/{group_id}")
 async def create_group_schedule(
     page_id: int,
@@ -530,14 +624,16 @@ async def create_group_schedule(
             models.MessageSchedule.customer_type_message_id.in_(message_ids)
         ).delete(synchronize_session=False)
         
-        # สร้าง schedule ใหม่สำหรับแต่ละข้อความ (ใช้เงื่อนไขเดียวกัน)
+        # สร้าง schedule ใหม่สำหรับแต่ละข้อความ
+        interval_value = _parse_interval_string(schedule_data.send_after_inactive)
         new_schedules = []
+        
         for msg_id in message_ids:
             db_schedule = models.MessageSchedule(
                 customer_type_message_id=msg_id,
                 send_type=schedule_data.send_type,
                 scheduled_at=schedule_data.scheduled_at,
-                send_after_inactive=schedule_data.send_after_inactive,
+                send_after_inactive=interval_value,
                 frequency=schedule_data.frequency
             )
             new_schedules.append(db_schedule)
@@ -545,6 +641,7 @@ async def create_group_schedule(
         db.add_all(new_schedules)
         db.commit()
         
+        logger.info(f"Created schedule for {len(new_schedules)} messages in group {group_id}")
         return {
             "status": "success",
             "message": f"Created schedule for {len(new_schedules)} messages",
@@ -556,7 +653,8 @@ async def create_group_schedule(
         logger.error(f"Error creating group schedule: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-# API สำหรับดึง schedule สรุปของกลุ่ม (ใช้ schedule แรกเป็นตัวแทน)
+# ==================== Schedule Summary APIs ====================
+
 @router.get("/group-schedule-summary/{page_id}")
 async def get_group_schedule_summaries(
     page_id: int,
@@ -593,7 +691,7 @@ async def get_group_schedule_summaries(
                         "message_count": len(messages),
                         "send_type": schedule.send_type,
                         "scheduled_at": schedule.scheduled_at,
-                        "send_after_inactive": schedule.send_after_inactive,
+                        "send_after_inactive": _format_interval_to_string(schedule.send_after_inactive),
                         "frequency": schedule.frequency,
                         "created_at": schedule.created_at
                     })
@@ -603,3 +701,74 @@ async def get_group_schedule_summaries(
     except Exception as e:
         logger.error(f"Error getting group schedule summaries: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== Helper Functions ====================
+
+async def _get_or_create_page_knowledge(db: Session, page_id: int, knowledge_id: int):
+    """Helper function สำหรับหาหรือสร้าง page_customer_type_knowledge record"""
+    page_knowledge = db.query(models.PageCustomerTypeKnowledge).filter(
+        models.PageCustomerTypeKnowledge.page_id == page_id,
+        models.PageCustomerTypeKnowledge.customer_type_knowledge_id == knowledge_id
+    ).first()
+    
+    if not page_knowledge:
+        # สร้างใหม่ถ้ายังไม่มี
+        page_knowledge = models.PageCustomerTypeKnowledge(
+            page_id=page_id,
+            customer_type_knowledge_id=knowledge_id,
+            is_enabled=True
+        )
+        db.add(page_knowledge)
+        db.commit()
+        db.refresh(page_knowledge)
+        logger.info(f"Created new page_customer_type_knowledge record: {page_knowledge.id}")
+    
+    return page_knowledge
+
+def _parse_interval_string(interval_str: Optional[str]) -> Optional[timedelta]:
+    """แปลง string เป็น timedelta object"""
+    if not interval_str:
+        return None
+    
+    parts = interval_str.split()
+    if len(parts) != 2:
+        return None
+    
+    try:
+        value = int(parts[0])
+        unit = parts[1].lower()
+        
+        if unit in ['minute', 'minutes']:
+            return timedelta(minutes=value)
+        elif unit in ['hour', 'hours']:
+            return timedelta(hours=value)
+        elif unit in ['day', 'days']:
+            return timedelta(days=value)
+        elif unit in ['week', 'weeks']:
+            return timedelta(weeks=value)
+        elif unit in ['month', 'months']:
+            return timedelta(days=value * 30)  # โดยประมาณ
+        else:
+            return None
+    except (ValueError, IndexError):
+        return None
+
+def _format_interval_to_string(interval: Optional[timedelta]) -> Optional[str]:
+    """แปลง timedelta object เป็น string"""
+    if not interval:
+        return None
+    
+    total_seconds = interval.total_seconds()
+    
+    if total_seconds < 3600:  # น้อยกว่า 1 ชั่วโมง
+        minutes = int(total_seconds / 60)
+        return f"{minutes} minutes"
+    elif total_seconds < 86400:  # น้อยกว่า 1 วัน
+        hours = int(total_seconds / 3600)
+        return f"{hours} hours"
+    elif total_seconds < 604800:  # น้อยกว่า 1 สัปดาห์
+        days = int(total_seconds / 86400)
+        return f"{days} days"
+    else:
+        weeks = int(total_seconds / 604800)
+        return f"{weeks} weeks"

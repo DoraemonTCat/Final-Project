@@ -4,7 +4,8 @@ Facebook Customer Groups Component
 จัดการ:
 - CRUD operations สำหรับกลุ่มลูกค้า
 - จัดกลุ่มอัตโนมัติตาม keywords
-- จัดการ keywords และ rules
+- จัดการ customer type knowledge
+- เปิด/ปิด knowledge types สำหรับแต่ละ page
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,31 +14,46 @@ from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel
 import logging
+
 from app.database import crud, models
 from app.database.database import get_db
-from app.routes.group_messages import GroupMessageCreate
 
+# ==================== Configuration ====================
 router = APIRouter()
-
-# สร้าง logger instance
 logger = logging.getLogger(__name__)
 
+# ==================== Pydantic Models ====================
 class CustomerGroupCreate(BaseModel):
+    """Model สำหรับสร้างกลุ่มลูกค้าใหม่"""
     page_id: int
     type_name: str
     keywords: List[str] = []
     rule_description: str = ""
     examples: List[str] = []
 
-
 class CustomerGroupUpdate(BaseModel):
+    """Model สำหรับอัพเดทกลุ่มลูกค้า"""
     type_name: Optional[str] = None
     keywords: Optional[List[str]] = None
     rule_description: Optional[str] = None
     examples: Optional[List[str]] = None
     is_active: Optional[bool] = None
 
-# API สำหรับสร้างกลุ่มลูกค้าใหม่
+class CustomerGroupResponse(BaseModel):
+    """Model สำหรับ response ของกลุ่มลูกค้า"""
+    id: int
+    page_id: int
+    type_name: str
+    keywords: List[str]
+    rule_description: str
+    examples: List[str]
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    customer_count: Optional[int] = 0
+
+# ==================== User Groups APIs ====================
+
 @router.post("/customer-groups")
 async def create_customer_group(
     group_data: CustomerGroupCreate,
@@ -69,9 +85,9 @@ async def create_customer_group(
         }
     except Exception as e:
         db.rollback()
+        logger.error(f"Error creating customer group: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-# API สำหรับดึงกลุ่มลูกค้าทั้งหมดของเพจ
 @router.get("/customer-groups/{page_id}")
 async def get_customer_groups(
     page_id: int,
@@ -79,33 +95,36 @@ async def get_customer_groups(
     db: Session = Depends(get_db)
 ):
     """ดึงกลุ่มลูกค้าทั้งหมดของเพจ"""
-    query = db.query(models.CustomerTypeCustom).filter(
-        models.CustomerTypeCustom.page_id == page_id
-    )
-    
-    if not include_inactive:
-        query = query.filter(models.CustomerTypeCustom.is_active == True)
-    
-    groups = query.order_by(models.CustomerTypeCustom.created_at.desc()).all()
-    
-    result = []
-    for group in groups:
-        result.append({
-            "id": group.id,
-            "page_id": group.page_id,
-            "type_name": group.type_name,
-            "keywords": group.keywords or [],
-            "examples": group.examples or [],
-            "rule_description": group.rule_description,
-            "is_active": group.is_active,
-            "created_at": group.created_at,
-            "updated_at": group.updated_at,
-            "customer_count": len(group.customers)
-        })
-    
-    return result
+    try:
+        query = db.query(models.CustomerTypeCustom).filter(
+            models.CustomerTypeCustom.page_id == page_id
+        )
+        
+        if not include_inactive:
+            query = query.filter(models.CustomerTypeCustom.is_active == True)
+        
+        groups = query.order_by(models.CustomerTypeCustom.created_at.desc()).all()
+        
+        result = []
+        for group in groups:
+            result.append({
+                "id": group.id,
+                "page_id": group.page_id,
+                "type_name": group.type_name,
+                "keywords": group.keywords or [],
+                "examples": group.examples or [],
+                "rule_description": group.rule_description,
+                "is_active": group.is_active,
+                "created_at": group.created_at,
+                "updated_at": group.updated_at,
+                "customer_count": len(group.customers)
+            })
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error fetching customer groups: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-# API สำหรับดึงข้อมูลกลุ่มลูกค้าตาม ID
 @router.get("/customer-group/{group_id}")
 async def get_customer_group(
     group_id: int,
@@ -132,7 +151,6 @@ async def get_customer_group(
         "customer_count": len(group.customers)
     }
 
-# API สำหรับอัพเดทข้อมูลกลุ่มลูกค้า
 @router.put("/customer-groups/{group_id}")
 async def update_customer_group(
     group_id: int,
@@ -172,16 +190,16 @@ async def update_customer_group(
         }
     except Exception as e:
         db.rollback()
+        logger.error(f"Error updating customer group: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-# API สำหรับลบกลุ่มลูกค้า
 @router.delete("/customer-groups/{group_id}")
 async def delete_customer_group(
     group_id: int,
     hard_delete: bool = False,
     db: Session = Depends(get_db)
 ):
-    """ลบกลุ่มลูกค้า"""
+    """ลบกลุ่มลูกค้า (soft delete หรือ hard delete)"""
     group = db.query(models.CustomerTypeCustom).filter(
         models.CustomerTypeCustom.id == group_id
     ).first()
@@ -198,12 +216,18 @@ async def delete_customer_group(
         
         db.commit()
         
-        return {"status": "success", "message": "Group deleted successfully"}
+        return {
+            "status": "success", 
+            "message": "Group deleted successfully",
+            "hard_delete": hard_delete
+        }
     except Exception as e:
         db.rollback()
+        logger.error(f"Error deleting customer group: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-# API สำหรับจัดกลุ่มลูกค้าอัตโนมัติ
+# ==================== Auto-Grouping API ====================
+
 @router.post("/auto-group-customer")
 async def auto_group_customer(
     page_id: str,
@@ -211,12 +235,12 @@ async def auto_group_customer(
     message_text: str,
     db: Session = Depends(get_db)
 ):
-    """ตรวจสอบข้อความและจัดกลุ่มลูกค้าอัตโนมัติ"""
+    """ตรวจสอบข้อความและจัดกลุ่มลูกค้าอัตโนมัติตาม keywords"""
     page = crud.get_page_by_page_id(db, page_id)
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
     
-    # ดึงกลุ่มทั้งหมดของเพจ
+    # ดึงกลุ่มที่ active ทั้งหมดของเพจ
     groups = db.query(models.CustomerTypeCustom).filter(
         models.CustomerTypeCustom.page_id == page.ID,
         models.CustomerTypeCustom.is_active == True
@@ -247,15 +271,18 @@ async def auto_group_customer(
             return {
                 "status": "success",
                 "group_detected": detected_group.type_name,
-                "keywords_matched": True
+                "keywords_matched": True,
+                "customer_psid": customer_psid
             }
     
     return {
         "status": "no_match",
-        "message": "No keywords matched"
+        "message": "No keywords matched",
+        "customer_psid": customer_psid
     }
 
-# เพิ่ม API สำหรับดึงข้อมูล customer_type_knowledge
+# ==================== Knowledge Type APIs ====================
+
 @router.get("/customer-type-knowledge")
 async def get_all_customer_type_knowledge(
     db: Session = Depends(get_db)
@@ -285,13 +312,12 @@ async def get_all_customer_type_knowledge(
         logger.error(f"Error fetching customer type knowledge: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# เพิ่ม API สำหรับดึง page_customer_type_knowledge (ความสัมพันธ์ระหว่าง page และ knowledge types)
 @router.get("/page-customer-type-knowledge/{page_id}")
 async def get_page_customer_type_knowledge(
     page_id: str,
     db: Session = Depends(get_db)
 ):
-    """ดึง knowledge types ที่ enabled สำหรับ page นี้"""
+    """ดึง knowledge types ที่เชื่อมกับ page นี้"""
     try:
         # หา page จาก Facebook page ID
         page = crud.get_page_by_page_id(db, page_id)
@@ -299,45 +325,20 @@ async def get_page_customer_type_knowledge(
             logger.warning(f"Page not found for page_id: {page_id}")
             return []
         
-        # ใช้ integer ID จาก database
         page_db_id = page.ID
         
         # ดึง records จากตาราง page_customer_type_knowledge
         page_knowledge_records = db.query(models.PageCustomerTypeKnowledge).filter(
             models.PageCustomerTypeKnowledge.page_id == page_db_id
-            # ลบบรรทัด models.PageCustomerTypeKnowledge.is_enabled == True ออก
         ).all()
         
         logger.info(f"Found {len(page_knowledge_records)} page_knowledge records for page {page_id}")
         
-        # ถ้าไม่มี records สำหรับ page นี้ ให้สร้างขึ้นมาใหม่จาก knowledge types ทั้งหมด
+        # ถ้าไม่มี records สำหรับ page นี้ ให้สร้างขึ้นมาใหม่
         if not page_knowledge_records:
-            logger.info(f"No page_customer_type_knowledge found, creating default records")
-            
-            # ดึง knowledge types ทั้งหมด
-            all_knowledge_types = db.query(models.CustomerTypeKnowledge).all()
-            
-            # สร้าง page_customer_type_knowledge records สำหรับ page นี้
-            for kt in all_knowledge_types:
-                new_record = models.PageCustomerTypeKnowledge(
-                    page_id=page_db_id,
-                    customer_type_knowledge_id=kt.id,
-                    is_enabled=True
-                )
-                db.add(new_record)
-            
-            try:
-                db.commit()
-                logger.info(f"Created {len(all_knowledge_types)} page_knowledge records")
-                
-                # ดึง records ที่เพิ่งสร้างใหม่
-                page_knowledge_records = db.query(models.PageCustomerTypeKnowledge).filter(
-                    models.PageCustomerTypeKnowledge.page_id == page_db_id
-                ).all()
-            except Exception as e:
-                db.rollback()
-                logger.error(f"Error creating page_knowledge records: {e}")
-                return []
+            page_knowledge_records = await _create_default_page_knowledge_records(
+                db, page_db_id
+            )
         
         # สร้าง response
         result = []
@@ -356,8 +357,8 @@ async def get_page_customer_type_knowledge(
                     "supports_image": kt.supports_image,
                     "image_label_keywords": kt.image_label_keywords,
                     "is_knowledge": True,
-                    "is_enabled": pk_record.is_enabled,  # ส่งสถานะไปด้วย
-                    "is_active": True,  # แสดงเสมอ ไม่สนใจ is_enabled
+                    "is_enabled": pk_record.is_enabled,
+                    "is_active": True,  # แสดงเสมอ
                     "created_at": pk_record.created_at.isoformat() if pk_record.created_at else None
                 })
                 
@@ -369,109 +370,7 @@ async def get_page_customer_type_knowledge(
         logger.error(f"Error fetching page customer type knowledge: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
-    
-# เพิ่ม API สำหรับดึงข้อความของ knowledge groups
-@router.get("/knowledge-group-messages/{page_id}/{knowledge_id}")
-async def get_knowledge_group_messages(
-    page_id: str,
-    knowledge_id: int,
-    db: Session = Depends(get_db)
-):
-    """ดึงข้อความของ knowledge group"""
-    try:
-        # หา page_customer_type_knowledge record
-        page_knowledge = db.query(models.PageCustomerTypeKnowledge).filter(
-            models.PageCustomerTypeKnowledge.page_id == page_id,
-            models.PageCustomerTypeKnowledge.customer_type_knowledge_id == knowledge_id
-        ).first()
-        
-        if not page_knowledge:
-            return []
-        
-        # ดึงข้อความที่เชื่อมกับ page_customer_type_knowledge นี้
-        messages = db.query(models.CustomerTypeMessage).filter(
-            models.CustomerTypeMessage.page_customer_type_knowledge_id == page_knowledge.id
-        ).order_by(models.CustomerTypeMessage.display_order).all()
-        
-        return messages
-        
-    except Exception as e:
-        logger.error(f"Error fetching knowledge group messages: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
-# เพิ่ม API สำหรับบันทึกข้อความให้ knowledge groups
-@router.post("/knowledge-group-messages")
-async def create_knowledge_group_message(
-    message_data: GroupMessageCreate,
-    db: Session = Depends(get_db)
-):
-    """สร้างข้อความใหม่สำหรับ knowledge group"""
-    try:
-        # ดึง knowledge_id จาก group id ที่ส่งมา (format: knowledge_123)
-        if not message_data.customer_type_custom_id.startswith('knowledge_'):
-            raise HTTPException(status_code=400, detail="Invalid knowledge group ID")
-        
-        knowledge_id = int(message_data.customer_type_custom_id.replace('knowledge_', ''))
-        
-        # หา page record จาก page_id string
-        page = crud.get_page_by_page_id(db, str(message_data.page_id))
-        if not page:
-            raise HTTPException(status_code=404, detail="Page not found")
-        
-        # หา page_customer_type_knowledge record
-        page_knowledge = db.query(models.PageCustomerTypeKnowledge).filter(
-            models.PageCustomerTypeKnowledge.page_id == str(message_data.page_id),
-            models.PageCustomerTypeKnowledge.customer_type_knowledge_id == knowledge_id
-        ).first()
-        
-        if not page_knowledge:
-            raise HTTPException(status_code=404, detail="Knowledge group not found for this page")
-        
-        # สร้างข้อความใหม่
-        db_message = models.CustomerTypeMessage(
-            page_id=page.ID,  # ใช้ integer ID สำหรับ page_id ใน CustomerTypeMessage
-            page_customer_type_knowledge_id=page_knowledge.id,
-            message_type=message_data.message_type,
-            content=message_data.content,
-            dir=message_data.dir or "",
-            display_order=message_data.display_order
-        )
-        
-        db.add(db_message)
-        db.commit()
-        db.refresh(db_message)
-        
-        logger.info(f"Created message for knowledge group {knowledge_id}")
-        return db_message
-        
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error creating knowledge group message: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-    
-# เพิ่ม API สำหรับ debug
-@router.get("/debug/knowledge-types")
-async def debug_knowledge_types(db: Session = Depends(get_db)):
-    """Debug endpoint สำหรับดู knowledge types ทั้งหมด"""
-    try:
-        knowledge_types = db.query(models.CustomerTypeKnowledge).all()
-        result = []
-        for kt in knowledge_types:
-            result.append({
-                "id": kt.id,
-                "type_name": kt.type_name,
-                "rule_description": kt.rule_description,
-                "keywords": kt.keywords,
-                "examples": kt.examples
-            })
-        return {
-            "total": len(result),
-            "knowledge_types": result
-        }
-    except Exception as e:
-        return {"error": str(e)}
-    
-# เพิ่ม API สำหรับเปิด/ปิด knowledge type สำหรับ page
 @router.put("/page-customer-type-knowledge/{page_id}/{knowledge_id}/toggle")
 async def toggle_page_knowledge_type(
     page_id: str,
@@ -496,8 +395,69 @@ async def toggle_page_knowledge_type(
         pk_record.updated_at = datetime.now()
         db.commit()
         
-        return {"status": "success", "is_enabled": pk_record.is_enabled}
+        return {
+            "status": "success", 
+            "is_enabled": pk_record.is_enabled,
+            "knowledge_id": knowledge_id,
+            "page_id": page_id
+        }
         
     except Exception as e:
         db.rollback()
+        logger.error(f"Error toggling page knowledge type: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== Debug APIs ====================
+
+@router.get("/debug/knowledge-types")
+async def debug_knowledge_types(db: Session = Depends(get_db)):
+    """Debug endpoint สำหรับดู knowledge types ทั้งหมด"""
+    try:
+        knowledge_types = db.query(models.CustomerTypeKnowledge).all()
+        result = []
+        for kt in knowledge_types:
+            result.append({
+                "id": kt.id,
+                "type_name": kt.type_name,
+                "rule_description": kt.rule_description,
+                "keywords": kt.keywords,
+                "examples": kt.examples
+            })
+        return {
+            "total": len(result),
+            "knowledge_types": result
+        }
+    except Exception as e:
+        logger.error(f"Debug error: {e}")
+        return {"error": str(e)}
+
+# ==================== Helper Functions ====================
+
+async def _create_default_page_knowledge_records(db: Session, page_db_id: int):
+    """Helper function สำหรับสร้าง default page_customer_type_knowledge records"""
+    logger.info(f"Creating default page_customer_type_knowledge records for page {page_db_id}")
+    
+    # ดึง knowledge types ทั้งหมด
+    all_knowledge_types = db.query(models.CustomerTypeKnowledge).all()
+    
+    # สร้าง page_customer_type_knowledge records สำหรับ page นี้
+    for kt in all_knowledge_types:
+        new_record = models.PageCustomerTypeKnowledge(
+            page_id=page_db_id,
+            customer_type_knowledge_id=kt.id,
+            is_enabled=True
+        )
+        db.add(new_record)
+    
+    try:
+        db.commit()
+        logger.info(f"Created {len(all_knowledge_types)} page_knowledge records")
+        
+        # ดึง records ที่เพิ่งสร้างใหม่
+        return db.query(models.PageCustomerTypeKnowledge).filter(
+            models.PageCustomerTypeKnowledge.page_id == page_db_id
+        ).all()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating page_knowledge records: {e}")
+        return []
