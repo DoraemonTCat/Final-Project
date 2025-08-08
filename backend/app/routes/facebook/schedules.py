@@ -11,6 +11,11 @@ Facebook Schedules Component
 from fastapi import APIRouter, Request
 from typing import Dict, List, Any
 import logging
+from fastapi import Depends
+from app.database.database import get_db
+from sqlalchemy.orm import Session
+from app.database import models
+from fastapi.responses import JSONResponse
 
 from app.service.message_scheduler import message_scheduler
 from .auth import get_page_tokens
@@ -176,3 +181,150 @@ async def update_user_inactivity(page_id: str, request: Request):
     except Exception as e:
         logger.error(f"Error updating user inactivity data: {e}")
         return {"status": "error", "message": str(e)}
+    
+# API สำหรับดึง schedules ทั้งหมดพร้อมรายละเอียดของกลุ่ม
+@router.get("/all-schedules/{page_id}")
+async def get_all_schedules_with_details(
+    page_id: str,
+    db: Session = Depends(get_db)
+):
+    """ดึง schedules ทั้งหมดพร้อมรายละเอียดของกลุ่ม"""
+    try:
+        # หา page จาก database
+        page = db.query(models.FacebookPage).filter(
+            models.FacebookPage.page_id == page_id
+        ).first()
+        
+        if not page:
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Page {page_id} not found"}
+            )
+        
+        # Query schedules พร้อม join กับ customer_type_messages
+        schedules_query = db.query(
+            models.MessageSchedule,
+            models.CustomerTypeMessage,
+            models.CustomerTypeCustom,
+            models.PageCustomerTypeKnowledge,
+            models.CustomerTypeKnowledge
+        ).join(
+            models.CustomerTypeMessage,
+            models.MessageSchedule.customer_type_message_id == models.CustomerTypeMessage.id
+        ).outerjoin(
+            models.CustomerTypeCustom,
+            models.CustomerTypeMessage.customer_type_custom_id == models.CustomerTypeCustom.id
+        ).outerjoin(
+            models.PageCustomerTypeKnowledge,
+            models.CustomerTypeMessage.page_customer_type_knowledge_id == models.PageCustomerTypeKnowledge.id
+        ).outerjoin(
+            models.CustomerTypeKnowledge,
+            models.PageCustomerTypeKnowledge.customer_type_knowledge_id == models.CustomerTypeKnowledge.id
+        ).filter(
+            models.CustomerTypeMessage.page_id == page.ID
+        ).all()
+        
+        # Group schedules by group
+        grouped_schedules = {}
+        
+        for schedule, message, custom_type, page_knowledge, knowledge_type in schedules_query:
+            # ตรวจสอบว่าเป็นกลุ่มประเภทไหน
+            if custom_type:
+                # กลุ่มที่ User สร้าง
+                group_key = f"custom_{custom_type.id}"
+                group_name = custom_type.type_name
+                group_type = "user_created"
+                group_id = custom_type.id
+            elif knowledge_type:
+                # กลุ่มพื้นฐาน (Knowledge Group)
+                group_key = f"knowledge_{knowledge_type.id}"
+                group_name = knowledge_type.type_name
+                group_type = "knowledge"
+                group_id = f"knowledge_{knowledge_type.id}"
+            else:
+                continue
+            
+            if group_key not in grouped_schedules:
+                grouped_schedules[group_key] = {
+                    "group_id": group_id,
+                    "group_name": group_name,
+                    "group_type": group_type,
+                    "schedules": [],
+                    "messages": [],
+                    "schedule_ids": set()
+                }
+            
+            # แปลง send_after_inactive จาก timedelta เป็น string ที่อ่านง่าย
+            send_after_inactive_str = None
+            if schedule.send_after_inactive:
+                total_seconds = schedule.send_after_inactive.total_seconds()
+                
+                if total_seconds < 3600:  # น้อยกว่า 1 ชั่วโมง
+                    minutes = int(total_seconds / 60)
+                    send_after_inactive_str = f"{minutes} minutes"
+                elif total_seconds < 86400:  # น้อยกว่า 1 วัน
+                    hours = int(total_seconds / 3600)
+                    send_after_inactive_str = f"{hours} hours"
+                elif total_seconds < 604800:  # น้อยกว่า 1 สัปดาห์
+                    days = int(total_seconds / 86400)
+                    send_after_inactive_str = f"{days} days"
+                elif total_seconds < 2592000:  # น้อยกว่า 30 วัน (ประมาณ 1 เดือน)
+                    weeks = int(total_seconds / 604800)
+                    send_after_inactive_str = f"{weeks} weeks"
+                else:
+                    months = int(total_seconds / 2592000)
+                    send_after_inactive_str = f"{months} months"
+            
+            # เพิ่ม schedule (ตรวจสอบไม่ให้ซ้ำ)
+            if schedule.id not in grouped_schedules[group_key]["schedule_ids"]:
+                schedule_data = {
+                    "id": schedule.id,
+                    "send_type": schedule.send_type,
+                    "scheduled_at": schedule.scheduled_at.isoformat() if schedule.scheduled_at else None,
+                    "send_after_inactive": send_after_inactive_str,  # ใช้ string ที่แปลงแล้ว
+                    "frequency": schedule.frequency,
+                    "created_at": schedule.created_at.isoformat() if schedule.created_at else None,
+                    "updated_at": schedule.updated_at.isoformat() if schedule.updated_at else None
+                }
+                grouped_schedules[group_key]["schedules"].append(schedule_data)
+                grouped_schedules[group_key]["schedule_ids"].add(schedule.id)
+            
+            # เพิ่มข้อความ
+            message_data = {
+                "id": message.id,
+                "type": message.message_type,
+                "content": message.content,
+                "order": message.display_order
+            }
+            
+            # ตรวจสอบไม่ให้ข้อความซ้ำ
+            if not any(m["id"] == message.id for m in grouped_schedules[group_key]["messages"]):
+                grouped_schedules[group_key]["messages"].append(message_data)
+        
+        # แปลงเป็น list และลบ schedule_ids set ออก
+        result = []
+        for key, value in grouped_schedules.items():
+            value.pop("schedule_ids", None)
+            result.append(value)
+        
+        # Debug log
+        logger.info(f"Found {len(result)} groups with schedules")
+        for group in result:
+            logger.info(f"Group: {group['group_name']} ({group['group_type']})")
+            for sched in group['schedules']:
+                logger.info(f"  Schedule: type={sched['send_type']}, inactive={sched['send_after_inactive']}")
+        
+        return {
+            "page_id": page_id,
+            "total_groups": len(result),
+            "schedules": result
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting all schedules: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )

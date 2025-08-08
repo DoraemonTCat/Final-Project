@@ -1094,3 +1094,71 @@
   color: #ff0000;
   font-weight: 500;
 }
+/* เพิ่มใน ScheduleDashboard.css */
+
+/* Knowledge Group (กลุ่มพื้นฐาน) */
+.knowledge-schedule-row {
+  background: linear-gradient(to right, #e6f3ff 0%, #f0f7ff 100%) !important;
+  border-left: 4px solid #4299e1;
+}
+
+.knowledge-schedule-row:hover {
+  background: linear-gradient(to right, #d1e7ff 0%, #e6f3ff 100%) !important;
+}
+
+.knowledge-badge-small {
+  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+  color: white;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 8px;
+  display: inline-block;
+}
+
+/* User Created Group (กลุ่มที่ User สร้าง) */
+.user-created-schedule-row {
+  background: linear-gradient(to right, #f0fdf4 0%, #f7fef9 100%) !important;
+  border-left: 4px solid #48bb78;
+}
+
+.user-created-schedule-row:hover {
+  background: linear-gradient(to right, #dcfce7 0%, #f0fdf4 100%) !important;
+}
+
+.user-created-badge-small {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 8px;
+  display: inline-block;
+}
+
+/* เพิ่ม visual indicator ที่ชัดเจน */
+.group-names-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Tooltip สำหรับ badges */
+.knowledge-badge-small:hover::after,
+.user-created-badge-small:hover::after {
+  content: attr(title);
+  position: absolute;
+  background: #2d3748;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 1000;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+}

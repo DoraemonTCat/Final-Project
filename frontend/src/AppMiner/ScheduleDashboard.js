@@ -54,21 +54,98 @@ function ScheduleDashboard() {
 
   // ฟังก์ชันโหลด schedules จากทั้ง localStorage และ database
   const loadAllSchedules = async (pageId) => {
-    setLoading(true);
+  setLoading(true);
+  try {
+    const response = await fetch(`http://localhost:8000/all-schedules/${pageId}`);
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log('Raw data from API:', data); // Debug log
+      
+      if (data.schedules && data.schedules.length > 0) {
+        const formattedSchedules = data.schedules.map(group => {
+          const firstSchedule = group.schedules[0] || {};
+          
+          console.log('Processing group:', group.group_name, 'Schedule:', firstSchedule); // Debug log
+          
+          // ดึงค่า inactivity period และ unit
+          const inactivityPeriod = extractInactivityPeriod(firstSchedule.send_after_inactive);
+          const inactivityUnit = extractInactivityUnit(firstSchedule.send_after_inactive);
+          
+          console.log('Extracted:', {
+            period: inactivityPeriod,
+            unit: inactivityUnit,
+            original: firstSchedule.send_after_inactive
+          }); // Debug log
+          
+          return {
+            id: `${group.group_type}_${group.group_id}`,
+            type: convertScheduleType(firstSchedule.send_type),
+            groups: [group.group_id],
+            groupNames: [group.group_name],
+            groupType: group.group_type,
+            messages: group.messages.sort((a, b) => a.order - b.order),
+            messageCount: group.messages.length,
+            date: firstSchedule.scheduled_at ? 
+              new Date(firstSchedule.scheduled_at).toISOString().split('T')[0] : null,
+            time: firstSchedule.scheduled_at ? 
+              new Date(firstSchedule.scheduled_at).toTimeString().slice(0, 5) : null,
+            inactivityPeriod: inactivityPeriod,
+            inactivityUnit: inactivityUnit,
+            repeat: {
+              type: firstSchedule.frequency || 'once',
+              endDate: null
+            },
+            createdAt: firstSchedule.created_at,
+            updatedAt: firstSchedule.updated_at,
+            source: 'database',
+            dbScheduleIds: group.schedules.map(s => s.id),
+            isKnowledge: group.group_type === 'knowledge',
+            isUserCreated: group.group_type === 'user_created'
+          };
+        });
+        
+        console.log('Formatted schedules:', formattedSchedules); // Debug log
+        setSchedules(formattedSchedules);
+        return;
+      }
+    }
+    
+    // Fallback to existing method if new API fails or returns empty
+    console.log('Falling back to old method...');
+    const dbId = await getPageDbId(pageId);
+    setPageDbId(dbId);
+    
+    // โหลดจาก localStorage และ database แบบเดิม
+    const localSchedules = loadLocalSchedules(pageId);
+    const dbSchedules = await loadDatabaseSchedules(dbId);
+    const allSchedules = [...localSchedules, ...dbSchedules];
+    
+    // กรองให้เหลือ schedule เดียวต่อกลุ่ม
+    const uniqueSchedules = [];
+    const seenGroups = new Set();
+    
+    allSchedules.forEach(schedule => {
+      const groupKey = schedule.groups.join(',');
+      if (!seenGroups.has(groupKey)) {
+        seenGroups.add(groupKey);
+        uniqueSchedules.push(schedule);
+      }
+    });
+    
+    setSchedules(uniqueSchedules);
+    
+  } catch (error) {
+    console.error('Error loading schedules:', error);
+    
+    // ถ้า error ให้ใช้วิธีเดิม
     try {
       const dbId = await getPageDbId(pageId);
       setPageDbId(dbId);
-
-      // 1. โหลด schedules จาก localStorage สำหรับ default groups
       const localSchedules = loadLocalSchedules(pageId);
-
-      // 2. โหลด schedules จาก database สำหรับ user groups
       const dbSchedules = await loadDatabaseSchedules(dbId);
-
-      // 3. รวมทั้งสองแหล่งข้อมูล - กรองให้เหลือ schedule เดียวต่อกลุ่ม
       const allSchedules = [...localSchedules, ...dbSchedules];
       
-      // Group schedules by group and take only the first one
       const uniqueSchedules = [];
       const seenGroups = new Set();
       
@@ -81,13 +158,14 @@ function ScheduleDashboard() {
       });
       
       setSchedules(uniqueSchedules);
-
-    } catch (error) {
-      console.error('Error loading schedules:', error);
-    } finally {
-      setLoading(false);
+    } catch (fallbackError) {
+      console.error('Fallback also failed:', fallbackError);
+      setSchedules([]);
     }
-  };
+  } finally {
+    setLoading(false);
+  }
+};
 
   // โหลด schedules จาก localStorage สำหรับ default groups
   const loadLocalSchedules = (pageId) => {
@@ -237,37 +315,38 @@ function ScheduleDashboard() {
 
   // ดึงตัวเลขจาก send_after_inactive string
   const extractInactivityPeriod = (sendAfterInactive) => {
-    if (!sendAfterInactive) return '1';
-    const match = sendAfterInactive.match(/(\d+)/);
-    return match ? match[1] : '1';
-  };
+  if (!sendAfterInactive) return '0';
+  
+  // ถ้าเป็น string format "X days" หรือ "X hours" etc.
+  const match = sendAfterInactive.match(/(\d+)\s+(\w+)/);
+  if (match) {
+    return match[1]; // คืนค่าตัวเลข
+  }
+  
+  // ถ้าเป็น format เก่า (timedelta string)
+  const oldMatch = sendAfterInactive.match(/(\d+)/);
+  return oldMatch ? oldMatch[1] : '0';
+};
 
   // ดึงหน่วยเวลาจาก send_after_inactive string
   const extractInactivityUnit = (sendAfterInactive) => {
-    if (!sendAfterInactive) return 'days';
-    if (sendAfterInactive.includes('minute')) return 'minutes';
-    if (sendAfterInactive.includes('hour')) return 'hours';
-    if (sendAfterInactive.includes('day')) return 'days';
-    if (sendAfterInactive.includes('week')) return 'weeks';
-    if (sendAfterInactive.includes('month')) return 'months';
-    return 'days';
-  };
-
-  // ดึงข้อความของ schedule
-  const getScheduleMessages = async (messageId) => {
-    try {
-      // สำหรับ database schedules, messageId คือ customer_type_message_id
-      // ต้องดึงข้อความจาก group messages API
-      if (!pageDbId) return [];
-      
-      // Note: อาจต้องเพิ่ม API endpoint เพื่อดึงข้อความตาม message ID
-      // หรือเก็บข้อความไว้ใน schedule
-      return [];
-    } catch (error) {
-      console.error('Error loading schedule messages:', error);
-      return [];
-    }
-  };
+  if (!sendAfterInactive) return 'days';
+  
+  // ถ้าเป็น string format "X days" หรือ "X hours" etc.
+  const match = sendAfterInactive.match(/(\d+)\s+(\w+)/);
+  if (match) {
+    return match[2]; // คืนค่าหน่วย (days, hours, minutes, etc.)
+  }
+  
+  // ถ้าเป็น format เก่า ให้พยายามหาหน่วย
+  if (sendAfterInactive.includes('minute')) return 'minutes';
+  if (sendAfterInactive.includes('hour')) return 'hours';
+  if (sendAfterInactive.includes('day')) return 'days';
+  if (sendAfterInactive.includes('week')) return 'weeks';
+  if (sendAfterInactive.includes('month')) return 'months';
+  
+  return 'days'; // default
+};
 
  
 
@@ -345,18 +424,40 @@ function ScheduleDashboard() {
   };
 
   const getScheduleDescription = (schedule) => {
-    if (schedule.type === 'immediate') return 'ส่งทันที';
-    if (schedule.type === 'scheduled') return `${new Date(schedule.date).toLocaleDateString('th-TH')} ${schedule.time}`;
-    if (schedule.type === 'user-inactive') {
-      return `${schedule.inactivityPeriod} ${
-        schedule.inactivityUnit === 'minutes' ? 'นาที' :
-        schedule.inactivityUnit === 'hours' ? 'ชั่วโมง' :
-        schedule.inactivityUnit === 'days' ? 'วัน' :
-        schedule.inactivityUnit === 'weeks' ? 'สัปดาห์' : 'เดือน'
-      }`;
+  if (schedule.type === 'immediate') return 'ส่งทันที';
+  
+  if (schedule.type === 'scheduled') {
+    const date = schedule.date ? new Date(schedule.date).toLocaleDateString('th-TH', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }) : 'ไม่ระบุวันที่';
+    const time = schedule.time || 'ไม่ระบุเวลา';
+    return `${date} เวลา ${time} น.`;
+  }
+  
+  if (schedule.type === 'user-inactive') {
+    const period = schedule.inactivityPeriod || '0';
+    const unit = schedule.inactivityUnit || 'days';
+    
+    // แปลงหน่วยเป็นภาษาไทย
+    const unitText = 
+      unit === 'minutes' ? 'นาที' :
+      unit === 'hours' ? 'ชั่วโมง' :
+      unit === 'days' ? 'วัน' :
+      unit === 'weeks' ? 'สัปดาห์' :
+      unit === 'months' ? 'เดือน' : unit;
+    
+    // ถ้าเป็น 0 ให้แสดงข้อความพิเศษ
+    if (period === '0' || period === 0) {
+      return 'ไม่ได้ตั้งเวลา';
     }
-    return '-';
-  };
+    
+    return `${period} ${unitText}`;
+  }
+  
+  return '-';
+};
 
   const deleteSchedule = async (schedule) => {
     if (!window.confirm('คุณต้องการลบตารางเวลานี้หรือไม่?')) return;
