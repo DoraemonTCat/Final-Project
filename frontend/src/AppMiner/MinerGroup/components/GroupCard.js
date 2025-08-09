@@ -85,7 +85,7 @@ const GroupCard = ({
               e.stopPropagation();
               onStartEdit(group);
             }} className="action-btn edit-name-btn">
-              ✏️ แก้ไข
+              ✏️ 
             </button>
           )}
           
@@ -94,7 +94,7 @@ const GroupCard = ({
               e.stopPropagation();
               onEditMessages(group.id);
             }} className="action-btn edit-message-btn">
-              💬 ข้อความ
+              💬 
             </button>
           )}
           

@@ -325,3 +325,14 @@ export async function getPageCustomerTypeKnowledge(pageId) {
   if (!res.ok) throw new Error("ไม่สามารถโหลด page customer type knowledge ได้");
   return res.json();
 }
+
+// ฟังก์ชันสำหรับอัพเดท Knowledge Type
+export async function updateCustomerTypeKnowledge(knowledgeId, updateData) {
+  const res = await fetch(`http://localhost:8000/customer-type-knowledge/${knowledgeId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updateData),
+  });
+  if (!res.ok) throw new Error("ไม่สามารถแก้ไข knowledge type ได้");
+  return res.json();
+}

@@ -457,6 +457,7 @@ async def debug_knowledge_types(db: Session = Depends(get_db)):
 
 # ==================== Helper Functions ====================
 
+# API สำหรับสร้าง default page_customer_type_knowledge records
 async def _create_default_page_knowledge_records(db: Session, page_db_id: int):
     """Helper function สำหรับสร้าง default page_customer_type_knowledge records"""
     logger.info(f"Creating default page_customer_type_knowledge records for page {page_db_id}")
@@ -485,3 +486,86 @@ async def _create_default_page_knowledge_records(db: Session, page_db_id: int):
         db.rollback()
         logger.error(f"Error creating page_knowledge records: {e}")
         return []
+    
+# เพิ่ม API สำหรับแก้ไข knowledge type
+@router.put("/customer-type-knowledge/{knowledge_id}")
+async def update_customer_type_knowledge(
+    knowledge_id: int,
+    update_data: dict,
+    db: Session = Depends(get_db)
+):
+    """แก้ไขข้อมูล customer type knowledge"""
+    try:
+        # ค้นหา knowledge type
+        knowledge_type = db.query(models.CustomerTypeKnowledge).filter(
+            models.CustomerTypeKnowledge.id == knowledge_id
+        ).first()
+        
+        if not knowledge_type:
+            raise HTTPException(status_code=404, detail="Knowledge type not found")
+        
+        # ใช้ raw SQL สำหรับอัพเดท ARRAY fields
+        update_fields = []
+        params = {"id": knowledge_id}
+        
+        if 'type_name' in update_data:
+            update_fields.append("type_name = :type_name")
+            params["type_name"] = update_data['type_name']
+            
+        if 'rule_description' in update_data:
+            update_fields.append("rule_description = :rule_description")
+            params["rule_description"] = update_data['rule_description']
+            
+        if 'keywords' in update_data:
+            keywords_str = update_data['keywords']
+            if isinstance(keywords_str, str):
+                keywords_array = [k.strip() for k in keywords_str.split(',') if k.strip()]
+            else:
+                keywords_array = keywords_str if isinstance(keywords_str, list) else []
+            
+            # สำหรับ PostgreSQL ARRAY
+            update_fields.append("keywords = :keywords")
+            params["keywords"] = keywords_array
+            
+        if 'examples' in update_data:
+            examples_str = update_data['examples']
+            if isinstance(examples_str, str):
+                examples_array = [e.strip() for e in examples_str.split('\n') if e.strip()]
+            else:
+                examples_array = examples_str if isinstance(examples_str, list) else []
+            
+            # สำหรับ PostgreSQL ARRAY
+            update_fields.append("examples = :examples")
+            params["examples"] = examples_array
+        
+        if update_fields:
+            from sqlalchemy import text
+            
+            query = text(f"""
+                UPDATE customer_type_knowledge 
+                SET {', '.join(update_fields)}
+                WHERE id = :id
+                RETURNING id, type_name, rule_description, keywords, examples
+            """)
+            
+            result = db.execute(query, params)
+            db.commit()
+            
+            # ดึงข้อมูลที่อัพเดทแล้ว
+            updated_row = result.fetchone()
+            
+            return {
+                "id": updated_row[0],
+                "type_name": updated_row[1],
+                "rule_description": updated_row[2],
+                "keywords": updated_row[3] if updated_row[3] else [],
+                "examples": updated_row[4] if updated_row[4] else [],
+                "message": "อัพเดทข้อมูลสำเร็จ"
+            }
+        
+        return {"message": "ไม่มีข้อมูลที่ต้องอัพเดท"}
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating knowledge type: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
