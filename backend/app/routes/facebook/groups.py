@@ -377,7 +377,7 @@ async def toggle_page_knowledge_type(
     knowledge_id: int,
     db: Session = Depends(get_db)
 ):
-    """เปิด/ปิด knowledge type สำหรับ page"""
+    """เปิด/ปิด knowledge type สำหรับ page พร้อมจัดการ schedules"""
     try:
         page = crud.get_page_by_page_id(db, page_id)
         if not page:
@@ -391,9 +391,33 @@ async def toggle_page_knowledge_type(
         if not pk_record:
             raise HTTPException(status_code=404, detail="Record not found")
         
+        # Toggle สถานะ
         pk_record.is_enabled = not pk_record.is_enabled
         pk_record.updated_at = datetime.now()
         db.commit()
+        
+        # ถ้าปิดกลุ่ม ให้ปิด schedules ด้วย
+        if not pk_record.is_enabled:
+            # ปิดการทำงานของ schedules ที่เกี่ยวข้อง
+            from app.service.message_scheduler import message_scheduler
+            
+            group_id = f"knowledge_{knowledge_id}"
+            removed_count = 0
+            
+            # ลบ schedules ที่ active อยู่
+            if page_id in message_scheduler.active_schedules:
+                schedules_to_remove = []
+                for schedule in message_scheduler.active_schedules[page_id]:
+                    if group_id in schedule.get('groups', []):
+                        schedules_to_remove.append(schedule['id'])
+                
+                for schedule_id in schedules_to_remove:
+                    message_scheduler.remove_schedule(page_id, schedule_id)
+                    removed_count += 1
+            
+            logger.info(f"Disabled knowledge group {knowledge_id} and deactivated {removed_count} schedules")
+        else:
+            logger.info(f"Enabled knowledge group {knowledge_id}")
         
         return {
             "status": "success", 

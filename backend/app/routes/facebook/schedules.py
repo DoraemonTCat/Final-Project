@@ -328,3 +328,85 @@ async def get_all_schedules_with_details(
             status_code=500,
             content={"error": str(e)}
         )
+
+# API สำหรับปิดการทำงานของ schedules ทั้งหมดใน knowledge group ที่ถูกปิด
+@router.post("/schedule/deactivate-knowledge-group")
+async def deactivate_knowledge_group_schedules(request: Request):
+    """ปิดการทำงาน schedules ทั้งหมดของ knowledge group ที่ถูกปิด"""
+    try:
+        data = await request.json()
+        page_id = data.get('page_id')
+        knowledge_id = data.get('knowledge_id')
+        
+        if not page_id or not knowledge_id:
+            return {"status": "error", "message": "Missing required data"}
+        
+        # สร้าง group_id ในรูปแบบที่ scheduler ใช้
+        group_id = f"knowledge_{knowledge_id}"
+        
+        # หา schedules ทั้งหมดที่เกี่ยวข้องกับ group นี้
+        schedules_to_remove = []
+        for schedule_id, schedule in message_scheduler.active_schedules.get(page_id, {}).items():
+            if group_id in schedule.get('groups', []):
+                schedules_to_remove.append(schedule_id)
+        
+        # ลบ schedules ออกจาก active schedules
+        for schedule_id in schedules_to_remove:
+            message_scheduler.remove_schedule(page_id, schedule_id)
+            logger.info(f"Deactivated schedule {schedule_id} for knowledge group {knowledge_id}")
+        
+        return {
+            "status": "success",
+            "message": f"Deactivated {len(schedules_to_remove)} schedules",
+            "deactivated_count": len(schedules_to_remove)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error deactivating knowledge group schedules: {e}")
+        return {"status": "error", "message": str(e)}
+    
+# API สำหรับเปิดการทำงานของ schedules ของ knowledge group ที่ถูกเปิดกลับมา  
+@router.post("/schedule/reactivate-knowledge-group")
+async def reactivate_knowledge_group_schedules(request: Request, db: Session = Depends(get_db)):
+    """เปิดการทำงาน schedules ของ knowledge group ที่ถูกเปิดกลับมา"""
+    try:
+        data = await request.json()
+        page_id = data.get('page_id')
+        knowledge_id = data.get('knowledge_id')
+        
+        if not page_id or not knowledge_id:
+            return {"status": "error", "message": "Missing required data"}
+        
+        # ดึงข้อมูล schedules จาก database
+        page = crud.get_page_by_page_id(db, page_id)
+        if not page:
+            return {"status": "error", "message": "Page not found"}
+        
+        # ดึง schedules ของ knowledge group นี้จาก database
+        group_id = f"group_knowledge_{knowledge_id}"
+        schedules_response = await fetch(
+            f"http://localhost:8000/message-schedules/group/{page.ID}/{group_id}"
+        )
+        
+        if schedules_response.ok:
+            schedules = await schedules_response.json()
+            
+            # เปิดใช้งาน schedules ทั้งหมด
+            for schedule in schedules:
+                # แปลงข้อมูลและเพิ่มเข้า active schedules
+                formatted_schedule = {
+                    'id': schedule['id'],
+                    'type': schedule['send_type'],
+                    'groups': [f"knowledge_{knowledge_id}"],
+                    'pageId': page_id,
+                    # ... เพิ่มข้อมูลอื่นๆ ตามต้องการ
+                }
+                
+                message_scheduler.add_schedule(page_id, formatted_schedule)
+                logger.info(f"Reactivated schedule {schedule['id']} for knowledge group {knowledge_id}")
+        
+        return {"status": "success", "message": "Schedules reactivated"}
+        
+    except Exception as e:
+        logger.error(f"Error reactivating knowledge group schedules: {e}")
+        return {"status": "error", "message": str(e)}

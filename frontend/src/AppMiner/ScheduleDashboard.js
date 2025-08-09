@@ -6,11 +6,11 @@ function ScheduleDashboard() {
   const [selectedPage, setSelectedPage] = useState('');
   const [schedules, setSchedules] = useState([]);
   const [activeSchedules, setActiveSchedules] = useState([]);
-  const [refreshing, setRefreshing] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pageDbId, setPageDbId] = useState(null);
+  const [knowledgeGroupStatuses, setKnowledgeGroupStatuses] = useState({});
 
   // กลุ่ม Default IDs
   const DEFAULT_GROUP_IDS = ['default_1', 'default_2', 'default_3'];
@@ -31,6 +31,33 @@ function ScheduleDashboard() {
     }
   };
 
+  // ฟังก์ชันดึงสถานะของ knowledge groups
+  const fetchKnowledgeGroupStatuses = async (pageId) => {
+    try {
+      const response = await fetch(`http://localhost:8000/page-customer-type-knowledge/${pageId}`);
+      if (response.ok) {
+        const knowledgeGroups = await response.json();
+        const statuses = {};
+        knowledgeGroups.forEach(group => {
+          statuses[group.knowledge_id] = group.is_enabled !== false;
+        });
+        setKnowledgeGroupStatuses(statuses);
+        console.log('📊 Knowledge group statuses:', statuses);
+        return statuses;
+      }
+      return {};
+    } catch (error) {
+      console.error('Error fetching knowledge group statuses:', error);
+      return {};
+    }
+  };
+
+  // ฟังก์ชันตรวจสอบว่า knowledge group ถูกปิดหรือไม่
+  const isKnowledgeGroupEnabled = (knowledgeId) => {
+    const numericId = parseInt(knowledgeId.toString().replace('knowledge_', ''));
+    return knowledgeGroupStatuses[numericId] !== false;
+  };
+
   useEffect(() => {
     const savedPage = localStorage.getItem("selectedPage");
     if (savedPage) {
@@ -40,6 +67,59 @@ function ScheduleDashboard() {
     }
   }, []);
 
+  useEffect(() => {
+    const handleKnowledgeGroupChange = async (event) => {
+      console.log('📡 Received knowledge group status change:', event.detail);
+      
+      // ตรวจสอบว่าเป็น page เดียวกันหรือไม่
+      if (event.detail.pageId === selectedPage) {
+        const { knowledgeId, isEnabled, groupName } = event.detail;
+        
+        // อัพเดท local state ทันที
+        setKnowledgeGroupStatuses(prev => ({
+          ...prev,
+          [knowledgeId]: isEnabled
+        }));
+        
+        // แสดง notification (optional)
+        console.log(`✅ กลุ่ม "${groupName}" ${isEnabled ? 'เปิด' : 'ปิด'}ใช้งานแล้ว`);
+        
+        // รอให้ backend อัพเดทเสร็จ แล้วโหลดข้อมูลใหม่
+        setTimeout(async () => {
+          await loadAllSchedules(selectedPage);
+          await loadActiveSchedules(selectedPage);
+        }, 300);
+      }
+    };
+
+    // ลงทะเบียน event listener
+    window.addEventListener('knowledgeGroupStatusChanged', handleKnowledgeGroupChange);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('knowledgeGroupStatusChanged', handleKnowledgeGroupChange);
+    };
+  }, [selectedPage]); // Re-register เมื่อ selectedPage เปลี่ยน
+
+  // โหลดข้อมูลเมื่อ component mount หรือเมื่อเปลี่ยน page
+  useEffect(() => {
+    const savedPage = localStorage.getItem("selectedPage");
+    if (savedPage) {
+      setSelectedPage(savedPage);
+      loadAllData(savedPage);
+    }
+  }, []);
+
+  // ฟังก์ชันโหลดข้อมูลทั้งหมด
+  const loadAllData = async (pageId) => {
+    if (pageId) {
+      await fetchKnowledgeGroupStatuses(pageId);
+      await loadAllSchedules(pageId);
+      await loadActiveSchedules(pageId);
+    }
+  };
+
+  // ฟังก์ชันโหลด active schedules
   const loadActiveSchedules = async (pageId) => {
     try {
       const response = await fetch(`http://localhost:8000/active-schedules/${pageId}`);
@@ -54,97 +134,97 @@ function ScheduleDashboard() {
 
   // ฟังก์ชันโหลด schedules จากทั้ง localStorage และ database
   const loadAllSchedules = async (pageId) => {
-  setLoading(true);
-  try {
-    const response = await fetch(`http://localhost:8000/all-schedules/${pageId}`);
-    
-    if (response.ok) {
-      const data = await response.json();
-      console.log('📋 Raw data from API:', data);
-      
-      if (data.schedules && data.schedules.length > 0) {
-        const formattedSchedules = data.schedules.map(group => {
-          const firstSchedule = group.schedules[0] || {};
-          
-          // ดึงค่า inactivity period และ unit
-          const inactivityPeriod = extractInactivityPeriod(firstSchedule.send_after_inactive);
-          const inactivityUnit = extractInactivityUnit(firstSchedule.send_after_inactive);
-          
-          console.log(`📌 Group: ${group.group_name}, Messages: ${group.messages.length}, Schedules: ${group.schedule_count}`);
-          
-          return {
-            id: `${group.group_type}_${group.group_id}_${firstSchedule.send_type}`,
-            type: convertScheduleType(firstSchedule.send_type),
-            groups: [group.group_id],
-            groupNames: [group.group_name],
-            groupType: group.group_type,
-            messages: group.messages.sort((a, b) => a.order - b.order),
-            messageCount: group.messages.length,
-            date: firstSchedule.scheduled_at ? 
-              new Date(firstSchedule.scheduled_at).toISOString().split('T')[0] : null,
-            time: firstSchedule.scheduled_at ? 
-              new Date(firstSchedule.scheduled_at).toTimeString().slice(0, 5) : null,
-            inactivityPeriod: inactivityPeriod,
-            inactivityUnit: inactivityUnit,
-            repeat: {
-              type: firstSchedule.frequency || 'once',
-              endDate: null
-            },
-            createdAt: firstSchedule.created_at,
-            updatedAt: firstSchedule.updated_at,
-            source: 'database',
-            dbScheduleIds: group.all_schedule_ids || [],  // ใช้ all_schedule_ids แทน
-            isKnowledge: group.group_type === 'knowledge',
-            isUserCreated: group.group_type === 'user_created',
-            scheduleCount: group.schedule_count || 1  // จำนวน schedules ที่รวมกัน
-          };
-        });
-        
-        console.log('✅ Formatted schedules:', formattedSchedules);
-        setSchedules(formattedSchedules);
-        return;
-      }
-    }
-    
-    // Fallback to existing method if new API fails or returns empty
-    console.log('Falling back to old method...');
-    const dbId = await getPageDbId(pageId);
-    setPageDbId(dbId);
-    
-    // โหลดจาก localStorage และ database แบบเดิม
-    const localSchedules = loadLocalSchedules(pageId);
-    const dbSchedules = await loadDatabaseSchedules(dbId);
-    const allSchedules = [...localSchedules, ...dbSchedules];
-    
-    // กรองให้เหลือ schedule เดียวต่อกลุ่ม
-    const uniqueSchedules = [];
-    const seenGroups = new Set();
-    
-    allSchedules.forEach(schedule => {
-      const groupKey = schedule.groups.join(',');
-      if (!seenGroups.has(groupKey)) {
-        seenGroups.add(groupKey);
-        uniqueSchedules.push(schedule);
-      }
-    });
-    
-    setSchedules(uniqueSchedules);
-    
-  } catch (error) {
-    console.error('Error loading schedules:', error);
-    
-    // ถ้า error ให้ใช้วิธีเดิม
+    setLoading(true);
     try {
+      // ดึงสถานะ knowledge groups ล่าสุด
+      const statuses = await fetchKnowledgeGroupStatuses(pageId);
+      
+      const response = await fetch(`http://localhost:8000/all-schedules/${pageId}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📋 Raw schedules data:', data);
+        
+        if (data.schedules && data.schedules.length > 0) {
+          const formattedSchedules = data.schedules.map(group => {
+            const firstSchedule = group.schedules[0] || {};
+            
+            const inactivityPeriod = extractInactivityPeriod(firstSchedule.send_after_inactive);
+            const inactivityUnit = extractInactivityUnit(firstSchedule.send_after_inactive);
+            
+            return {
+              id: `${group.group_type}_${group.group_id}_${firstSchedule.send_type}`,
+              type: convertScheduleType(firstSchedule.send_type),
+              groups: [group.group_id],
+              groupNames: [group.group_name],
+              groupType: group.group_type,
+              messages: group.messages.sort((a, b) => a.order - b.order),
+              messageCount: group.messages.length,
+              date: firstSchedule.scheduled_at ? 
+                new Date(firstSchedule.scheduled_at).toISOString().split('T')[0] : null,
+              time: firstSchedule.scheduled_at ? 
+                new Date(firstSchedule.scheduled_at).toTimeString().slice(0, 5) : null,
+              inactivityPeriod: inactivityPeriod,
+              inactivityUnit: inactivityUnit,
+              repeat: {
+                type: firstSchedule.frequency || 'once',
+                endDate: null
+              },
+              createdAt: firstSchedule.created_at,
+              updatedAt: firstSchedule.updated_at,
+              source: 'database',
+              dbScheduleIds: group.all_schedule_ids || [],
+              isKnowledge: group.group_type === 'knowledge',
+              isUserCreated: group.group_type === 'user_created',
+              scheduleCount: group.schedule_count || 1
+            };
+          });
+          
+          // 🔥 กรอง schedules ของ knowledge groups ที่ถูกปิด
+          const filteredSchedules = formattedSchedules.filter(schedule => {
+            if (schedule.isKnowledge) {
+              const knowledgeId = schedule.groups[0];
+              const numericId = parseInt(knowledgeId.toString().replace('knowledge_', ''));
+              const isEnabled = statuses[numericId] !== false;
+              
+              if (!isEnabled) {
+                console.log(`🚫 Hiding disabled knowledge group schedule: ${schedule.groupNames[0]}`);
+                return false;
+              }
+            }
+            return true;
+          });
+          
+          console.log(`✅ Showing ${filteredSchedules.length} of ${formattedSchedules.length} schedules`);
+          setSchedules(filteredSchedules);
+          return;
+        }
+      }
+      
+      // Fallback method
+      console.log('Using fallback method...');
       const dbId = await getPageDbId(pageId);
       setPageDbId(dbId);
+      
       const localSchedules = loadLocalSchedules(pageId);
       const dbSchedules = await loadDatabaseSchedules(dbId);
       const allSchedules = [...localSchedules, ...dbSchedules];
       
+      // กรอง schedules ตาม statuses
+      const filteredSchedules = allSchedules.filter(schedule => {
+        if (schedule.isKnowledge) {
+          const knowledgeId = schedule.groups[0] || schedule.groupId;
+          const numericId = parseInt(knowledgeId.toString().replace('knowledge_', ''));
+          return statuses[numericId] !== false;
+        }
+        return true;
+      });
+      
+      // กรองให้เหลือ schedule เดียวต่อกลุ่ม
       const uniqueSchedules = [];
       const seenGroups = new Set();
       
-      allSchedules.forEach(schedule => {
+      filteredSchedules.forEach(schedule => {
         const groupKey = schedule.groups.join(',');
         if (!seenGroups.has(groupKey)) {
           seenGroups.add(groupKey);
@@ -153,14 +233,14 @@ function ScheduleDashboard() {
       });
       
       setSchedules(uniqueSchedules);
-    } catch (fallbackError) {
-      console.error('Fallback also failed:', fallbackError);
+      
+    } catch (error) {
+      console.error('Error loading schedules:', error);
       setSchedules([]);
+    } finally {
+      setLoading(false);
     }
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   // โหลด schedules จาก localStorage สำหรับ default groups
   const loadLocalSchedules = (pageId) => {
@@ -384,8 +464,7 @@ function ScheduleDashboard() {
           })
         });
 
-        if (!response.ok) throw new Error('Failed to deactivate');
-        alert("หยุดการทำงานสำเร็จ!");
+        
       } else {
         const response = await fetch('http://localhost:8000/schedule/activate', {
           method: 'POST',
@@ -401,8 +480,6 @@ function ScheduleDashboard() {
           })
         });
 
-        if (!response.ok) throw new Error('Failed to activate');
-        alert("เปิดใช้งานสำเร็จ!");
       }
 
       await loadActiveSchedules(selectedPage);

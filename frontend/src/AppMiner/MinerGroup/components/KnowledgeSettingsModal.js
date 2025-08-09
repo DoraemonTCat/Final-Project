@@ -8,7 +8,7 @@ const KnowledgeSettingsModal = ({ show, onClose, pageId, knowledgeGroups, onTogg
     if (knowledgeGroups.length > 0) {
       const initialSettings = {};
       knowledgeGroups.forEach(group => {
-        initialSettings[group.knowledge_id] = group.is_active;
+        initialSettings[group.knowledge_id] = group.is_enabled !== false;
       });
       setSettings(initialSettings);
     }
@@ -32,7 +32,19 @@ const KnowledgeSettingsModal = ({ show, onClose, pageId, knowledgeGroups, onTogg
         [knowledgeId]: result.is_enabled
       }));
 
-      // เรียก callback เพื่ออัพเดทข้อมูลใน parent
+      // 🔥 ส่ง custom event เพื่อแจ้งให้ทุก component รู้ว่ามีการเปลี่ยนแปลง
+      window.dispatchEvent(new CustomEvent('knowledgeGroupStatusChanged', {
+        detail: {
+          knowledgeId: knowledgeId,
+          isEnabled: result.is_enabled,
+          pageId: pageId,
+          groupName: knowledgeGroups.find(g => g.knowledge_id === knowledgeId)?.type_name || 'Unknown'
+        }
+      }));
+
+      console.log(`📡 Dispatched event: Knowledge group ${knowledgeId} is now ${result.is_enabled ? 'enabled' : 'disabled'}`);
+
+      // เรียก callback เพื่ออัพเดทข้อมูลใน parent (MinerGroup)
       onToggle();
 
     } catch (error) {
@@ -44,7 +56,6 @@ const KnowledgeSettingsModal = ({ show, onClose, pageId, knowledgeGroups, onTogg
   };
 
   if (!show) return null;
-  
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -60,11 +71,15 @@ const KnowledgeSettingsModal = ({ show, onClose, pageId, knowledgeGroups, onTogg
         <div className="modal-body">
           <p className="settings-description">
             เลือกกลุ่มพื้นฐานที่ต้องการใช้งานสำหรับเพจนี้
+            <br />
+            <small style={{ color: '#e53e3e' }}>
+              ⚠️ การปิดกลุ่มจะทำให้ schedule ที่เกี่ยวข้องถูกซ่อนจาก Dashboard ทันที
+            </small>
           </p>
 
           <div className="knowledge-list">
             {knowledgeGroups.map((group) => (
-              <div key={group.id} className="knowledge-item">
+              <div key={group.id} className={`knowledge-item ${!settings[group.knowledge_id] ? 'disabled' : ''}`}>
                 <div className="knowledge-info">
                   <span className="knowledge-icon">{group.icon || '📋'}</span>
                   <div className="knowledge-details">
@@ -72,6 +87,7 @@ const KnowledgeSettingsModal = ({ show, onClose, pageId, knowledgeGroups, onTogg
                     <p className="knowledge-description">
                       {group.rule_description || 'ไม่มีคำอธิบาย'}
                     </p>
+                    
                   </div>
                 </div>
                 
@@ -269,6 +285,7 @@ const KnowledgeSettingsModal = ({ show, onClose, pageId, knowledgeGroups, onTogg
           transform: translateY(-2px);
           box-shadow: 0 6px 12px rgba(102, 126, 234, 0.3);
         }
+        
       `}</style>
     </div>
   );

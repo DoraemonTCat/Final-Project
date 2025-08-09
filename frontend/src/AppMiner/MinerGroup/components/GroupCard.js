@@ -115,6 +115,8 @@ const GroupCard = ({
           )}
         </div>
       </div>
+
+      
       
       {!isKnowledge && !isDefault && !isDisabled && (
         <button
@@ -127,7 +129,10 @@ const GroupCard = ({
         >
           🗑️
         </button>
+        
       )}
+
+      
     </div>
   );
 };
