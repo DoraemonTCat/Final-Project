@@ -32,13 +32,17 @@ export const useSchedules = (customerGroups, selectedPage) => {
     // ตรวจสอบว่าเป็น knowledge group หรือไม่
     const isKnowledge = groupId && groupId.toString().startsWith('knowledge_');
     
-    // สร้าง search ID ที่ถูกต้อง
-    const searchGroupId = isKnowledge ? 
-      `group_knowledge_${groupId.replace('knowledge_', '')}` : 
-      groupId;
+    // ไม่ต้องแปลง format - ส่ง groupId ตรงๆ
+    const searchGroupId = groupId;
+    
+    console.log(`Fetching schedules for group: ${searchGroupId}, isKnowledge: ${isKnowledge}`);
     
     const response = await fetch(`http://localhost:8000/message-schedules/group/${dbId}/${searchGroupId}`);
-    if (!response.ok) return [];
+    
+    if (!response.ok) {
+      console.error(`Failed to fetch schedules for group ${searchGroupId}: ${response.status}`);
+      return [];
+    }
     
     const schedules = await response.json();
     

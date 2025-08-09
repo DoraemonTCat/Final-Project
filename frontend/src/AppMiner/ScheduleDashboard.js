@@ -60,26 +60,20 @@ function ScheduleDashboard() {
     
     if (response.ok) {
       const data = await response.json();
-      console.log('Raw data from API:', data); // Debug log
+      console.log('📋 Raw data from API:', data);
       
       if (data.schedules && data.schedules.length > 0) {
         const formattedSchedules = data.schedules.map(group => {
           const firstSchedule = group.schedules[0] || {};
           
-          console.log('Processing group:', group.group_name, 'Schedule:', firstSchedule); // Debug log
-          
           // ดึงค่า inactivity period และ unit
           const inactivityPeriod = extractInactivityPeriod(firstSchedule.send_after_inactive);
           const inactivityUnit = extractInactivityUnit(firstSchedule.send_after_inactive);
           
-          console.log('Extracted:', {
-            period: inactivityPeriod,
-            unit: inactivityUnit,
-            original: firstSchedule.send_after_inactive
-          }); // Debug log
+          console.log(`📌 Group: ${group.group_name}, Messages: ${group.messages.length}, Schedules: ${group.schedule_count}`);
           
           return {
-            id: `${group.group_type}_${group.group_id}`,
+            id: `${group.group_type}_${group.group_id}_${firstSchedule.send_type}`,
             type: convertScheduleType(firstSchedule.send_type),
             groups: [group.group_id],
             groupNames: [group.group_name],
@@ -99,13 +93,14 @@ function ScheduleDashboard() {
             createdAt: firstSchedule.created_at,
             updatedAt: firstSchedule.updated_at,
             source: 'database',
-            dbScheduleIds: group.schedules.map(s => s.id),
+            dbScheduleIds: group.all_schedule_ids || [],  // ใช้ all_schedule_ids แทน
             isKnowledge: group.group_type === 'knowledge',
-            isUserCreated: group.group_type === 'user_created'
+            isUserCreated: group.group_type === 'user_created',
+            scheduleCount: group.schedule_count || 1  // จำนวน schedules ที่รวมกัน
           };
         });
         
-        console.log('Formatted schedules:', formattedSchedules); // Debug log
+        console.log('✅ Formatted schedules:', formattedSchedules);
         setSchedules(formattedSchedules);
         return;
       }
@@ -460,37 +455,41 @@ function ScheduleDashboard() {
 };
 
   const deleteSchedule = async (schedule) => {
-    if (!window.confirm('คุณต้องการลบตารางเวลานี้หรือไม่?')) return;
+  if (!window.confirm('คุณต้องการลบตารางเวลานี้หรือไม่?')) return;
 
-    try {
-      if (schedule.source === 'database') {
-        // ลบ schedules ทั้งหมดของกลุ่มนี้จาก database
-        if (schedule.dbScheduleIds && schedule.dbScheduleIds.length > 0) {
-          for (const scheduleId of schedule.dbScheduleIds) {
-            const response = await fetch(`http://localhost:8000/message-schedules/${scheduleId}`, {
-              method: 'DELETE'
-            });
-            
-            if (!response.ok) {
-              console.error(`Failed to delete schedule ${scheduleId}`);
-            }
+  try {
+    if (schedule.source === 'database') {
+      // ลบ schedules ทั้งหมดที่เกี่ยวข้องกับกลุ่มนี้
+      if (schedule.dbScheduleIds && schedule.dbScheduleIds.length > 0) {
+        console.log(`🗑️ Deleting ${schedule.dbScheduleIds.length} schedules`);
+        
+        for (const scheduleId of schedule.dbScheduleIds) {
+          const response = await fetch(`http://localhost:8000/message-schedules/${scheduleId}`, {
+            method: 'DELETE'
+          });
+          
+          if (!response.ok) {
+            console.error(`Failed to delete schedule ${scheduleId}`);
           }
         }
-      } else {
-        // ลบจาก localStorage
-        const key = `miningSchedules_${selectedPage}`;
-        const savedSchedules = JSON.parse(localStorage.getItem(key) || '[]');
-        const updatedSchedules = savedSchedules.filter(s => s.id !== schedule.id);
-        localStorage.setItem(key, JSON.stringify(updatedSchedules));
+        
+        console.log('✅ All related schedules deleted');
       }
-
-      await loadAllSchedules(selectedPage);
-      alert('ลบตารางเวลาสำเร็จ!');
-    } catch (error) {
-      console.error('Error deleting schedule:', error);
-      alert('เกิดข้อผิดพลาดในการลบตารางเวลา');
+    } else {
+      // ลบจาก localStorage
+      const key = `miningSchedules_${selectedPage}`;
+      const savedSchedules = JSON.parse(localStorage.getItem(key) || '[]');
+      const updatedSchedules = savedSchedules.filter(s => s.id !== schedule.id);
+      localStorage.setItem(key, JSON.stringify(updatedSchedules));
     }
-  };
+
+    await loadAllSchedules(selectedPage);
+    alert('ลบตารางเวลาสำเร็จ!');
+  } catch (error) {
+    console.error('Error deleting schedule:', error);
+    alert('เกิดข้อผิดพลาดในการลบตารางเวลา');
+  }
+};
 
   const goToMinerGroup = () => {
     window.location.href = '/MinerGroup';
@@ -677,17 +676,17 @@ function ScheduleDashboard() {
             <div className="modal-body">
               <div className="detail-section">
                 <h4>ข้อมูลทั่วไป</h4>
+                <p><strong>กลุ่ม:</strong> {selectedSchedule.groupNames?.join(', ') || 'ไม่ระบุ'}
+                  {selectedSchedule.isKnowledge && (
+                    <span className="knowledge-badge-small" style={{ marginLeft: '8px' }}>พื้นฐาน</span>
+                  )}
+                </p>
                 <p><strong>ประเภท:</strong> {
                   selectedSchedule.type === 'immediate' ? 'ส่งทันที' :
                   selectedSchedule.type === 'scheduled' ? 'ตามเวลา' : 'User หายไป'
                 }</p>
-                <p><strong>กลุ่ม:</strong> {selectedSchedule.groupNames?.join(', ') || 'ไม่ระบุ'}
-                  {isDefaultGroup(selectedSchedule.groups || []) && (
-                    <span className="default-badge-small" style={{ marginLeft: '8px' }}>พื้นฐาน</span>
-                  )}
-                </p>
                 <p><strong>เงื่อนไข:</strong> {getScheduleDescription(selectedSchedule)}</p>
-               
+                
                 {selectedSchedule.repeat && selectedSchedule.repeat.type !== 'once' && (
                   <p><strong>ทำซ้ำ:</strong> {
                     selectedSchedule.repeat.type === 'daily' ? 'ทุกวัน' :
@@ -697,7 +696,7 @@ function ScheduleDashboard() {
               </div>
 
               <div className="detail-section">
-                <h4>ข้อความ ({getMessageCount(selectedSchedule)})</h4>
+                <h4>ข้อความในกลุ่ม ({getMessageCount(selectedSchedule)} ข้อความ)</h4>
                 <div className="messages-list">
                   {selectedSchedule.messages && selectedSchedule.messages.length > 0 ? (
                     selectedSchedule.messages.map((msg, idx) => (
@@ -718,14 +717,20 @@ function ScheduleDashboard() {
               </div>
 
               <div className="detail-section">
-                <h4>สถานะ</h4>
-                <p><strong>สถานะปัจจุบัน:</strong> {getScheduleStatus(selectedSchedule)}</p>
+                <h4>สถานะและการตั้งค่า</h4>
+                <p><strong>สถานะปัจจุบัน:</strong> 
+                  <span style={{ 
+                    color: getStatusColor(getScheduleStatus(selectedSchedule)),
+                    fontWeight: 'bold',
+                    marginLeft: '8px'
+                  }}>
+                    {getScheduleStatus(selectedSchedule)}
+                  </span>
+                </p>
+                <p><strong>จำนวน Schedule IDs:</strong> {selectedSchedule.dbScheduleIds?.length || 0} รายการ</p>
                 <p><strong>สร้างเมื่อ:</strong> {new Date(selectedSchedule.createdAt || Date.now()).toLocaleString('th-TH')}</p>
                 {selectedSchedule.updatedAt && (
                   <p><strong>แก้ไขล่าสุด:</strong> {new Date(selectedSchedule.updatedAt).toLocaleString('th-TH')}</p>
-                )}
-                {selectedSchedule.dbScheduleId && (
-                  <p><strong>Schedule ID (DB):</strong> {selectedSchedule.dbScheduleId}</p>
                 )}
               </div>
             </div>

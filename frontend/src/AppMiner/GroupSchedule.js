@@ -5,7 +5,7 @@ import { fetchPages, connectFacebook } from "../Features/Tool";
 import Sidebar from "./Sidebar"; 
 
 function GroupSchedule() {
-  // State declarations (คงเดิม)
+  // State declarations 
   const [pages, setPages] = useState([]);
   const [selectedPage, setSelectedPage] = useState("");
   const [selectedGroups, setSelectedGroups] = useState([]);
@@ -316,26 +316,72 @@ const toggleDropdown = () => {
 
   // ฟังก์ชันบันทึก schedule หลักที่รองรับทั้ง user groups และ knowledge groups
   const saveSchedule = async () => {
-    if (!validateSchedule()) return;
+  if (!validateSchedule()) return;
+  
+  setSavingSchedule(true);
+  
+  try {
+    const dbId = await getPageDbId(selectedPage);
+    if (!dbId) {
+      alert('ไม่พบข้อมูลเพจในระบบ');
+      return;
+    }
     
-    setSavingSchedule(true);
+    const groupId = selectedGroups[0].id;
+    const isKnowledge = isKnowledgeGroup(groupId);
     
-    try {
-      const dbId = await getPageDbId(selectedPage);
-      if (!dbId) {
-        alert('ไม่พบข้อมูลเพจในระบบ');
-        return;
+    if (isKnowledge) {
+      const knowledgeId = groupId.replace('knowledge_', '');
+      
+      // ขั้นตอนที่ 1: ลบ schedules เก่าทั้งหมด
+      console.log('🗑️ Deleting old schedules for knowledge group:', knowledgeId);
+      await deleteKnowledgeGroupSchedules(selectedPage, knowledgeId);
+      
+      // ขั้นตอนที่ 2: ดึงข้อความและสร้าง schedules ใหม่
+      const messagesResponse = await fetch(
+        `http://localhost:8000/knowledge-group-messages/${selectedPage}/${knowledgeId}`
+      );
+      
+      if (messagesResponse.ok) {
+        const messages = await messagesResponse.json();
+        const messageIds = messages.map(msg => msg.id);
+        
+        // สร้าง schedules ใหม่
+        const schedulePromises = messageIds.map(async (messageId) => {
+          const scheduleData = {
+            customer_type_message_id: messageId,
+            send_type: SCHEDULE_TYPE_MAP[scheduleType],
+            scheduled_at: scheduleType === 'scheduled' ? 
+              `${scheduleDate}T${scheduleTime}:00` : null,
+            send_after_inactive: scheduleType === 'user-inactive' ? 
+              `${inactivityPeriod} ${inactivityUnit}` : null,
+            frequency: repeatType
+          };
+          
+          const response = await fetch('http://localhost:8000/message-schedules', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(scheduleData)
+          });
+          
+          if (!response.ok) {
+            throw new Error('Failed to create schedule');
+          }
+          
+          return response.json();
+        });
+        
+        await Promise.all(schedulePromises);
+        console.log('✅ All new schedules created successfully');
       }
+    } else {
+      // สำหรับ user groups (ใช้โค้ดเดิม)
+      const dbGroupId = groupId;
       
-      const groupId = selectedGroups[0].id;
-      const isKnowledge = isKnowledgeGroup(groupId);
-      
-      const dbGroupId = isKnowledge ? 
-        `group_knowledge_${groupId.replace('knowledge_', '')}` : 
-        groupId;
-      
+      // ลบ schedules เก่า
       await deleteExistingSchedules(dbId, dbGroupId);
       
+      // โหลด message IDs
       if (!messageIds || messageIds.length === 0) {
         const ids = await loadMessageIds(dbId, groupId, isKnowledge);
         if (ids.length === 0) {
@@ -345,16 +391,17 @@ const toggleDropdown = () => {
         }
       }
       
+      // สร้าง schedules ใหม่
       const schedulePromises = messageIds.map(async (messageId) => {
         const scheduleData = {
           customer_type_message_id: messageId,
           send_type: SCHEDULE_TYPE_MAP[scheduleType],
-          scheduled_at: scheduleType === 'scheduled' ? `${scheduleDate}T${scheduleTime}:00` : null,
-          send_after_inactive: scheduleType === 'user-inactive' ? `${inactivityPeriod} ${inactivityUnit}` : null,
+          scheduled_at: scheduleType === 'scheduled' ? 
+            `${scheduleDate}T${scheduleTime}:00` : null,
+          send_after_inactive: scheduleType === 'user-inactive' ? 
+            `${inactivityPeriod} ${inactivityUnit}` : null,
           frequency: repeatType
         };
-        
-        console.log('Creating schedule for message:', messageId, scheduleData);
         
         const response = await fetch('http://localhost:8000/message-schedules', {
           method: 'POST',
@@ -366,48 +413,58 @@ const toggleDropdown = () => {
         
         if (!response.ok) {
           const error = await response.json();
-          console.error('Schedule save error:', error);
           throw new Error(`Failed to save schedule: ${error.detail || 'Unknown error'}`);
         }
         
         return response.json();
       });
       
-      const results = await Promise.all(schedulePromises);
-      console.log('All schedules saved:', results);
-      alert("บันทึกการตั้งเวลาสำเร็จ!");
-      
-      localStorage.removeItem("selectedCustomerGroups");
-      localStorage.removeItem("selectedCustomerGroupsPageId");
-      localStorage.removeItem("editingScheduleId");
-      
-      navigate('/MinerGroup');
-      
-    } catch (error) {
-      console.error('Error saving schedule:', error);
-      alert('เกิดข้อผิดพลาดในการบันทึกการตั้งเวลา: ' + error.message);
-    } finally {
-      setSavingSchedule(false);
+      await Promise.all(schedulePromises);
     }
-  };
+    
+    alert("บันทึกการตั้งเวลาสำเร็จ!");
+    
+    localStorage.removeItem("selectedCustomerGroups");
+    localStorage.removeItem("selectedCustomerGroupsPageId");
+    localStorage.removeItem("editingScheduleId");
+    
+    navigate('/MinerGroup');
+    
+  } catch (error) {
+    console.error('❌ Error saving schedule:', error);
+    alert('เกิดข้อผิดพลาดในการบันทึกการตั้งเวลา: ' + error.message);
+  } finally {
+    setSavingSchedule(false);
+  }
+};
+
   // ฟังก์ชันช่วยในการลบ schedules เก่า
   const deleteExistingSchedules = async (dbId, dbGroupId) => {
-    try {
-      const existingSchedulesResponse = await fetch(`http://localhost:8000/message-schedules/group/${dbId}/${dbGroupId}`);
-      if (existingSchedulesResponse.ok) {
-        const existingSchedules = await existingSchedulesResponse.json();
-        
-        for (const oldSchedule of existingSchedules) {
-          await fetch(`http://localhost:8000/message-schedules/${oldSchedule.id}`, {
-            method: 'DELETE'
-          });
-          console.log(`Deleted old schedule: ${oldSchedule.id}`);
-        }
+  try {
+    console.log('🔍 Checking for existing schedules for group:', dbGroupId);
+    
+    const existingSchedulesResponse = await fetch(
+      `http://localhost:8000/message-schedules/group/${dbId}/${dbGroupId}`
+    );
+    
+    if (existingSchedulesResponse.ok) {
+      const existingSchedules = await existingSchedulesResponse.json();
+      console.log(`📋 Found ${existingSchedules.length} existing schedules to delete`);
+      
+      for (const oldSchedule of existingSchedules) {
+        console.log(`🗑️ Deleting old schedule: ${oldSchedule.id}`);
+        await fetch(`http://localhost:8000/message-schedules/${oldSchedule.id}`, {
+          method: 'DELETE'
+        });
       }
-    } catch (error) {
-      console.error('Error deleting old schedules:', error);
+      
+      console.log('✅ All old schedules deleted successfully');
     }
-  };
+  } catch (error) {
+    console.error('❌ Error deleting old schedules:', error);
+    // ไม่ throw error เพื่อให้สามารถดำเนินการสร้าง schedule ใหม่ต่อได้
+  }
+};
 
   // ฟังก์ชันช่วยในการโหลด message IDs
   const loadMessageIds = async (dbId, groupId, isKnowledge) => {
@@ -491,6 +548,26 @@ const toggleDropdown = () => {
     
     return summary;
   };
+
+  const deleteKnowledgeGroupSchedules = async (pageId, knowledgeId) => {
+  try {
+    const response = await fetch(
+      `http://localhost:8000/message-schedules/knowledge-group/${pageId}/${knowledgeId}`,
+      { method: 'DELETE' }
+    );
+    
+    if (!response.ok) {
+      throw new Error('Failed to delete schedules');
+    }
+    
+    const result = await response.json();
+    console.log('✅ Deleted schedules:', result);
+    return result;
+  } catch (error) {
+    console.error('Error deleting knowledge group schedules:', error);
+    throw error;
+  }
+};
 
   const selectedPageInfo = pages.find(p => p.id === selectedPage);
   const isForKnowledgeGroup = selectedGroups.some(g => g.isKnowledge);

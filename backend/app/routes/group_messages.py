@@ -410,63 +410,123 @@ async def create_message_schedule(
         logger.error(f"Error creating message schedule: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
+#API สำหรับดึง schedules ทั้งหมดของกลุ่มลูกค้า
 @router.get("/message-schedules/group/{page_id}/{group_id}")
 async def get_group_schedules(
     page_id: int,
-    group_id: str,  # รองรับทั้ง ID ตัวเลขและ default_x
+    group_id: str,  # รองรับทั้ง ID ตัวเลขและ knowledge_x
     db: Session = Depends(get_db)
 ):
     """ดึง schedules ทั้งหมดของกลุ่มลูกค้า"""
     try:
-        # ตรวจสอบว่าเป็น default group หรือไม่
-        if group_id.startswith('default_'):
-            return []  # default groups ไม่มี schedules ใน database
-        
-        # แปลง group_id เป็น integer สำหรับ user groups
-        try:
-            group_id_int = int(group_id)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid group ID format")
-        
-        # ดึงข้อความทั้งหมดของกลุ่ม
-        messages = db.query(models.CustomerTypeMessage).filter(
-            models.CustomerTypeMessage.page_id == page_id,
-            models.CustomerTypeMessage.customer_type_custom_id == group_id_int
-        ).all()
-        
-        if not messages:
-            return []
-        
-        message_ids = [msg.id for msg in messages]
-        
-        # ดึง schedules ของข้อความเหล่านั้น
-        schedules = db.query(models.MessageSchedule).filter(
-            models.MessageSchedule.customer_type_message_id.in_(message_ids)
-        ).all()
-        
-        # แปลง interval เป็น string
-        result = []
-        for schedule in schedules:
-            schedule_dict = {
-                "id": schedule.id,
-                "customer_type_message_id": schedule.customer_type_message_id,
-                "send_type": schedule.send_type,
-                "scheduled_at": schedule.scheduled_at,
-                "frequency": schedule.frequency,
-                "created_at": schedule.created_at,
-                "updated_at": schedule.updated_at,
-                "send_after_inactive": _format_interval_to_string(schedule.send_after_inactive)
-            }
-            result.append(schedule_dict)
-        
-        return result
+        # ตรวจสอบว่าเป็น knowledge group หรือไม่
+        if group_id.startswith('knowledge_') or group_id.startswith('group_knowledge_'):
+            # แยก knowledge_id ออกมา
+            if group_id.startswith('group_knowledge_'):
+                knowledge_id = int(group_id.replace('group_knowledge_', ''))
+            else:
+                knowledge_id = int(group_id.replace('knowledge_', ''))
+            
+            logger.info(f"Fetching schedules for knowledge group {knowledge_id}")
+            
+            # หา page record
+            page = db.query(models.FacebookPage).filter(
+                models.FacebookPage.ID == page_id
+            ).first()
+            
+            if not page:
+                logger.warning(f"Page {page_id} not found")
+                return []
+            
+            # ดึงข้อความของ knowledge group ผ่าน page_customer_type_knowledge
+            messages = db.query(models.CustomerTypeMessage).join(
+                models.PageCustomerTypeKnowledge,
+                models.CustomerTypeMessage.page_customer_type_knowledge_id == models.PageCustomerTypeKnowledge.id
+            ).filter(
+                models.PageCustomerTypeKnowledge.page_id == page_id,
+                models.PageCustomerTypeKnowledge.customer_type_knowledge_id == knowledge_id
+            ).all()
+            
+            logger.info(f"Found {len(messages)} messages for knowledge group {knowledge_id}")
+            
+            if not messages:
+                return []
+            
+            message_ids = [msg.id for msg in messages]
+            
+            # ดึง schedules ของข้อความเหล่านั้น
+            schedules = db.query(models.MessageSchedule).filter(
+                models.MessageSchedule.customer_type_message_id.in_(message_ids)
+            ).all()
+            
+            logger.info(f"Found {len(schedules)} schedules")
+            
+            # แปลง interval เป็น string
+            result = []
+            for schedule in schedules:
+                schedule_dict = {
+                    "id": schedule.id,
+                    "customer_type_message_id": schedule.customer_type_message_id,
+                    "send_type": schedule.send_type,
+                    "scheduled_at": schedule.scheduled_at,
+                    "frequency": schedule.frequency,
+                    "created_at": schedule.created_at,
+                    "updated_at": schedule.updated_at,
+                    "send_after_inactive": _format_interval_to_string(schedule.send_after_inactive)
+                }
+                result.append(schedule_dict)
+            
+            return result
+            
+        else:
+            # สำหรับ user groups - ใช้โค้ดเดิม
+            try:
+                group_id_int = int(group_id)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid group ID format")
+            
+            # ดึงข้อความทั้งหมดของกลุ่ม
+            messages = db.query(models.CustomerTypeMessage).filter(
+                models.CustomerTypeMessage.page_id == page_id,
+                models.CustomerTypeMessage.customer_type_custom_id == group_id_int
+            ).all()
+            
+            if not messages:
+                return []
+            
+            message_ids = [msg.id for msg in messages]
+            
+            # ดึง schedules ของข้อความเหล่านั้น
+            schedules = db.query(models.MessageSchedule).filter(
+                models.MessageSchedule.customer_type_message_id.in_(message_ids)
+            ).all()
+            
+            # แปลง interval เป็น string
+            result = []
+            for schedule in schedules:
+                schedule_dict = {
+                    "id": schedule.id,
+                    "customer_type_message_id": schedule.customer_type_message_id,
+                    "send_type": schedule.send_type,
+                    "scheduled_at": schedule.scheduled_at,
+                    "frequency": schedule.frequency,
+                    "created_at": schedule.created_at,
+                    "updated_at": schedule.updated_at,
+                    "send_after_inactive": _format_interval_to_string(schedule.send_after_inactive)
+                }
+                result.append(schedule_dict)
+            
+            return result
         
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error getting group schedules: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+# API สำหรับอัพเดท schedule
 @router.put("/message-schedules/{schedule_id}", response_model=MessageScheduleResponse)
 async def update_message_schedule(
     schedule_id: int,
@@ -511,6 +571,7 @@ async def update_message_schedule(
     
     return response_data
 
+#API สำหรับลบ schedule
 @router.delete("/message-schedules/{schedule_id}")
 async def delete_message_schedule(
     schedule_id: int,
@@ -528,6 +589,123 @@ async def delete_message_schedule(
     db.commit()
     
     return {"status": "success", "message": "Schedule deleted"}
+
+#  API สำหรับลบ schedules ทั้งหมดของ knowledge group
+@router.delete("/message-schedules/knowledge-group/{page_id}/{knowledge_id}")
+async def delete_knowledge_group_schedules(
+    page_id: str,
+    knowledge_id: int,
+    db: Session = Depends(get_db)
+):
+    """ลบ schedules ทั้งหมดของ knowledge group"""
+    try:
+        # หา page
+        page = crud.get_page_by_page_id(db, page_id)
+        if not page:
+            raise HTTPException(status_code=404, detail="Page not found")
+        
+        # ดึงข้อความทั้งหมดของ knowledge group
+        messages = db.query(models.CustomerTypeMessage).join(
+            models.PageCustomerTypeKnowledge,
+            models.CustomerTypeMessage.page_customer_type_knowledge_id == models.PageCustomerTypeKnowledge.id
+        ).filter(
+            models.PageCustomerTypeKnowledge.page_id == page.ID,
+            models.PageCustomerTypeKnowledge.customer_type_knowledge_id == knowledge_id
+        ).all()
+        
+        logger.info(f"Found {len(messages)} messages for knowledge group {knowledge_id}")
+        
+        deleted_count = 0
+        for message in messages:
+            # ลบ schedules ของแต่ละข้อความ
+            deleted = db.query(models.MessageSchedule).filter(
+                models.MessageSchedule.customer_type_message_id == message.id
+            ).delete(synchronize_session=False)
+            deleted_count += deleted
+        
+        db.commit()
+        
+        logger.info(f"Deleted {deleted_count} schedules for knowledge group {knowledge_id}")
+        
+        return {
+            "status": "success",
+            "deleted_count": deleted_count,
+            "message": f"ลบ schedules ทั้งหมด {deleted_count} รายการสำเร็จ"
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting knowledge group schedules: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# API สำหรับลบ schedules ทั้งหมดของกลุ่ม
+@router.delete("/message-schedules/delete-by-group")
+async def delete_schedules_by_group(
+    page_id: str,
+    group_id: str,
+    db: Session = Depends(get_db)
+):
+    """ลบ schedules ทั้งหมดของกลุ่ม"""
+    try:
+        # ตรวจสอบว่าเป็น knowledge group หรือไม่
+        if group_id.startswith('knowledge_'):
+            knowledge_id = group_id.replace('knowledge_', '')
+            
+            # ดึงข้อความทั้งหมดของ knowledge group
+            messages = db.query(models.CustomerTypeMessage).join(
+                models.PageCustomerTypeKnowledge,
+                models.CustomerTypeMessage.page_customer_type_knowledge_id == models.PageCustomerTypeKnowledge.id
+            ).filter(
+                models.PageCustomerTypeKnowledge.customer_type_knowledge_id == int(knowledge_id)
+            ).all()
+            
+            deleted_count = 0
+            for message in messages:
+                # ลบ schedules ของแต่ละข้อความ
+                deleted = db.query(models.MessageSchedule).filter(
+                    models.MessageSchedule.customer_type_message_id == message.id
+                ).delete(synchronize_session=False)
+                deleted_count += deleted
+            
+            db.commit()
+            
+            logger.info(f"Deleted {deleted_count} schedules for knowledge group {group_id}")
+            return {
+                "status": "success",
+                "deleted_count": deleted_count,
+                "group_type": "knowledge"
+            }
+        else:
+            # สำหรับ user groups
+            page = crud.get_page_by_page_id(db, page_id)
+            if not page:
+                raise HTTPException(status_code=404, detail="Page not found")
+            
+            messages = db.query(models.CustomerTypeMessage).filter(
+                models.CustomerTypeMessage.page_id == page.ID,
+                models.CustomerTypeMessage.customer_type_custom_id == int(group_id)
+            ).all()
+            
+            deleted_count = 0
+            for message in messages:
+                deleted = db.query(models.MessageSchedule).filter(
+                    models.MessageSchedule.customer_type_message_id == message.id
+                ).delete(synchronize_session=False)
+                deleted_count += deleted
+            
+            db.commit()
+            
+            logger.info(f"Deleted {deleted_count} schedules for user group {group_id}")
+            return {
+                "status": "success",
+                "deleted_count": deleted_count,
+                "group_type": "user"
+            }
+            
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting schedules by group: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ==================== Batch Schedule Operations ====================
 
