@@ -12,6 +12,10 @@ from app.database.database import get_db
 from app.service.facebook_api import fb_get
 from .auth import get_page_tokens
 
+"""
+   -ใช้สำหรับดึงข้อมูลข้อความจาก Facebook มาเก็บในตาราง customer_messages
+"""
+
 router = APIRouter()
 bangkok_tz = pytz.timezone("Asia/Bangkok")
 
