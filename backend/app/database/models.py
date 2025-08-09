@@ -133,7 +133,7 @@ class FbCustomer(Base):
     page = relationship("FacebookPage", back_populates="customers", foreign_keys=[page_id])
     customer_type_custom = relationship("CustomerTypeCustom", back_populates="customers")
     customer_type_knowledge = relationship("CustomerTypeKnowledge", back_populates="customers")
-
+    customermessage = relationship("CustomerMessage", back_populates="customer", cascade="all, delete-orphan")
 
 class MessageSets(Base):
     __tablename__ = "message_sets"
@@ -201,3 +201,17 @@ class RetargetTierConfig(Base):
             name="chk_days_contact"
         ),
     )
+
+class CustomerMessage(Base):
+    __tablename__ = "customer_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("fb_customers.id", ondelete="CASCADE"), nullable=True)
+    conversation_id = Column(Text, nullable=False)
+    sender_id = Column(Text, nullable=False)
+    sender_name = Column(Text, nullable=False)
+    message_text = Column(Text, nullable=False)
+    message_type = Column(Text, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    customer = relationship("FbCustomer", back_populates="customermessage", foreign_keys=[customer_id])
