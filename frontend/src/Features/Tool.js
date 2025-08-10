@@ -60,7 +60,9 @@ export const fetchConversations = async (pageId) => {
         console.log(`Customer ${idx + 1}:`, {
           name: customer.name,
           customer_type_custom_id: customer.customer_type_custom_id,
-          customer_type_name: customer.customer_type_name
+          customer_type_name: customer.customer_type_name,
+          customer_type_knowledge_id: customer.customer_type_knowledge_id,
+          customer_type_knowledge_name: customer.customer_type_knowledge_name
         });
       }
     });
@@ -78,9 +80,11 @@ export const fetchConversations = async (pageId) => {
       user_name: conv.name,
       raw_psid: conv.customer_psid,
       source_type: conv.source_type,
-      // เพิ่มข้อมูล customer type
+      // เพิ่มข้อมูล customer type ทั้ง 2 ประเภท
       customer_type_custom_id: conv.customer_type_custom_id,
-      customer_type_name: conv.customer_type_name
+      customer_type_name: conv.customer_type_name,
+      customer_type_knowledge_id: conv.customer_type_knowledge_id,
+      customer_type_knowledge_name: conv.customer_type_knowledge_name
     }));
 
     return formattedConversations;

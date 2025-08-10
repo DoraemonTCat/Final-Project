@@ -27,29 +27,37 @@ const ConversationRow = React.memo(({
     'มีการตอบกลับ': '#3182ce'
   };
 
-  // อัพเดท Customer type mapping สำหรับแสดงชื่อกลุ่ม
+  // ฟังก์ชันแสดงหมวดหมู่ลูกค้า - รองรับทั้ง 2 ประเภท
   const getCustomerTypeDisplay = () => {
-    // Debug log
-    console.log(`Row ${idx + 1} - Customer Type:`, {
-      name: conv.customer_type_name,
-      id: conv.customer_type_custom_id
-    });
+    // สร้าง array เก็บหมวดหมู่ทั้งหมด
+    const types = [];
     
-    // ถ้ามีชื่อกลุ่มจาก backend
-    if (conv.customer_type_name) {
-      return {
+    // ถ้ามี User Group (กลุ่มที่ user สร้าง)
+    if (conv.customer_type_name && conv.customer_type_custom_id) {
+      types.push({
         name: conv.customer_type_name,
-        color: "#667eea"
-      };
+        color: "#667eea",
+        type: "user",
+        icon: "👤"
+      });
     }
     
-    // ถ้าไม่มี ใช้ค่า default
-    return null;
+    // ถ้ามี Knowledge Group (กลุ่มพื้นฐาน)
+    if (conv.customer_type_knowledge_name && conv.customer_type_knowledge_id) {
+      types.push({
+        name: conv.customer_type_knowledge_name,
+        color: "#48bb78",
+        type: "knowledge",
+        icon: "🧠"
+      });
+    }
+    
+    return types;
   };
   
-  const customerTypeInfo = getCustomerTypeDisplay();
+  const customerTypes = getCustomerTypeDisplay();
 
-  // Platform mapping (โค้ดเดิม)
+  // Platform mapping
   const platformMap = {
     FB: {
       label: "Facebook",
@@ -133,8 +141,6 @@ const ConversationRow = React.memo(({
         onInactivityChange={onInactivityChange}
       />
       
-     
-      
       <td className="table-cell">
         <div className={`platform-badge ${platformInfo.className}`}>
           {platformInfo.icon}
@@ -143,18 +149,31 @@ const ConversationRow = React.memo(({
       </td>
       
       <td className="table-cell">
-        {customerTypeInfo ? (
-          <span style={{
-            background: customerTypeInfo.color,
-            color: "#fff",
-            padding: "4px 12px",
-            borderRadius: "12px",
-            fontSize: "13px",
-            fontWeight: "600",
-            display: "inline-block"
-          }}>
-            {customerTypeInfo.name}
-          </span>
+        {customerTypes.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {customerTypes.map((type, index) => (
+              <span 
+                key={`${type.type}-${index}`}
+                style={{
+                  background: type.color,
+                  color: "#fff",
+                  padding: "4px 10px",
+                  borderRadius: "12px",
+                  fontSize: "12px",
+                  fontWeight: "600",
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  width: 'fit-content',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                }}
+                title={type.type === 'user' ? 'กลุ่มที่สร้างเอง' : 'กลุ่มพื้นฐาน'}
+              >
+                <span style={{ fontSize: '10px' }}>{type.icon}</span>
+                {type.name}
+              </span>
+            ))}
+          </div>
         ) : (
           <span style={{
             background: "#f7fafc",
@@ -164,7 +183,7 @@ const ConversationRow = React.memo(({
             fontSize: "13px",
             display: "inline-block"
           }}>
-          ยังไม่จัดกลุ่ม
+            ยังไม่จัดกลุ่ม
           </span>
         )}
       </td>

@@ -2427,6 +2427,57 @@ body.no-animations * {
   50% { transform: scale(1.05); }
   100% { transform: scale(1); }
 }
+/* Customer Type Badges */
+.customer-type-badges {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.customer-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  width: fit-content;
+}
+
+/* Customer Type Badge Styles */
+
+.customer-type-badge.user-type {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.customer-type-badge.knowledge-type {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+}
+
+.customer-type-badge .type-icon {
+  font-size: 10px;
+}
+
+/* Tooltip for customer types */
+.customer-type-badge[title] {
+  cursor: help;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+  .customer-type-badges {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  
+  .customer-type-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+}
 /* =====================================================
    END OF STYLESHEET
    ===================================================== */

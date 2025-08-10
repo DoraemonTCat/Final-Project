@@ -34,9 +34,10 @@ def get_customers_by_page(page_id: str, db: Session = Depends(get_db)):
     # ดึงวันที่ติดตั้งระบบ
     install_date = page.created_at
     
-    # ดึง customer พร้อม eager load customer_type_custom
+    # ดึง customer พร้อม eager load ทั้ง customer_type_custom และ customer_type_knowledge
     customers_query = db.query(FbCustomer).options(
-        joinedload(FbCustomer.customer_type_custom)
+        joinedload(FbCustomer.customer_type_custom),
+        joinedload(FbCustomer.customer_type_knowledge)
     ).filter(FbCustomer.page_id == page.ID)
     
     # กรองตามเงื่อนไข
@@ -54,7 +55,7 @@ def get_customers_by_page(page_id: str, db: Session = Depends(get_db)):
         )
     ).order_by(FbCustomer.last_interaction_at.desc()).all()
     
-    # สร้าง response data พร้อม customer type name
+    # สร้าง response data พร้อมทั้ง user group และ knowledge group names
     result = []
     for customer in customers:
         customer_data = {
@@ -69,8 +70,9 @@ def get_customers_by_page(page_id: str, db: Session = Depends(get_db)):
             "created_at": customer.created_at,
             "updated_at": customer.updated_at,
             "source_type": customer.source_type,
-            # เพิ่มชื่อกลุ่ม
-            "customer_type_name": customer.customer_type_custom.type_name if customer.customer_type_custom else None
+            # เพิ่มชื่อกลุ่มทั้ง 2 ประเภท
+            "customer_type_name": customer.customer_type_custom.type_name if customer.customer_type_custom else None,
+            "customer_type_knowledge_name": customer.customer_type_knowledge.type_name if customer.customer_type_knowledge else None
         }
         result.append(customer_data)
     
@@ -79,11 +81,8 @@ def get_customers_by_page(page_id: str, db: Session = Depends(get_db)):
     # Debug: แสดงข้อมูล customer type
     for idx, customer in enumerate(customers[:5]):  # แสดง 5 คนแรก
         print(f"Customer {idx+1}: {customer.name}")
-        print(f"  - customer_type_custom_id: {customer.customer_type_custom_id}")
-        if customer.customer_type_custom:
-            print(f"  - customer_type_name: {customer.customer_type_custom.type_name}")
-        else:
-            print(f"  - customer_type_name: None")
+        print(f"  - User Group: {customer.customer_type_custom.type_name if customer.customer_type_custom else 'None'}")
+        print(f"  - Knowledge Group: {customer.customer_type_knowledge.type_name if customer.customer_type_knowledge else 'None'}")
     
     return result
 
