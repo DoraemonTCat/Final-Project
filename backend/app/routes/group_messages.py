@@ -777,6 +777,7 @@ async def delete_group_schedule(
         logger.error(f"Error deleting group schedule: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
+# API สำหรับสร้าง schedule เดียวสำหรับข้อความทั้งหมดในกลุ่ม
 @router.post("/group-schedule/{page_id}/{group_id}")
 async def create_group_schedule(
     page_id: int,

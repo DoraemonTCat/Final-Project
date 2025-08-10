@@ -240,68 +240,93 @@ function App() {
 
   // 🆕 Callback สำหรับ real-time updates
   const handleRealtimeUpdate = useCallback((updates) => {
-    console.log('📊 Received updates:', updates);
+  console.log('📊 Received updates:', updates);
 
-    // Handle customer type updates
-    if (Array.isArray(updates) && updates.length > 0) {
-      const firstUpdate = updates[0];
+  // Handle customer type updates
+  if (Array.isArray(updates) && updates.length > 0) {
+    const firstUpdate = updates[0];
 
-      // ตรวจสอบว่าเป็น customer type update
-      if (firstUpdate.customer_type_name !== undefined || firstUpdate.customer_type_custom_id !== undefined) {
-        console.log('🏷️ Processing customer type updates');
+    // ตรวจสอบว่าเป็น customer type update (ทั้ง custom และ knowledge)
+    if (firstUpdate.customer_type_name !== undefined || 
+        firstUpdate.customer_type_custom_id !== undefined ||
+        firstUpdate.customer_type_knowledge_name !== undefined ||
+        firstUpdate.customer_type_knowledge_id !== undefined) {
+      
+      console.log('🏷️ Processing customer type updates');
 
-        // อัพเดท conversations
-        setConversations(prevConvs => {
-          return prevConvs.map(conv => {
-            const update = updates.find(u => u.psid === conv.raw_psid);
-            if (update) {
-              // เพิ่ม user ที่อัพเดทเข้า Set
-              if (update.customer_type_name !== undefined) {
-                setRecentlyUpdatedUsers(prev => {
-                  const newSet = new Set(prev);
-                  newSet.add(conv.raw_psid);
+      // อัพเดท conversations
+      setConversations(prevConvs => {
+        return prevConvs.map(conv => {
+          const update = updates.find(u => u.psid === conv.raw_psid);
+          if (update) {
+            // เพิ่ม visual feedback
+            setRecentlyUpdatedUsers(prev => {
+              const newSet = new Set(prev);
+              newSet.add(conv.raw_psid);
 
-                  setTimeout(() => {
-                    setRecentlyUpdatedUsers(current => {
-                      const updated = new Set(current);
-                      updated.delete(conv.raw_psid);
-                      return updated;
-                    });
-                  }, 3000);
-
-                  return newSet;
+              setTimeout(() => {
+                setRecentlyUpdatedUsers(current => {
+                  const updated = new Set(current);
+                  updated.delete(conv.raw_psid);
+                  return updated;
                 });
-              }
+              }, 3000);
 
-              // 🟢 เพิ่มการอัพเดทเวลา
-              return {
-                ...conv,
-                customer_type_custom_id: update.customer_type_custom_id,
-                customer_type_name: update.customer_type_name,
-                last_user_message_time: update.last_interaction || conv.last_user_message_time,
-                updated_time: new Date().toISOString()
-              };
-            }
-            return conv;
-          });
-        });
+              return newSet;
+            });
 
-        // อัพเดท allConversations
-        setAllConversations(prevAll => {
-          return prevAll.map(conv => {
-            const update = updates.find(u => u.psid === conv.raw_psid);
-            if (update) {
-              return {
-                ...conv,
-                customer_type_custom_id: update.customer_type_custom_id,
-                customer_type_name: update.customer_type_name,
-                last_user_message_time: update.last_interaction || conv.last_user_message_time,
-                updated_time: new Date().toISOString()
-              };
-            }
-            return conv;
-          });
+            // อัพเดทข้อมูลทั้ง custom และ knowledge types
+            return {
+              ...conv,
+              // Custom type
+              customer_type_custom_id: update.customer_type_custom_id !== undefined 
+                ? update.customer_type_custom_id 
+                : conv.customer_type_custom_id,
+              customer_type_name: update.customer_type_name !== undefined 
+                ? update.customer_type_name 
+                : conv.customer_type_name,
+              // Knowledge type
+              customer_type_knowledge_id: update.customer_type_knowledge_id !== undefined 
+                ? update.customer_type_knowledge_id 
+                : conv.customer_type_knowledge_id,
+              customer_type_knowledge_name: update.customer_type_knowledge_name !== undefined 
+                ? update.customer_type_knowledge_name 
+                : conv.customer_type_knowledge_name,
+              // Update times
+              last_user_message_time: update.last_interaction || conv.last_user_message_time,
+              updated_time: new Date().toISOString()
+            };
+          }
+          return conv;
         });
+      });
+
+      // อัพเดท allConversations
+      setAllConversations(prevAll => {
+        return prevAll.map(conv => {
+          const update = updates.find(u => u.psid === conv.raw_psid);
+          if (update) {
+            return {
+              ...conv,
+              customer_type_custom_id: update.customer_type_custom_id !== undefined 
+                ? update.customer_type_custom_id 
+                : conv.customer_type_custom_id,
+              customer_type_name: update.customer_type_name !== undefined 
+                ? update.customer_type_name 
+                : conv.customer_type_name,
+              customer_type_knowledge_id: update.customer_type_knowledge_id !== undefined 
+                ? update.customer_type_knowledge_id 
+                : conv.customer_type_knowledge_id,
+              customer_type_knowledge_name: update.customer_type_knowledge_name !== undefined 
+                ? update.customer_type_knowledge_name 
+                : conv.customer_type_knowledge_name,
+              last_user_message_time: update.last_interaction || conv.last_user_message_time,
+              updated_time: new Date().toISOString()
+            };
+          }
+          return conv;
+        });
+      });
 
         // อัพเดท filteredConversations ถ้ามี
         setFilteredConversations(prevFiltered => {
@@ -324,14 +349,21 @@ function App() {
         });
 
         // แสดง notification
-        const updateCount = updates.filter(u => u.customer_type_name).length;
-        if (updateCount > 0) {
-          showNotification('info', `อัพเดทหมวดหมู่ลูกค้า ${updateCount} คน`);
+      const customUpdateCount = updates.filter(u => u.customer_type_name).length;
+      const knowledgeUpdateCount = updates.filter(u => u.customer_type_knowledge_name).length;
+      const totalUpdates = customUpdateCount + knowledgeUpdateCount;
+      
+      if (totalUpdates > 0) {
+        let message = `อัพเดทหมวดหมู่ลูกค้า ${totalUpdates} คน`;
+        if (customUpdateCount > 0 && knowledgeUpdateCount > 0) {
+          message += ` (กลุ่มผู้ใช้: ${customUpdateCount}, กลุ่มพื้นฐาน: ${knowledgeUpdateCount})`;
         }
-
-        return; // จบการประมวลผล customer type updates
+        showNotification('info', message);
       }
+
+      return; // จบการประมวลผล customer type updates
     }
+  }
 
     // Handle normal customer updates (โค้ดเดิม)
     setPendingUpdates(prev => [...prev, ...updates]);
