@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from sqlalchemy.orm import Session
 import requests
 from typing import Dict
+import logging
 
 from app.database import crud, schemas
 from app.database.database import get_db
@@ -20,6 +21,8 @@ from app.service.message_scheduler import message_scheduler
 from app.service.auto_sync_service import auto_sync_service
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 # Memory storage for page tokens
 page_tokens: Dict[str, str] = {}
@@ -120,6 +123,17 @@ def facebook_callback(code: str, db: Session = Depends(get_db)):
         if not existing:
             new_page = schemas.FacebookPageCreate(page_id=page_id, page_name=page_name)
             crud.create_page(db, new_page)
+            
+        # 🔥 เพิ่มโค้ดตรงนี้ - หลังจากบันทึก page แล้ว
+        try:
+            # ดึง page record ที่บันทึกแล้ว
+            page_record = existing if existing else crud.get_page_by_page_id(db, page_id)
+            if page_record:
+                synced_tiers = crud.sync_retarget_tiers_from_knowledge(db, page_record.ID)
+                logger.info(f"✅ Auto-synced {len(synced_tiers)} retarget tiers for page {page_name}")
+        except Exception as e:
+            logger.error(f"Failed to sync retarget tiers for {page_name}: {e}")
+        # 🔥 จบส่วนที่เพิ่ม
 
         connected_pages.append({"id": page_id, "name": page_name})
         print(f"✅ เชื่อมต่อเพจสำเร็จ: {page_name} (ID: {page_id})")

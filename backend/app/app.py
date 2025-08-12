@@ -13,6 +13,7 @@ import uvicorn
 # Import routes - ใช้ relative imports
 from app.routes import pages, webhook, custom_messages, fb_customer, sync, group_messages
 from app.routes import facebook  # ถ้ายังใช้ facebook.py เดิม
+from app.routes import retarget_tiers
 
 # หรือถ้าใช้ refactored version
 # from app.routes.facebook import router as facebook_router
@@ -80,6 +81,7 @@ app.include_router(custom_messages.router)
 app.include_router(fb_customer.router)
 app.include_router(sync.router)
 app.include_router(group_messages.router)
+app.include_router(retarget_tiers.router) 
 
 # Root endpoint
 @app.get("/")
