@@ -93,7 +93,7 @@ async def update_retarget_tier(
         }
     }
 
-# API สำหรับลบ retarget tier
+# API สำหรับลบ retarget tier 
 @router.delete("/retarget-tiers/{tier_id}")
 async def delete_retarget_tier(
     tier_id: int,

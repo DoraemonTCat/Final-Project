@@ -711,14 +711,14 @@ function ScheduleDashboard() {
                       </td>
                       <td>
                         <button 
-                          className="action-btn view-btn"
+                          className="action-btn view-btn" style={{ width:"70%"}}
                           onClick={() => viewScheduleDetails(schedule)}
                         >
                           👁️ ดู
                         </button>
                         {status !== 'ส่งแล้ว' && (
                           <button 
-                            className="action-btn toggle-btn"
+                            className="action-btn toggle-btn " style={{ width:"70%"}}
                             onClick={() => toggleScheduleStatus(schedule)}
                           >
                             {status === 'กำลังทำงาน' ? '⏸️ หยุด' : '▶️ เริ่ม'}
