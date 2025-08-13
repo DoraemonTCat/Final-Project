@@ -67,5 +67,5 @@ def start_scheduler():
     scheduler.add_job(schedule_facebook_messages_sync, 'interval', hours=1)
     
     # เพิ่ม job สำหรับ sync retarget tiers ทุกวัน
-    scheduler.add_job(sync_all_retarget_tiers, 'interval', minutes=1)
+    # scheduler.add_job(sync_all_retarget_tiers, 'interval', hours=14)
     scheduler.start()
