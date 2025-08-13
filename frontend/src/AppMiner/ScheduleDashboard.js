@@ -58,14 +58,16 @@ function ScheduleDashboard() {
     return knowledgeGroupStatuses[numericId] !== false;
   };
 
+  // useEffect ที่โหลดข้อมูลตอน mount
   useEffect(() => {
-    const savedPage = localStorage.getItem("selectedPage");
-    if (savedPage) {
-      setSelectedPage(savedPage);
-      loadAllSchedules(savedPage);
-      loadActiveSchedules(savedPage);
-    }
-  }, []);
+  const savedPage = localStorage.getItem("selectedPage");
+  if (savedPage && savedPage !== selectedPage) {
+    setSelectedPage(savedPage);
+    loadAllData(savedPage);
+  } else if (savedPage) {
+    loadAllData(savedPage);
+  }
+}, []); // ทำครั้งเดียวตอน mount
 
   useEffect(() => {
     const handleKnowledgeGroupChange = async (event) => {
@@ -567,6 +569,38 @@ function ScheduleDashboard() {
     alert('เกิดข้อผิดพลาดในการลบตารางเวลา');
   }
 };
+
+// เพิ่ม useEffect สำหรับ listen การเปลี่ยน page
+useEffect(() => {
+  const handlePageChange = () => {
+    const newPage = localStorage.getItem("selectedPage");
+    if (newPage && newPage !== selectedPage) {
+      console.log('📄 Page changed from', selectedPage, 'to', newPage);
+      setSelectedPage(newPage);
+      // Reset states
+      setSchedules([]);
+      setActiveSchedules([]);
+      setKnowledgeGroupStatuses({});
+      // Load new data
+      loadAllData(newPage);
+    }
+  };
+
+  // Listen to storage events (เมื่อมีการเปลี่ยนแปลงใน localStorage จาก tab อื่น)
+  window.addEventListener('storage', handlePageChange);
+  
+  // Listen to custom event (เมื่อมีการเปลี่ยนแปลงใน localStorage จาก tab เดียวกัน)
+  window.addEventListener('pageChanged', handlePageChange);
+  
+  // Check on focus (เมื่อกลับมาที่ tab นี้)
+  window.addEventListener('focus', handlePageChange);
+
+  return () => {
+    window.removeEventListener('storage', handlePageChange);
+    window.removeEventListener('pageChanged', handlePageChange);
+    window.removeEventListener('focus', handlePageChange);
+  };
+}, [selectedPage]);
 
   const goToMinerGroup = () => {
     window.location.href = '/MinerGroup';
