@@ -528,9 +528,19 @@ def delete_retarget_tier(db: Session, tier_id: int):
 def sync_retarget_tiers_from_knowledge(db: Session, page_id: int):
     """
     Sync retarget tiers จาก customer_type_knowledge 
-    สำหรับ page ที่ระบุ - ป้องกันข้อมูลซ้ำซ้อน
+    สำหรับ page ที่ระบุ - ทำเพียงครั้งเดียว
     """
     try:
+        # 🔥 ตรวจสอบก่อนว่ามีข้อมูลของ page นี้อยู่แล้วหรือไม่
+        existing_tiers = db.query(models.RetargetTierConfig).filter(
+            models.RetargetTierConfig.page_id == page_id
+        ).all()
+        
+        # ถ้ามีข้อมูลอยู่แล้ว ไม่ต้องทำอะไร
+        if existing_tiers and len(existing_tiers) > 0:
+            logger.info(f"✅ Page {page_id} already has {len(existing_tiers)} retarget tiers - skipping sync")
+            return existing_tiers
+        
         # กำหนดค่า default สำหรับแต่ละ tier (มีแค่ 3 tiers เท่านั้น)
         default_tiers = [
             {"name": "หาย", "days": 7},
@@ -588,12 +598,7 @@ def sync_retarget_tiers_from_knowledge(db: Session, page_id: int):
             if tier["name"] not in tiers_dict:
                 tiers_dict[tier["name"]] = tier["days"]
         
-        # ลบข้อมูลเก่าทั้งหมดของ page นี้ก่อน (ป้องกันข้อมูลซ้ำ)
-        db.query(models.RetargetTierConfig).filter(
-            models.RetargetTierConfig.page_id == page_id
-        ).delete()
-        
-        # Sync tiers ใหม่ (จะมีแค่ 3 tiers ต่อ page)
+        # สร้าง tiers ใหม่ (จะมีแค่ 3 tiers ต่อ page)
         synced_tiers = []
         for tier_name, days in tiers_dict.items():
             new_tier = models.RetargetTierConfig(
@@ -606,10 +611,88 @@ def sync_retarget_tiers_from_knowledge(db: Session, page_id: int):
             logger.info(f"Created tier: {tier_name} = {days} days for page {page_id}")
         
         db.commit()
-        logger.info(f"Successfully synced {len(synced_tiers)} tiers for page {page_id}")
+        logger.info(f"✅ Successfully synced {len(synced_tiers)} tiers for page {page_id}")
         return synced_tiers
         
     except Exception as e:
         db.rollback()
         logger.error(f"Error syncing retarget tiers: {e}")
         return []
+
+# เพิ่มฟังก์ชันสำหรับ reset/cleanup ข้อมูลซ้ำ
+def cleanup_duplicate_retarget_tiers(db: Session):
+    """
+    ลบข้อมูล retarget tiers ที่ซ้ำซ้อน เหลือแค่ 3 tiers ต่อ page
+    """
+    try:
+        # ดึง pages ทั้งหมด
+        pages = db.query(models.FacebookPage).all()
+        
+        for page in pages:
+            # ดึง tiers ทั้งหมดของ page นี้
+            all_tiers = db.query(models.RetargetTierConfig).filter(
+                models.RetargetTierConfig.page_id == page.ID
+            ).order_by(models.RetargetTierConfig.id).all()
+            
+            if len(all_tiers) > 3:
+                logger.info(f"Page {page.ID} has {len(all_tiers)} tiers - cleaning up...")
+                
+                # เก็บไว้แค่ 3 tiers แรก (หรือ 3 tiers ที่มี tier_name ไม่ซ้ำ)
+                seen_names = set()
+                tiers_to_keep = []
+                tiers_to_delete = []
+                
+                for tier in all_tiers:
+                    if tier.tier_name not in seen_names and len(tiers_to_keep) < 3:
+                        seen_names.add(tier.tier_name)
+                        tiers_to_keep.append(tier)
+                    else:
+                        tiers_to_delete.append(tier)
+                
+                # ลบ tiers ที่ไม่ต้องการ
+                for tier in tiers_to_delete:
+                    db.delete(tier)
+                
+                logger.info(f"Deleted {len(tiers_to_delete)} duplicate tiers for page {page.ID}")
+        
+        db.commit()
+        logger.info("✅ Cleanup completed")
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error cleaning up duplicate tiers: {e}")
+
+# เพิ่มฟังก์ชันสำหรับตรวจสอบและ sync เฉพาะ page ที่ยังไม่มีข้อมูล
+def sync_missing_retarget_tiers(db: Session):
+    """
+    Sync retarget tiers เฉพาะ page ที่ยังไม่มีข้อมูล
+    """
+    try:
+        # ดึง pages ทั้งหมด
+        all_pages = db.query(models.FacebookPage).all()
+        
+        synced_count = 0
+        skipped_count = 0
+        
+        for page in all_pages:
+            # ตรวจสอบว่ามี tiers อยู่แล้วหรือไม่
+            existing_tiers = db.query(models.RetargetTierConfig).filter(
+                models.RetargetTierConfig.page_id == page.ID
+            ).count()
+            
+            if existing_tiers == 0:
+                # ยังไม่มี tiers - ทำการ sync
+                synced_tiers = sync_retarget_tiers_from_knowledge(db, page.ID)
+                if synced_tiers:
+                    synced_count += 1
+                    logger.info(f"✅ Synced tiers for page {page.page_name}")
+            else:
+                skipped_count += 1
+                logger.debug(f"⏭️ Page {page.page_name} already has {existing_tiers} tiers - skipped")
+        
+        logger.info(f"✅ Sync completed: {synced_count} pages synced, {skipped_count} pages skipped")
+        return {"synced": synced_count, "skipped": skipped_count}
+        
+    except Exception as e:
+        logger.error(f"Error in sync_missing_retarget_tiers: {e}")
+        return {"error": str(e)}

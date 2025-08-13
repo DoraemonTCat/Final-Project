@@ -1,13 +1,17 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 import requests
-from app.database.crud import get_all_connected_pages
+from app.database.crud import get_all_connected_pages, sync_missing_retarget_tiers
 from app.database.database import SessionLocal
-from app.database import crud, database, models, schemas
+from app.database import crud
+import logging
 
-# ฟังก์ชันสำหรับรันการ sync ข้อมูลลูกค้าใน background
+logger = logging.getLogger(__name__)
+
 SYNC_TIMEOUT = 60*5
 
+# ฟังก์ชันสำหรับ sync ข้อมูลลูกค้าจาก Facebook
 def schedule_facebook_sync():
+    """Sync ข้อมูลลูกค้าจาก Facebook"""
     db = SessionLocal()
     try:
         all_pages = get_all_connected_pages(db)
@@ -24,8 +28,9 @@ def schedule_facebook_sync():
     finally:
         db.close()
 
-# ฟังก์ชันสำหรับรันการ sync ข้อมูลข้อความใน background
+# ฟังก์ชันสำหรับ sync ข้อความจาก Facebook
 def schedule_facebook_messages_sync():
+    """Sync ข้อความจาก Facebook"""
     db = SessionLocal()
     try:
         all_pages = get_all_connected_pages(db)
@@ -42,30 +47,31 @@ def schedule_facebook_messages_sync():
     finally:
         db.close()
 
-# ฟังก์ชันสำหรับ sync retarget tiers สำหรับทุก page    
-def sync_all_retarget_tiers():
-    """Sync retarget tiers สำหรับทุก page ในระบบ"""
+# ฟังก์ชันสำหรับ sync retarget tiers เฉพาะ page ที่ยังไม่มีข้อมูล
+def sync_missing_tiers_on_startup():
+    """Sync retarget tiers เฉพาะ page ที่ยังไม่มีข้อมูล - ทำครั้งเดียวตอนเริ่มระบบ"""
     db = SessionLocal()
     try:
-        # ดึง pages ทั้งหมด
-        pages = db.query(models.FacebookPage).all()
-        
-        for page in pages:
-            try:
-                synced_tiers = crud.sync_retarget_tiers_from_knowledge(db, page.ID)
-                logger.info(f"✅ Synced {len(synced_tiers)} tiers for page {page.page_name}")
-            except Exception as e:
-                logger.error(f"❌ Failed to sync tiers for page {page.page_name}: {e}")
-                
+        result = crud.sync_missing_retarget_tiers(db)
+        logger.info(f"✅ Initial retarget tiers sync completed: {result}")
+    except Exception as e:
+        logger.error(f"❌ Failed initial retarget tiers sync: {e}")
     finally:
         db.close()
 
-
+# ฟังก์ชันสำหรับเริ่มต้น scheduler
 def start_scheduler():
+    """เริ่มต้น scheduler สำหรับ background tasks"""
     scheduler = BackgroundScheduler()
+    
+    # Sync ข้อมูลลูกค้าทุกนาที
     scheduler.add_job(schedule_facebook_sync, 'interval', minutes=1)
+    
+    # Sync ข้อความทุกชั่วโมง
     scheduler.add_job(schedule_facebook_messages_sync, 'interval', hours=1)
     
-    # เพิ่ม job สำหรับ sync retarget tiers ทุกวัน
-    # scheduler.add_job(sync_all_retarget_tiers, 'interval', hours=14)
+    # Sync retarget tiers เฉพาะตอนเริ่มระบบ (ครั้งเดียว)
+    sync_missing_tiers_on_startup()
+    
     scheduler.start()
+    logger.info("✅ Scheduler started successfully")
