@@ -799,7 +799,7 @@ useEffect(() => {
           </div>
         </div>
 
-        <div className="action-buttons">
+        <div className="action-buttons_D">
           <Link to="/MinerGroup" className="back-btn">
             ← กลับ
           </Link>

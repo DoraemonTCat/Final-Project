@@ -393,7 +393,7 @@
    ======================= */
 
 /* Container สำหรับปุ่ม action */
-.action-buttons {
+.action-buttons_D {
   display: flex;                  /* จัด layout แบบ flex */
   justify-content: space-between; /* กระจายซ้าย-ขวา */
   align-items: center;            /* จัดกึ่งกลางแนวตั้ง */

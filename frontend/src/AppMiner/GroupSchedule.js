@@ -818,7 +818,7 @@ const toggleDropdown = () => {
             </div>
           </div>
 
-          <div className="action-buttons">
+          <div className="action-buttons_D">
             <Link to="/GroupDefault" className="back-btn">
               ← กลับ
             </Link>

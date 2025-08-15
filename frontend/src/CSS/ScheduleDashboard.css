@@ -188,6 +188,7 @@ tr:hover {
   cursor: pointer;
   transition: all 0.2s ease;
   margin-right: 8px;
+  
 }
 
 .view-btn {
@@ -422,3 +423,195 @@ tr:hover {
     margin-left: 8px;
     display: inline-block;
   }
+/* Schedule Sections */
+.schedules-container {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.schedule-section {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.section-header {
+  padding: 20px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.3s ease;
+}
+
+.section-header:hover {
+  filter: brightness(1.05);
+}
+
+.section-header h3 {
+  margin: 0;
+  color: white;
+  font-size: 18px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.collapse-icon {
+  font-size: 14px;
+  transition: transform 0.3s ease;
+}
+
+.badge {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 14px;
+  margin-left: auto;
+}
+
+.table-wrapper {
+  padding: 20px;
+  background: #f8f9fa;
+}
+
+.empty-section {
+  padding: 40px;
+  text-align: center;
+  color: #718096;
+}
+
+/* Drag and Drop Styles */
+.drag-handle {
+  cursor: move;
+  color: #a0aec0;
+  text-align: center;
+  font-size: 14px;
+}
+
+.drag-handle:hover {
+  color: #4a5568;
+}
+
+tr.dragging {
+  opacity: 0.5;
+  background: #e2e8f0;
+}
+
+tr.drag-over {
+  background: #bee3f8 !important;
+  border-top: 3px solid #3182ce;
+}
+
+/* Action Buttons Group */
+.action-buttons {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  padding-bottom: 40px;
+}
+
+.action-btn {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  
+}
+
+
+/* Stat Cards Customization */
+.stat-card.knowledge-stat {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.stat-card.knowledge-stat .stat-value,
+.stat-card.knowledge-stat .stat-label {
+  color: white;
+}
+
+.stat-card.user-stat {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+}
+
+.stat-card.user-stat .stat-value,
+.stat-card.user-stat .stat-label {
+  color: white;
+}
+
+/* Header Actions */
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.filter-btn {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.filter-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .schedules-container {
+    gap: 20px;
+  }
+  
+  .section-header h3 {
+    font-size: 16px;
+  }
+  
+  .table-wrapper {
+    padding: 10px;
+    overflow-x: auto;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .action-btn {
+    width: 100%;
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+}
+
+/* Smooth Animations */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.table-wrapper table tbody tr {
+  animation: slideDown 0.3s ease forwards;
+}
+
+.table-wrapper table tbody tr:nth-child(n) {
+  animation-delay: calc(0.05s * var(--index));
+}

@@ -142,22 +142,8 @@ export default function SyncCustomersButton({ selectedPage, onSyncComplete }) {
       <button
         onClick={() => setShowSyncOptions(!showSyncOptions)}
         disabled={syncing || !selectedPage}
-        className="sync-btn"
-        style={{
-          padding: '12px 24px',
-          background: syncing ? '#cbd5e0' : 'linear-gradient(135deg, #4299e1 0%, #3182ce 100%)',
-          color: 'white',
-          border: 'none',
-          borderRadius: '8px',
-          fontSize: '14px',
-          fontWeight: '600',
-          cursor: syncing ? 'not-allowed' : 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          boxShadow: '0 4px 6px rgba(66, 153, 225, 0.2)',
-          transition: 'all 0.3s ease'
-        }}
+        className="date-filter-btn" style={{marginTop:"14px" }}
+      
       >
         <span className={syncing ? 'spinning' : ''}>🔄</span>
         {syncing ? 'กำลัง Sync...' : 'ดึงข้อมูลลูกค้าเก่า'}

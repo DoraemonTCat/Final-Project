@@ -35,7 +35,7 @@ const ActionBar = ({
         <button
           onClick={onOpenPopup}
           className={`action-btn primary ${selectedCount > 0 ? 'active' : ''}`} 
-          style={{paddingRight:"35%", paddingLeft:"10%" }}
+          style={{paddingRight:"95%", paddingLeft:"50%" }}
           disabled={loading || selectedCount === 0}
         >
           <span className="btn-icon">⛏️</span>
@@ -53,7 +53,7 @@ const ActionBar = ({
             }
           }}
           className="action-btn secondary"  
-          style={{paddingRight:"30%", paddingLeft:"10%"}}
+          style={{paddingRight:"95%", paddingLeft:"50%"}}
           disabled={loading || !selectedPage}
           title={!selectedPage ? "กรุณาเลือกเพจก่อน" : "คลิกเพื่อรีเฟรชข้อมูล"}
         >
