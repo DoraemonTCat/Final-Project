@@ -11,8 +11,14 @@ const ScheduleModal = ({ show, schedules, groupName, onClose, onDeleteSchedule }
 
   if (!show) return null;
 
-  // ฟังก์ชันสำหรับแสดงรายละเอียด schedule
+  // ฟังก์ชันสำหรับแสดงรายละเอียด schedule ที่ปรับปรุงแล้ว
   const formatScheduleDetail = (schedule) => {
+    // ถ้ามี displayText ที่ประมวลผลมาแล้ว ใช้เลย
+    if (schedule.displayText) {
+      return schedule.displayText;
+    }
+    
+    // ไม่งั้นใช้ logic เดิมแต่ปรับปรุง
     if (schedule.type === 'immediate') {
       return 'ส่งทันที';
     } else if (schedule.type === 'scheduled') {
@@ -24,13 +30,35 @@ const ScheduleModal = ({ show, schedules, groupName, onClose, onDeleteSchedule }
       const time = schedule.time || 'ไม่ระบุเวลา';
       return `ส่งตามเวลา: ${date} เวลา ${time} น.`;
     } else if (schedule.type === 'user-inactive') {
+      // ถ้ามี inactivityDescription ใช้เลย
+      if (schedule.inactivityDescription) {
+        return schedule.inactivityDescription;
+      }
+      
+      // ถ้ามี send_after_inactive ดิบ ให้แปลง
+      if (schedule.send_after_inactive) {
+        const parts = schedule.send_after_inactive.split(' ');
+        if (parts.length >= 2) {
+          const value = parts[0];
+          const unit = parts[1];
+          const unitText = 
+            unit.includes('minute') ? 'นาที' :
+            unit.includes('hour') ? 'ชั่วโมง' :
+            unit.includes('day') ? 'วัน' :
+            unit.includes('week') ? 'สัปดาห์' :
+            unit.includes('month') ? 'เดือน' : unit;
+          return `ส่งเมื่อ User หายไป ${value} ${unitText}`;
+        }
+      }
+      
+      // Fallback ถ้าไม่มีข้อมูล
       const period = schedule.inactivityPeriod || 0;
       const unit = schedule.inactivityUnit || 'days';
       const unitText = unit === 'minutes' ? 'นาที' :
                       unit === 'hours' ? 'ชั่วโมง' :
                       unit === 'days' ? 'วัน' :
                       unit === 'weeks' ? 'สัปดาห์' : 'เดือน';
-      return `ส่งเมื่อหายไป ${period} ${unitText}`;
+      return `ส่งเมื่อ User หายไป ${period} ${unitText}`;
     }
     return 'ไม่ทราบประเภท';
   };
@@ -109,8 +137,8 @@ const ScheduleModal = ({ show, schedules, groupName, onClose, onDeleteSchedule }
                         {formatRepeat(schedule)}
                       </p>
                     )}
+                  
                     
-                    {/* แสดงข้อมูลเพิ่มเติมถ้ามี */}
                     {schedule.created_at && (
                       <p style={{
                         margin: '8px 0 0 0',
@@ -121,60 +149,46 @@ const ScheduleModal = ({ show, schedules, groupName, onClose, onDeleteSchedule }
                       </p>
                     )}
                   </div>
-                  <button
-                    onClick={() => handleEditSchedule(schedule)}
-                    style={{
-                      background: 'orange',
-                      color: '#f3e8e8ff',
-                      border: 'none',
-                      borderRadius: '8px',
-                      padding: '8px 16px',
-                      fontSize: '14px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      transition: 'all 0.2s ease',
-                      marginLeft: '16px'
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.background = 'orange';
-                      e.currentTarget.style.color = 'white';
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.background = '#fee';
-                      e.currentTarget.style.color = 'orange';
-                    }}
-                  >
-                   ✏️ แก้ไข
-                  </button>
-                  <button
-                    onClick={() => onDeleteSchedule(schedule.id)}
-                    style={{
-                      background: '#fee',
-                      color: '#e53e3e',
-                      border: 'none',
-                      borderRadius: '8px',
-                      padding: '8px 16px',
-                      fontSize: '14px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      transition: 'all 0.2s ease',
-                      marginLeft: '16px'
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.background = '#e53e3e';
-                      e.currentTarget.style.color = 'white';
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.background = '#fee';
-                      e.currentTarget.style.color = '#e53e3e';
-                    }}
-                  >
-                    🗑️ ลบ
-                  </button>
+                  
+                  {/* ปุ่มแก้ไขและลบ */}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => handleEditSchedule(schedule)}
+                      style={{
+                        background: 'orange',
+                        color: '#f3e8e8ff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        padding: '8px 16px',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      ✏️ แก้ไข
+                    </button>
+                    <button
+                      onClick={() => onDeleteSchedule(schedule.id)}
+                      style={{
+                        background: '#fee',
+                        color: '#e53e3e',
+                        border: 'none',
+                        borderRadius: '8px',
+                        padding: '8px 16px',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      🗑️ ลบ
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
