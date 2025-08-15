@@ -537,13 +537,13 @@ tr.drag-over {
 }
 
 .stat-card.user-stat {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  
   color: white;
 }
 
 .stat-card.user-stat .stat-value,
 .stat-card.user-stat .stat-label {
-  color: white;
+  color: rgb(109, 106, 106);
 }
 
 /* Header Actions */
