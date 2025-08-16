@@ -69,7 +69,7 @@ const GroupCard = ({
             e.stopPropagation();
             if (!isDisabled) onViewSchedules(group);
           }}>
-            <span>⏰ มีการตั้งเวลา {scheduleCount} รายการ</span>
+            <span>⏰เงื่อนไขของกลุ่มที่ตั้งไว้</span>
           </div>
         )}
         
