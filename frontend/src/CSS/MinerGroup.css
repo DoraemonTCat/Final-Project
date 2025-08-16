@@ -282,6 +282,54 @@
 /* User Groups Section */
 .user-groups-section {
   margin-bottom: 30px;
+  animation: fadeInUp 0.6s ease;
+}
+
+.user-groups-section .groups-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+
+
+.group-card:not(.knowledge-group):not(.default-group) {
+  background: linear-gradient(135deg, #ffffff 0%, #fef7ff 100%);
+  border: 1px solid #fce7f3;
+  border-radius: 20px;
+  padding: 24px;
+  position: relative;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.group-card:not(.knowledge-group):not(.default-group)::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #f9a8d4 0%, #ec4899 100%);
+  transform: scaleX(0);
+  transition: transform 0.4s ease;
+}
+
+.group-card:not(.knowledge-group):not(.default-group):hover::before {
+  transform: scaleX(1);
+}
+
+.group-card:not(.knowledge-group):not(.default-group):hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 40px rgba(236, 72, 153, 0.12);
+  border-color: #fbcfe8;
+}
+
+.group-card:not(.knowledge-group):not(.default-group).selected {
+  background: linear-gradient(135deg, #fef2f8 0%, #fce7f3 100%);
+  border-color: #f9a8d4;
+  border-width: 2px;
 }
 
 .groups-grid {
@@ -297,18 +345,27 @@
   grid-template-columns: repeat(auto-fill, minmax(282px, 1fr));
   gap: 24px;
   margin-bottom: 30px;
+  height: 290px;
 }
 
 /* Group Card */
 .group-card {
-  background: white;
-  border-radius: 16px;
-  padding: 29px;
   position: relative;
-  transition: all 0.3s ease;
-  border: 3px solid transparent;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
-  cursor: pointer;
+  overflow: hidden;
+}
+
+.group-card::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255,255,255,0.8) 0%, transparent 70%);
+  opacity: 0;
+  transform: scale(0);
+  transition: all 0.6s ease;
+  pointer-events: none;
 }
 
 .group-card:hover {
@@ -347,8 +404,9 @@
 /* Custom Checkbox */
 .group-checkbox {
   position: absolute;
-  top: 20px;
-  left: 20px;
+  top: 24px;
+  left: 24px;
+  z-index: 2;
 }
 
 .group-checkbox input[type="checkbox"] {
@@ -356,30 +414,33 @@
 }
 
 .group-checkbox label {
-  width: 24px;
-  height: 24px;
-  border: 2px solid #cbd5e0;
+  width: 22px;
+  height: 22px;
+  border: 2px solid #e2e8f0;
   border-radius: 6px;
   display: block;
   position: relative;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: white;
 }
 
 .group-checkbox input[type="checkbox"]:checked + label {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-color: #667eea;
+  background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
+  border-color: transparent;
+  transform: scale(1.1);
 }
 
 .group-checkbox input[type="checkbox"]:checked + label::after {
-  content: '✓';
+  content: '';
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: white;
-  font-size: 14px;
-  font-weight: bold;
+  left: 7px;
+  top: 3px;
+  width: 5px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 
 .group-content {
@@ -387,19 +448,30 @@
 }
 
 .group-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-  text-align: center;
-  padding-right: 22px;
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  margin: 0 auto 16px;
+  transition: all 0.3s ease;
 }
 
+.group-card:hover .group-icon {
+  transform: rotate(-5deg) scale(1.1);
+}
+
+
 .group-name {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
-  color: #2d3748;
-  white-space: nowrap;
+  color: #1e293b;
   text-align: center;
-  padding-right: 20px;
+  margin-bottom: 8px;
+  letter-spacing: -0.2px;
 }
 
 /* 🔥 Group Description */
@@ -413,19 +485,24 @@
 
 /* 🔥 Schedule Info */
 .schedule-info {
-  text-align: center;
-  margin: 12px 0;
-  padding: 8px;
-  background: linear-gradient(135deg, rgba(72, 187, 120, 0.1), rgba(56, 161, 105, 0.1));
-  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border: 1px solid #bbf7d0;
+  border-radius: 100px;
   font-size: 12px;
-  color: #38a169;
+  color: #15803d;
   cursor: pointer;
   transition: all 0.2s ease;
+  margin-left: 20px;
+  font-weight: 500;
 }
 
 .schedule-info:hover {
-  background: linear-gradient(135deg, rgba(72, 187, 120, 0.2), rgba(56, 161, 105, 0.2));
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+  transform: translateX(2px);
 }
 
 .group-date {
@@ -440,21 +517,35 @@
   display: flex;
   gap: 8px;
   justify-content: center;
-  flex-wrap: wrap;
-  margin-top: 12px;
+  margin-top: 16px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.group-card:hover .group-actions {
+  opacity: 1;
 }
 
 .action-btn {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: white;
+  color: #64748b;
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
   transition: all 0.2s ease;
+}
+
+.action-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .edit-name-btn {
@@ -463,8 +554,9 @@
 }
 
 .edit-name-btn:hover {
-  background-color: #e67e22;
-  transform: translateY(-1px);
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-color: #fbbf24;
+  color: #92400e;
 }
 
 .edit-message-btn {
@@ -473,8 +565,9 @@
 }
 
 .edit-message-btn:hover {
-  background-color: #5a67d8;
-  transform: translateY(-1px);
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border-color: #60a5fa;
+  color: #1e40af;
 }
 
 /* 🔥 Edit Save/Cancel Buttons */
@@ -508,18 +601,21 @@
 
 .delete-btn {
   position: absolute;
-  top: 20px;
-  right: 20px;
-  width: 36px;
-  height: 36px;
-  border: none;
-  background-color: #fee;
-  color: #e53e3e;
-  border-radius: 8px;
-  font-size: 16px;
+  top: 24px;
+  right: 24px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #fee2e2;
+  background: white;
+  color: #ef4444;
+  border-radius: 10px;
+  font-size: 14px;
   cursor: pointer;
   transition: all 0.3s ease;
   opacity: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .group-card:hover .delete-btn {
@@ -527,9 +623,9 @@
 }
 
 .delete-btn:hover {
-  background-color: #e53e3e;
-  color: white;
-  transform: scale(1.1);
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border-color: #fca5a5;
+  transform: rotate(-10deg) scale(1.1);
 }
 
 /* Empty State */
@@ -653,8 +749,17 @@
     padding: 20px;
   }
 
-  .groups-grid {
+  .groups-grid,
+  .groups-grid_D {
     grid-template-columns: 1fr;
+  }
+  
+  .group-actions {
+    opacity: 1;
+  }
+  
+  .delete-btn {
+    opacity: 1;
   }
 
   .miner-controls {
@@ -676,13 +781,33 @@
   }
 
   .groups-divider {
-    margin: 30px 0;
-  }
+  display: flex;
+  align-items: center;
+  margin: 48px 0 36px;
+  position: relative;
+}
+
+.groups-divider::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #e2e8f0 20%, #e2e8f0 80%, transparent);
+}
 
   .divider-text {
-    font-size: 12px;
-    padding: 6px 16px;
-  }
+  position: relative;
+  background: #f5f7fa;
+  padding: 8px 24px;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  margin: 0 auto;
+  border-radius: 100px;
+  border: 1px solid #e2e8f0;
+}
 }
 /* CSS สำหรับ Default Groups ใน MinerGroup.css */
 
@@ -874,24 +999,17 @@
 
 /* Detail Button Styles */
 .detail-btn {
-  background-color: #4299e1;
-  color: white;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
+  width: auto !important;
+  padding: 0 16px;
+  font-size: 13px;
   font-weight: 500;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
   gap: 6px;
-  transition: all 0.2s ease;
 }
 
 .detail-btn:hover {
-  background-color: #3182ce;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(66, 153, 225, 0.3);
+  background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+  border-color: #818cf8;
+  color: #4c1d95;
 }
 
 .detail-btn:active {
@@ -922,40 +1040,83 @@
 /* Knowledge Groups Styles */
 .knowledge-groups-section {
   margin-bottom: 40px;
+  animation: fadeInUp 0.5s ease;
 }
 
 .group-card.knowledge-group {
-  background: linear-gradient(135deg, #f0f4f8 0%, #e8f4fd 100%);
-  border: 3px solid #4299e1;
+  background: linear-gradient(135deg, #ffffff 0%, #fafbff 100%);
+  border: 1px solid #e0e7ff;
+  border-radius: 20px;
+  padding: 24px;
   position: relative;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.group-card.knowledge-group::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #818cf8 0%, #6366f1 100%);
+  transform: scaleX(0);
+  transition: transform 0.4s ease;
+}
+
+.group-card.knowledge-group:hover::before {
+  transform: scaleX(1);
 }
 
 .group-card.knowledge-group:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 24px rgba(66, 153, 225, 0.15);
+  transform: translateY(-6px);
+  box-shadow: 0 20px 40px rgba(99, 102, 241, 0.12);
+  border-color: #c7d2fe;
 }
 
 .group-card.knowledge-group.selected {
-  border-color: #2b6cb0;
-  background: linear-gradient(to bottom, rgba(66, 153, 225, 0.1), rgba(66, 153, 225, 0.05));
+  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+  border-color: #818cf8;
+  border-width: 2px;
 }
 
 .knowledge-badge {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+  top: 16px;
+  right: 16px;
+  background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
   color: white;
-  padding: 4px 12px;
-  border-radius: 12px;
+  padding: 6px 14px;
+  border-radius: 100px;
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
 }
 
 /* Knowledge Groups Section Title */
 .knowledge-groups-section .section-title {
-  color: #2b6cb0;
+  font-size: 18px;
+  font-weight: 500;
+  color: #64748b;
+  letter-spacing: 0.5px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.knowledge-groups-section .section-title .section-icon {
+  background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
 }
 
 /* ปรับปรุง divider สำหรับแยกระหว่าง knowledge และ user groups */
@@ -1060,20 +1221,17 @@
 }
 /* Disabled Group Styling */
 .group-card.disabled-group {
-  opacity: 0.7;
-  position: relative;
+  opacity: 0.5;
+  filter: grayscale(0.5);
 }
 
 .group-card.disabled-group::after {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.2);
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.7) 0%, rgba(248,250,252,0.7) 100%);
+  border-radius: 20px;
   pointer-events: none;
-  border-radius: 16px;
 }
 
 .disabled-indicator {
@@ -1087,12 +1245,45 @@
   pointer-events: none;
   opacity: 0.5;
 }
+
 .disabled-message {
-  margin-right: 20px;
-  font-size: 20px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* ฟอนต์สวยและอ่านง่าย */
-  color: #ff0000;
+  color: #94a3b8;
+  font-size: 13px;
   font-weight: 500;
+  padding: 6px 12px;
+  background: #f1f5f9;
+  border-radius: 100px;
+  display: inline-block;
+}
+
+.loading-state {
+  text-align: center;
+  padding: 80px 20px;
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid #f3f4f6;
+  border-top-color: #818cf8;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 /* เพิ่มใน ScheduleDashboard.css */
 
@@ -1162,3 +1353,26 @@
   left: 50%;
   transform: translateX(-50%);
 }
+
+/* Card Gradient Overlay */
+.card-gradient-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 0%, rgba(99, 102, 241, 0.03) 100%);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+  border-radius: 20px;
+}
+
+.group-card.knowledge-group:hover .card-gradient-overlay {
+  opacity: 1;
+}
+
+.group-card:not(.knowledge-group):not(.default-group):hover .card-gradient-overlay {
+  background: linear-gradient(135deg, transparent 0%, rgba(236, 72, 153, 0.03) 100%);
+  opacity: 1;
+}
+
+
+

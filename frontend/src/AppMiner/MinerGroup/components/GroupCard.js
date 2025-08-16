@@ -30,9 +30,12 @@ const GroupCard = ({
   
   return (
     <div className={`group-card ${isKnowledge ? 'knowledge-group' : ''} ${isDefault ? 'default-group' : ''} ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled-group' : ''}`}>
+
+      {/* Gradient overlay for hover effect */}
+      <div className="card-gradient-overlay"></div>
       {isKnowledge && (
         <div className="knowledge-badge">
-          กลุ่มพื้นฐาน
+          <span className="badge-text">กลุ่มพื้นฐาน</span>
           {isDisabled && <span className="disabled-indicator"> (ปิดใช้งาน)</span>}
         </div>
       )}
@@ -64,7 +67,7 @@ const GroupCard = ({
           </>
         )}
         
-        {scheduleCount > 0 && !isDisabled && (
+         {scheduleCount > 0 && !isDisabled && (
           <div className="schedule-info" onClick={(e) => {
             e.stopPropagation();
             if (!isDisabled) onViewSchedules(group);
@@ -72,6 +75,7 @@ const GroupCard = ({
             <span>⏰เงื่อนไขของกลุ่มที่ตั้งไว้</span>
           </div>
         )}
+
         
         <div className="group-meta">
           <div className="group-date">
