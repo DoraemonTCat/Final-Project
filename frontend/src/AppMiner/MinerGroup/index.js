@@ -16,6 +16,7 @@ import EmptyState from './components/EmptyState';
 import ScheduleModal from './components/ScheduleModal';
 import GroupDetailModal from './components/GroupDetailModal';  // เพิ่ม import
 import KnowledgeSettingsModal from './components/KnowledgeSettingsModal';
+import EditGroupModal from './components/EditGroupModal';
 
 import '../../CSS/MinerGroup.css';
 
@@ -40,6 +41,10 @@ function MinerGroup() {
   const [showDetailModal, setShowDetailModal] = useState(false);  // เพิ่ม state สำหรับ detail modal
   const [selectedGroupDetail, setSelectedGroupDetail] = useState(null);  // เพิ่ม state สำหรับเก็บข้อมูลกลุ่มที่เลือก
   const [showKnowledgeSettings, setShowKnowledgeSettings] = useState(false);
+
+  // ในส่วน state management เพิ่ม:
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingGroup, setEditingGroup] = useState(null);
 
   // Custom Hooks
   const {
@@ -111,8 +116,9 @@ function MinerGroup() {
 
   // ฟังก์ชันสำหรับดู schedules ของกลุ่ม
   const handleStartEdit = (group) => {
-    setEditingGroupId(group.id);
-  };
+  setEditingGroup(group);
+  setShowEditModal(true);
+};
 
   // ฟังก์ชันสำหรับดูรายละเอียดกลุ่ม
   const handleSaveEdit = async (editData) => {
@@ -122,11 +128,8 @@ function MinerGroup() {
   }
 
   try {
-    const editingGroup = customerGroups.find(g => g.id === editingGroupId);
-    
-    // ตรวจสอบว่าเป็น knowledge group หรือไม่
     if (editingGroup && editingGroup.isKnowledge) {
-      // แยก knowledge_id จาก group id
+      // สำหรับ knowledge group
       const knowledgeId = editingGroup.id.toString().replace('knowledge_', '');
       
       const response = await fetch(`http://localhost:8000/customer-type-knowledge/${knowledgeId}`, {
@@ -145,20 +148,19 @@ function MinerGroup() {
         throw new Error(errorData.detail || 'Failed to update knowledge type');
       }
       
-      // แสดงข้อความสำเร็จ
       const result = await response.json();
       alert(result.message || 'อัพเดทข้อมูลสำเร็จ');
       
-    } else if (editingGroupId.toString().startsWith('default_')) {
-      // สำหรับ default groups (ถ้ามี)
+    } else if (editingGroup && editingGroup.id.toString().startsWith('default_')) {
+      // สำหรับ default groups
       const customNamesKey = `defaultGroupCustomNames_${selectedPage}`;
       const customNames = JSON.parse(localStorage.getItem(customNamesKey) || '{}');
-      customNames[editingGroupId] = editData.type_name;
+      customNames[editingGroup.id] = editData.type_name;
       localStorage.setItem(customNamesKey, JSON.stringify(customNames));
       
     } else {
       // สำหรับ user groups
-      const response = await fetch(`http://localhost:8000/customer-groups/${editingGroupId}`, {
+      const response = await fetch(`http://localhost:8000/customer-groups/${editingGroup.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -175,14 +177,21 @@ function MinerGroup() {
       }
     }
     
-    // โหลดข้อมูลใหม่และปิดโหมดแก้ไข
+    // ปิด modal และโหลดข้อมูลใหม่
+    setShowEditModal(false);
+    setEditingGroup(null);
     await fetchCustomerGroups(selectedPage);
-    setEditingGroupId(null);
     
   } catch (error) {
     console.error('Error updating group:', error);
     alert(`เกิดข้อผิดพลาดในการแก้ไข: ${error.message}`);
   }
+};
+
+  // เพิ่มฟังก์ชันสำหรับปิด modal
+const handleCloseEditModal = () => {
+  setShowEditModal(false);
+  setEditingGroup(null);
 };
 
   // ฟังก์ชันสำหรับลบกลุ่ม
@@ -415,19 +424,26 @@ function MinerGroup() {
           ) : (
             <>
               <GroupsGrid
-                defaultGroups={filteredKnowledgeGroups} // ส่ง knowledge groups แทน default groups
+                defaultGroups={filteredKnowledgeGroups}
                 userGroups={filteredUserGroups}
                 selectedGroups={selectedGroups}
-                editingGroupId={editingGroupId}
+                editingGroupId={null} // เปลี่ยนเป็น null เพราะไม่ใช้แล้ว
                 groupScheduleCounts={groupScheduleCounts}
                 onToggleSelect={toggleGroupSelection}
-                onStartEdit={handleStartEdit}
+                onStartEdit={handleStartEdit} // เรียก handleStartEdit แทน
                 onDelete={handleDeleteGroup}
                 onEditMessages={handleEditMessages}
                 onViewSchedules={handleViewSchedules}
-                onSaveEdit={handleSaveEdit}
-                onCancelEdit={() => setEditingGroupId(null)}
+                onSaveEdit={() => {}} // ไม่ใช้แล้ว
+                onCancelEdit={() => {}} // ไม่ใช้แล้ว
                 onViewDetails={handleViewDetails}
+              />
+
+              <EditGroupModal 
+                show={showEditModal}
+                group={editingGroup}
+                onSave={handleSaveEdit}
+                onClose={handleCloseEditModal}
               />
 
               <ActionBar

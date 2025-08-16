@@ -13,20 +13,18 @@ import EditGroupForm from './EditGroupForm';
 const GroupCard = ({ 
   group, 
   isSelected, 
-  isEditing, 
+  isEditing, // ไม่ใช้แล้ว แต่เก็บไว้เพื่อ compatibility
   scheduleCount,
   onToggleSelect, 
   onStartEdit, 
   onDelete, 
   onEditMessages, 
   onViewSchedules,
-  onSaveEdit,
-  onCancelEdit,
   onViewDetails
 }) => {
   const isKnowledge = group.isKnowledge;
   const isDefault = group.isDefault;
-  const isDisabled = isKnowledge && group.is_enabled === false; // เช็คว่าถูกปิดใช้งานหรือไม่
+  const isDisabled = isKnowledge && group.is_enabled === false;
   
   return (
     <div className={`group-card ${isKnowledge ? 'knowledge-group' : ''} ${isDefault ? 'default-group' : ''} ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled-group' : ''}`}>
@@ -55,17 +53,9 @@ const GroupCard = ({
       <div className="group-content">
         <div className="group-icon">{group.icon || '👥'}</div>
         
-        {isEditing && !isDisabled ? (
-          <EditGroupForm 
-            group={group}
-            onSave={onSaveEdit}
-            onCancel={onCancelEdit}
-          />
-        ) : (
-          <>
+        
             <h3 className="group-name">{group.type_name || group.name}</h3>
-          </>
-        )}
+        
         
          {scheduleCount > 0 && !isDisabled && (
           <div className="schedule-info" onClick={(e) => {
@@ -85,10 +75,14 @@ const GroupCard = ({
         
         <div className="group-actions">
           {!isDisabled && (
-            <button onClick={(e) => {
-              e.stopPropagation();
-              onStartEdit(group);
-            }} className="action-btn edit-name-btn">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartEdit(group); // ส่ง group object ทั้งหมดไป
+              }} 
+              className="action-btn edit-name-btn"
+              title="แก้ไขรายละเอียดกลุ่ม"
+            >
               ✏️ 
             </button>
           )}
