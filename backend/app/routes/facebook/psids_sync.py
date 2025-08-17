@@ -364,7 +364,7 @@ async def sync_messages_for_page(page_id: str, db: Session = Depends(get_db)):
         return JSONResponse(status_code=400, content={"error": f"access_token not found for page_id {page_id}"})
 
     now_bkk = datetime.now(bangkok_tz)
-    since_dt = now_bkk - timedelta(days=1)
+    since_dt = now_bkk - timedelta(hours=12)
     since_utc = since_dt.astimezone(pytz.utc)
     since_iso = since_utc.isoformat()
 

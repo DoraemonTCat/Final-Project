@@ -17,7 +17,7 @@ class FacebookPage(Base):
     customer_type_messages = relationship("CustomerTypeMessage", back_populates="page", cascade="all, delete-orphan")
     customers = relationship("FbCustomer", back_populates="page", cascade="all, delete-orphan")
     page_customer_type_knowledge = relationship("PageCustomerTypeKnowledge", back_populates="page", cascade="all, delete-orphan")
-    retarget_tiers_config = relationship("RetargetTierConfig", back_populates="page", cascade="all, delete-orphan")
+    retarget_tiers_config = relationship("RetargetTiersConfig", back_populates="page", cascade="all, delete-orphan")
 
 class CustomerTypeCustom(Base):
     __tablename__ = "customer_type_custom"
@@ -179,7 +179,7 @@ class PageCustomerTypeKnowledge(Base):
     customer_type_knowledge = relationship("CustomerTypeKnowledge", back_populates="page_customer_type_knowledge")
     customer_type_messages = relationship("CustomerTypeMessage", back_populates="page_customer_type_knowledge_rel")
     
-class RetargetTierConfig(Base):
+class RetargetTiersConfig(Base):
     __tablename__ = "retarget_tiers_config"
 
     id = Column(Integer, primary_key=True, index=True)
