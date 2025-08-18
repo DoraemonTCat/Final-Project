@@ -1,3 +1,4 @@
+# backend/app/LLM/agent.py
 import re
 import requests
 from io import BytesIO
@@ -6,6 +7,7 @@ from sqlalchemy.orm import Session
 import google.generativeai as genai
 from PIL import Image
 from app.database import models
+import asyncio
 
 def classify_and_assign_tier_hybrid(db: Session, page_id: int):
     # 1️⃣ load knowledge config ที่ enabled
@@ -70,8 +72,43 @@ def classify_and_assign_tier_hybrid(db: Session, page_id: int):
             elif message_type == "attachment":
                 category_id = classify_with_gemini_image(message_text, knowledge_map)
 
-        # update knowledge id
-        cust.customer_type_knowledge_id = category_id
+        # update knowledge id และส่ง SSE update
+        if category_id != cust.customer_type_knowledge_id:
+            cust.customer_type_knowledge_id = category_id
+            
+            # ส่ง SSE update แบบ async
+            if category_id:
+                knowledge_type = db.query(models.CustomerTypeKnowledge).filter(
+                    models.CustomerTypeKnowledge.id == category_id
+                ).first()
+                
+                if knowledge_type:
+                    try:
+                        from app.routes.facebook.sse import customer_type_update_queue
+                        
+                        # ดึง page_id string จาก database
+                        page_record = db.query(models.FacebookPage).filter(
+                            models.FacebookPage.ID == page_id
+                        ).first()
+                        
+                        if page_record:
+                            update_data = {
+                                'page_id': page_record.page_id,  # ใช้ Facebook page_id string
+                                'psid': cust.customer_psid,
+                                'customer_type_knowledge_id': category_id,
+                                'customer_type_knowledge_name': knowledge_type.type_name,
+                                'timestamp': datetime.now(timezone.utc).isoformat()
+                            }
+                            
+                            # สร้าง async task เพื่อส่ง update
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            loop.run_until_complete(customer_type_update_queue.put(update_data))
+                            loop.close()
+                            
+                            print(f"📡 Sent SSE update for customer {cust.customer_psid} -> {knowledge_type.type_name}")
+                    except Exception as e:
+                        print(f"❌ Error sending SSE update: {e}")
 
         # 5️⃣ หา tier จากวัน
         if cust.last_interaction_at:

@@ -368,7 +368,7 @@ class MessageScheduler:
             logger.error(f"[{group_type}] Error processing schedule: {e}")
     
     async def send_messages_to_users(self, page_id: str, psids: List[str], messages: List[Dict], 
-                                    access_token: str, schedule: Dict[str, Any] = None, group_type: str = ""):
+                                access_token: str, schedule: Dict[str, Any] = None, group_type: str = ""):
         """ส่งข้อความไปยัง users พร้อมอัพเดท customer type และแสดงประเภท"""
         success_count = 0
         fail_count = 0
@@ -425,6 +425,7 @@ class MessageScheduler:
                                 knowledge_id = int(str(group_id).replace('knowledge_', ''))
                                 customer = crud.get_customer_by_psid(db, page.ID, psid)
                                 if customer:
+                                    # อัพเดทในฐานข้อมูล
                                     customer.customer_type_knowledge_id = knowledge_id
                                     customer.updated_at = datetime.now()
                                     db.commit()
@@ -437,17 +438,17 @@ class MessageScheduler:
                                     ).first()
                                     
                                     if knowledge_type:
-                                        from app.routes.facebook.sse import customer_type_update_queue
-                                        update_data = {
-                                            'page_id': page_id,
-                                            'psid': psid,
-                                            'customer_type_knowledge_id': knowledge_id,
-                                            'customer_type_knowledge_name': knowledge_type.type_name,
-                                            'timestamp': datetime.now().isoformat()
-                                        }
-                                        await customer_type_update_queue.put(update_data)
-                                        logger.info(f"[{group_type}] 📡 Sent SSE update for knowledge type: {knowledge_type.type_name}")
+                                        from app.routes.facebook.sse import send_customer_type_update
                                         
+                                        # ส่ง SSE update
+                                        await send_customer_type_update(
+                                            page_id=page_id,
+                                            psid=psid,
+                                            customer_type_knowledge_id=knowledge_id,
+                                            customer_type_knowledge_name=knowledge_type.type_name
+                                        )
+                                        logger.info(f"[{group_type}] 📡 Sent SSE update for knowledge type: {knowledge_type.type_name}")
+                                            
                             except Exception as e:
                                 logger.error(f"[{group_type}] ❌ Error updating customer knowledge type: {e}")
                                 db.rollback()
@@ -462,6 +463,7 @@ class MessageScheduler:
                                         models.CustomerTypeCustom.id == group_id_int
                                     ).first()
                                     if customer_group:
+                                        # อัพเดทในฐานข้อมูล
                                         customer.customer_type_custom_id = group_id_int
                                         customer.updated_at = datetime.now()
                                         db.commit()
@@ -469,12 +471,15 @@ class MessageScheduler:
                                         logger.info(f"[{group_type}] ✅ Updated customer {psid} to custom group {group_id_int}")
                                         
                                         # ส่ง SSE update
+                                        from app.routes.facebook.sse import send_customer_type_update
                                         await send_customer_type_update(
                                             page_id=page_id,
                                             psid=psid,
                                             customer_type_name=customer_group.type_name,
                                             customer_type_custom_id=group_id_int
                                         )
+                                        logger.info(f"[{group_type}] 📡 Sent SSE update for custom type: {customer_group.type_name}")
+                                        
                             except Exception as e:
                                 logger.error(f"[{group_type}] ❌ Error updating customer type: {e}")
                                 db.rollback()

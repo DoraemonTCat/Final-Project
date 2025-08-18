@@ -62,8 +62,12 @@ async def event_generator(page_id: str, db: Session) -> AsyncGenerator:
                                     'first_interaction': customer.first_interaction_at.isoformat() if customer.first_interaction_at else None,
                                     'last_interaction': customer.last_interaction_at.isoformat() if customer.last_interaction_at else None,
                                     'source_type': customer.source_type,
+                                    # User Groups
                                     'customer_type_custom_id': customer.customer_type_custom_id,
                                     'customer_type_name': customer.customer_type_custom.type_name if customer.customer_type_custom else None,
+                                    # Knowledge Groups - เพิ่มข้อมูลนี้
+                                    'customer_type_knowledge_id': customer.customer_type_knowledge_id,
+                                    'customer_type_knowledge_name': customer.customer_type_knowledge.type_name if customer.customer_type_knowledge else None,
                                     'action': 'update'
                                 }
                                 updates.append(update_data)
@@ -105,15 +109,25 @@ async def event_generator(page_id: str, db: Session) -> AsyncGenerator:
             pass
 
 # Helper function สำหรับส่ง customer type update
-async def send_customer_type_update(page_id: str, psid: str, customer_type_name: str, customer_type_custom_id: int):
+async def send_customer_type_update(page_id: str, psid: str, customer_type_name: str = None, customer_type_custom_id: int = None, customer_type_knowledge_name: str = None, customer_type_knowledge_id: int = None):
     """ส่ง customer type update ผ่าน SSE"""
     update = {
         'page_id': page_id,
         'psid': psid,
-        'customer_type_name': customer_type_name,
-        'customer_type_custom_id': customer_type_custom_id,
         'timestamp': datetime.now().isoformat()
     }
+    
+    # เพิ่มข้อมูล User Group ถ้ามี
+    if customer_type_name is not None:
+        update['customer_type_name'] = customer_type_name
+    if customer_type_custom_id is not None:
+        update['customer_type_custom_id'] = customer_type_custom_id
+    
+    # เพิ่มข้อมูล Knowledge Group ถ้ามี
+    if customer_type_knowledge_name is not None:
+        update['customer_type_knowledge_name'] = customer_type_knowledge_name
+    if customer_type_knowledge_id is not None:
+        update['customer_type_knowledge_id'] = customer_type_knowledge_id
     
     await customer_type_update_queue.put(update)
     logger.info(f"Queued customer type update for {psid}")

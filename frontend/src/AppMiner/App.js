@@ -278,14 +278,14 @@ function App() {
             // อัพเดทข้อมูลทั้ง custom และ knowledge types
             return {
               ...conv,
-              // Custom type
+              // Custom type (User Groups)
               customer_type_custom_id: update.customer_type_custom_id !== undefined 
                 ? update.customer_type_custom_id 
                 : conv.customer_type_custom_id,
               customer_type_name: update.customer_type_name !== undefined 
                 ? update.customer_type_name 
                 : conv.customer_type_name,
-              // Knowledge type
+              // Knowledge type (กลุ่มพื้นฐาน)
               customer_type_knowledge_id: update.customer_type_knowledge_id !== undefined 
                 ? update.customer_type_knowledge_id 
                 : conv.customer_type_knowledge_id,
@@ -308,12 +308,14 @@ function App() {
           if (update) {
             return {
               ...conv,
+              // Custom type (User Groups)
               customer_type_custom_id: update.customer_type_custom_id !== undefined 
                 ? update.customer_type_custom_id 
                 : conv.customer_type_custom_id,
               customer_type_name: update.customer_type_name !== undefined 
                 ? update.customer_type_name 
                 : conv.customer_type_name,
+              // Knowledge type (กลุ่มพื้นฐาน)
               customer_type_knowledge_id: update.customer_type_knowledge_id !== undefined 
                 ? update.customer_type_knowledge_id 
                 : conv.customer_type_knowledge_id,
@@ -328,27 +330,39 @@ function App() {
         });
       });
 
-        // อัพเดท filteredConversations ถ้ามี
-        setFilteredConversations(prevFiltered => {
-          if (prevFiltered.length > 0) {
-            return prevFiltered.map(conv => {
-              const update = updates.find(u => u.psid === conv.raw_psid);
-              if (update) {
-                return {
-                  ...conv,
-                  customer_type_custom_id: update.customer_type_custom_id,
-                  customer_type_name: update.customer_type_name,
-                  last_user_message_time: update.last_interaction || conv.last_user_message_time,
-                  updated_time: new Date().toISOString()
-                };
-              }
-              return conv;
-            });
-          }
-          return prevFiltered;
-        });
+      // อัพเดท filteredConversations ถ้ามี
+      setFilteredConversations(prevFiltered => {
+        if (prevFiltered.length > 0) {
+          return prevFiltered.map(conv => {
+            const update = updates.find(u => u.psid === conv.raw_psid);
+            if (update) {
+              return {
+                ...conv,
+                // Custom type (User Groups)
+                customer_type_custom_id: update.customer_type_custom_id !== undefined 
+                  ? update.customer_type_custom_id 
+                  : conv.customer_type_custom_id,
+                customer_type_name: update.customer_type_name !== undefined 
+                  ? update.customer_type_name 
+                  : conv.customer_type_name,
+                // Knowledge type (กลุ่มพื้นฐาน)
+                customer_type_knowledge_id: update.customer_type_knowledge_id !== undefined 
+                  ? update.customer_type_knowledge_id 
+                  : conv.customer_type_knowledge_id,
+                customer_type_knowledge_name: update.customer_type_knowledge_name !== undefined 
+                  ? update.customer_type_knowledge_name 
+                  : conv.customer_type_knowledge_name,
+                last_user_message_time: update.last_interaction || conv.last_user_message_time,
+                updated_time: new Date().toISOString()
+              };
+            }
+            return conv;
+          });
+        }
+        return prevFiltered;
+      });
 
-        // แสดง notification
+      // แสดง notification
       const customUpdateCount = updates.filter(u => u.customer_type_name).length;
       const knowledgeUpdateCount = updates.filter(u => u.customer_type_knowledge_name).length;
       const totalUpdates = customUpdateCount + knowledgeUpdateCount;
@@ -357,6 +371,10 @@ function App() {
         let message = `อัพเดทหมวดหมู่ลูกค้า ${totalUpdates} คน`;
         if (customUpdateCount > 0 && knowledgeUpdateCount > 0) {
           message += ` (กลุ่มผู้ใช้: ${customUpdateCount}, กลุ่มพื้นฐาน: ${knowledgeUpdateCount})`;
+        } else if (customUpdateCount > 0) {
+          message += ` (กลุ่มผู้ใช้)`;
+        } else if (knowledgeUpdateCount > 0) {
+          message += ` (กลุ่มพื้นฐาน)`;
         }
         showNotification('info', message);
       }

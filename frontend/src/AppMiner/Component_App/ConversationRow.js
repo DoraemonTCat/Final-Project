@@ -9,6 +9,8 @@
 // - ใช้ TimeAgoCell สำหรับแสดงเวลา
 // =====================================================
 
+// frontend/src/AppMiner/Component_App/ConversationRow.js
+
 import React from 'react';
 import TimeAgoCell from './TimeAgoCell';
 import CustomerInfoBadge from './CustomerInfoBadge';
@@ -21,12 +23,6 @@ const ConversationRow = React.memo(({
   onInactivityChange,
   isRecentlyUpdated
 }) => {
-  const statusColors = {
-    'ขุดแล้ว': '#48bb78',
-    'ยังไม่ขุด': '#e53e3e',
-    'มีการตอบกลับ': '#3182ce'
-  };
-
   // ฟังก์ชันแสดงหมวดหมู่ลูกค้า - รองรับทั้ง 2 ประเภท
   const getCustomerTypeDisplay = () => {
     // สร้าง array เก็บหมวดหมู่ทั้งหมด
@@ -38,7 +34,8 @@ const ConversationRow = React.memo(({
         name: conv.customer_type_name,
         color: "#667eea",
         type: "user",
-        icon: "👤"
+        icon: "👤",
+        id: conv.customer_type_custom_id
       });
     }
     
@@ -48,7 +45,8 @@ const ConversationRow = React.memo(({
         name: conv.customer_type_knowledge_name,
         color: "#48bb78",
         type: "knowledge",
-        icon: "🧠"
+        icon: "👤",
+        id: conv.customer_type_knowledge_id
       });
     }
     
@@ -153,7 +151,8 @@ const ConversationRow = React.memo(({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             {customerTypes.map((type, index) => (
               <span 
-                key={`${type.type}-${index}`}
+                key={`${type.type}-${type.id}-${index}`}
+                className={`customer-type-badge ${isRecentlyUpdated ? 'updating' : ''}`}
                 style={{
                   background: type.color,
                   color: "#fff",
@@ -165,12 +164,23 @@ const ConversationRow = React.memo(({
                   alignItems: 'center',
                   gap: '4px',
                   width: 'fit-content',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                  transition: 'all 0.3s ease',
+                  transform: isRecentlyUpdated ? 'scale(1.05)' : 'scale(1)'
                 }}
-                title={type.type === 'user' ? 'กลุ่มที่สร้างเอง' : 'กลุ่มพื้นฐาน'}
+                title={type.type === 'user' ? 'กลุ่มที่สร้างเอง' : 'กลุ่มพื้นฐาน (AI Classification)'}
               >
                 <span style={{ fontSize: '10px' }}>{type.icon}</span>
                 {type.name}
+                {isRecentlyUpdated && (
+                  <span className="update-pulse" style={{
+                    width: '6px',
+                    height: '6px',
+                    backgroundColor: '#fff',
+                    borderRadius: '50%',
+                    animation: 'pulse 1s infinite'
+                  }}></span>
+                )}
               </span>
             ))}
           </div>
