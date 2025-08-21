@@ -35,19 +35,7 @@ const AlertMessages = ({ selectedPage, conversationsLength, loading, filteredLen
     );
   }
 
-  if (filteredLength > 0) {
-    return (
-      <div className="alert alert-success">
-        <div className="alert-icon">🔍</div>
-        <div className="alert-content">
-          <strong>กำลังแสดงผลการกรอง</strong>
-          <p>พบ {filteredLength} จาก {allLength} การสนทนา</p>
-        </div>
-      </div>
-    );
-  }
-
-  return null;
+  
 };
 
 export default AlertMessages;

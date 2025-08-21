@@ -117,22 +117,14 @@ const GroupDetailModal = ({ show, group, onClose }) => {
                   {group.is_active !== false ? '✅ ใช้งาน' : '⛔ ไม่ใช้งาน'}
                 </span>
               </div>
-              <div className="info-item">
-                <span className="info-label">จำนวนลูกค้า:</span>
-                <span className="info-value">{group.customer_count || 0} คน</span>
-              </div>
+              
               <div className="info-item">
                 <span className="info-label">สร้างเมื่อ:</span>
                 <span className="info-value">
                   {group.created_at ? new Date(group.created_at).toLocaleDateString('th-TH') : 'ไม่ทราบ'}
                 </span>
               </div>
-              <div className="info-item">
-                <span className="info-label">แก้ไขล่าสุด:</span>
-                <span className="info-value">
-                  {group.updated_at ? new Date(group.updated_at).toLocaleDateString('th-TH') : 'ไม่ทราบ'}
-                </span>
-              </div>
+              
             </div>
           </div>
         </div>

@@ -316,21 +316,8 @@ function Settings() {
         </div>
 
         <div className="settings-footer">
-          <div className="footer-left">
-            <button onClick={exportSettings} className="btn-secondary">
-              📥 Export การตั้งค่า
-            </button>
-            <label className="btn-secondary">
-              📤 Import การตั้งค่า
-              <input 
-                type="file" 
-                accept=".json"
-                onChange={importSettings}
-                style={{ display: 'none' }}
-              />
-            </label>
-          </div>
-          <div className="footer-right">
+          
+          <div className="footer-right" style={{marginLeft:"780px"}}>
             <button onClick={resetSettings} className="btn-danger">
               🔄 รีเซ็ตทั้งหมด
             </button>
@@ -473,43 +460,6 @@ const DisplaySettings = ({ settings, updateSetting }) => {
     
       <h2 className="section-title">การแสดงผล</h2>
       
-      <div className="setting-group">
-        <label className="setting-label">ตำแหน่ง Sidebar</label>
-        <div className="radio-group">
-          <label className="radio-option">
-            <input
-              type="radio"
-              value="left"
-              checked={settings.sidebarPosition === 'left'}
-              onChange={(e) => updateSetting('sidebarPosition', e.target.value)}
-            />
-            ซ้าย
-          </label>
-          <label className="radio-option">
-            <input
-              type="radio"
-              value="right"
-              checked={settings.sidebarPosition === 'right'}
-              onChange={(e) => updateSetting('sidebarPosition', e.target.value)}
-            />
-            ขวา
-          </label>
-        </div>
-      </div>
-
-      <div className="setting-group">
-        <label className="setting-label">ขนาด Sidebar</label>
-        <select 
-          value={settings.sidebarWidth}
-          onChange={(e) => updateSetting('sidebarWidth', e.target.value)}
-          className="setting-select"
-        >
-          <option value="narrow">แคบ (200px)</option>
-          <option value="normal">ปกติ (250px)</option>
-          <option value="wide">กว้าง (300px)</option>
-        </select>
-      </div>
-
       <div className="setting-group">
         <label className="setting-label">
           <input
