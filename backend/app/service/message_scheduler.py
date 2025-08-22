@@ -1,6 +1,3 @@
-# ไฟล์: backend/app/service/message_scheduler.py
-# แก้ไข class MessageScheduler ทั้งหมด
-
 import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Set
@@ -250,6 +247,7 @@ class MessageScheduler:
             inactivity_period = int(schedule.get('inactivityPeriod', 1))
             inactivity_unit = schedule.get('inactivityUnit', 'days')
             schedule_id = str(schedule['id'])
+            groups = schedule.get('groups', [])
 
             # แปลงหน่วยเวลาเป็นนาที
             if inactivity_unit == 'minutes':
@@ -278,37 +276,70 @@ class MessageScheduler:
                 logger.warning(f"No access token for page {page_id}")
                 return
 
-            inactive_users = []
-            sent_users = self.sent_tracking.get(schedule_id, set())
+            # 🔥 เพิ่มการตรวจสอบ users ที่อยู่ในกลุ่ม knowledge
+            db = SessionLocal()
+            try:
+                # หา page record
+                page = crud.get_page_by_page_id(db, page_id)
+                if not page:
+                    logger.error(f"Page {page_id} not found")
+                    return
 
-            # ตรวจสอบแต่ละ user
-            for user_id, user_data in page_inactivity_data.items():
-                # ตรวจสอบว่าเคยส่งให้ user นี้แล้วหรือยัง
-                if user_id in sent_users:
-                    continue
+                # ตรวจสอบว่าเป็น knowledge group หรือไม่
+                knowledge_group_ids = []
+                for group_id in groups:
+                    if str(group_id).startswith('knowledge_'):
+                        knowledge_id = int(str(group_id).replace('knowledge_', ''))
+                        knowledge_group_ids.append(knowledge_id)
 
-                # ดึงระยะเวลาที่หายไป (เป็นนาที)
-                user_inactivity_minutes = user_data.get('inactivity_minutes', 0)
+                inactive_users = []
+                sent_users = self.sent_tracking.get(schedule_id, set())
 
-                # ตรวจสอบว่าอยู่ในช่วงที่ตรงกับเงื่อนไข
-                tolerance = target_minutes * 0.02  # 2% ของเป้าหมาย
-                min_tolerance = max(0.2, tolerance)
-                
-                lower_bound = target_minutes - min_tolerance
-                upper_bound = target_minutes + min_tolerance
-                
-                if lower_bound <= user_inactivity_minutes <= upper_bound:
-                    inactive_users.append(user_id)
-                    logger.info(f"[{group_type}] User {user_id} matches: {user_inactivity_minutes} min (target: {target_minutes}±{min_tolerance})")
+                # ตรวจสอบแต่ละ user
+                for user_id, user_data in page_inactivity_data.items():
+                    # ตรวจสอบว่าเคยส่งให้ user นี้แล้วหรือยัง
+                    if user_id in sent_users:
+                        continue
 
-            # ส่งข้อความให้ users ที่ตรงเงื่อนไข
-            if inactive_users:
-                logger.info(f"[{group_type}] Found {len(inactive_users)} inactive users for schedule {schedule['id']}")
-                await self.send_messages_to_users(page_id, inactive_users, schedule['messages'], access_token, schedule, group_type)
+                    # ดึงระยะเวลาที่หายไป (เป็นนาที)
+                    user_inactivity_minutes = user_data.get('inactivity_minutes', 0)
 
-                # เพิ่ม users ที่ส่งแล้วเข้า tracking
-                self.sent_tracking[schedule_id].update(inactive_users)
-                schedule['last_sent'] = datetime.now().isoformat()
+                    # ตรวจสอบว่าอยู่ในช่วงที่ตรงกับเงื่อนไข
+                    tolerance = target_minutes * 0.02  # 2% ของเป้าหมาย
+                    min_tolerance = max(0.2, tolerance)
+                    
+                    lower_bound = target_minutes - min_tolerance
+                    upper_bound = target_minutes + min_tolerance
+                    
+                    if lower_bound <= user_inactivity_minutes <= upper_bound:
+                        # 🔥 ถ้าเป็น knowledge group ต้องตรวจสอบว่า user อยู่ในกลุ่มหรือไม่
+                        if knowledge_group_ids:
+                            customer = crud.get_customer_by_psid(db, page.ID, user_id)
+                            if not customer:
+                                logger.debug(f"[{group_type}] User {user_id} not found in database")
+                                continue
+                            
+                            # ตรวจสอบว่า customer อยู่ใน knowledge group ที่ต้องการหรือไม่
+                            if not customer.customer_type_knowledge_id or customer.customer_type_knowledge_id not in knowledge_group_ids:
+                                logger.info(f"[{group_type}] User {user_id} not in knowledge group {knowledge_group_ids}, skipping")
+                                continue
+                            
+                            logger.info(f"[{group_type}] User {user_id} is in knowledge group {customer.customer_type_knowledge_id}")
+                        
+                        inactive_users.append(user_id)
+                        logger.info(f"[{group_type}] User {user_id} matches: {user_inactivity_minutes} min (target: {target_minutes}±{min_tolerance})")
+
+                # ส่งข้อความให้ users ที่ตรงเงื่อนไข
+                if inactive_users:
+                    logger.info(f"[{group_type}] Found {len(inactive_users)} inactive users for schedule {schedule['id']}")
+                    await self.send_messages_to_users(page_id, inactive_users, schedule['messages'], access_token, schedule, group_type)
+
+                    # เพิ่ม users ที่ส่งแล้วเข้า tracking
+                    self.sent_tracking[schedule_id].update(inactive_users)
+                    schedule['last_sent'] = datetime.now().isoformat()
+
+            finally:
+                db.close()
 
         except Exception as e:
             logger.error(f"[{group_type}] Error checking user inactivity: {e}")
@@ -331,36 +362,68 @@ class MessageScheduler:
             if not access_token:
                 logger.warning(f"No access token for page {page_id}")
                 return
-                
-            # ดึงข้อมูล conversations
-            from app.service.facebook_api import fb_get
             
-            endpoint = f"{page_id}/conversations"
-            params = {
-                "fields": "participants,updated_time,id",
-                "limit": 100
-            }
+            # 🔥 ตรวจสอบประเภทกลุ่ม
+            knowledge_group_ids = []
+            for group_id in groups:
+                if str(group_id).startswith('knowledge_'):
+                    knowledge_id = int(str(group_id).replace('knowledge_', ''))
+                    knowledge_group_ids.append(knowledge_id)
             
-            conversations = fb_get(endpoint, params, access_token)
-            if "error" in conversations:
-                logger.error(f"Error getting conversations: {conversations['error']}")
-                return
+            # ถ้าเป็น knowledge group ต้องดึงเฉพาะ users ที่อยู่ในกลุ่ม
+            if knowledge_group_ids:
+                db = SessionLocal()
+                try:
+                    page = crud.get_page_by_page_id(db, page_id)
+                    if not page:
+                        logger.error(f"Page {page_id} not found")
+                        return
+                    
+                    # ดึง customers ที่อยู่ใน knowledge group
+                    customers = db.query(models.FbCustomer).filter(
+                        models.FbCustomer.page_id == page.ID,
+                        models.FbCustomer.customer_type_knowledge_id.in_(knowledge_group_ids)
+                    ).all()
+                    
+                    all_psids = [customer.customer_psid for customer in customers]
+                    logger.info(f"[{group_type}] Found {len(all_psids)} users in knowledge groups {knowledge_group_ids}")
+                    
+                finally:
+                    db.close()
+            else:
+                # กรณีเดิม - ดึงจาก conversations
+                from app.service.facebook_api import fb_get
                 
-            # รวบรวม PSIDs ทั้งหมด
-            all_psids = []
+                endpoint = f"{page_id}/conversations"
+                params = {
+                    "fields": "participants,updated_time,id",
+                    "limit": 100
+                }
+                
+                conversations = fb_get(endpoint, params, access_token)
+                if "error" in conversations:
+                    logger.error(f"Error getting conversations: {conversations['error']}")
+                    return
+                    
+                # รวบรวม PSIDs ทั้งหมด
+                all_psids = []
+                sent_users = self.sent_tracking.get(schedule_id, set())
+                
+                for conv in conversations.get('data', []):
+                    participants = conv.get('participants', {}).get('data', [])
+                    for participant in participants:
+                        user_id = participant.get('id')
+                        if user_id and user_id != page_id and user_id not in sent_users:
+                            all_psids.append(user_id)
+            
+            # กรอง users ที่ส่งแล้ว
             sent_users = self.sent_tracking.get(schedule_id, set())
+            filtered_psids = [psid for psid in all_psids if psid not in sent_users]
             
-            for conv in conversations.get('data', []):
-                participants = conv.get('participants', {}).get('data', [])
-                for participant in participants:
-                    user_id = participant.get('id')
-                    if user_id and user_id != page_id and user_id not in sent_users:
-                        all_psids.append(user_id)
-                        
-            if all_psids:
-                logger.info(f"[{group_type}] Sending messages to {len(all_psids)} users")
-                await self.send_messages_to_users(page_id, all_psids, messages, access_token, schedule, group_type)
-                self.sent_tracking[schedule_id].update(all_psids)
+            if filtered_psids:
+                logger.info(f"[{group_type}] Sending messages to {len(filtered_psids)} users")
+                await self.send_messages_to_users(page_id, filtered_psids, messages, access_token, schedule, group_type)
+                self.sent_tracking[schedule_id].update(filtered_psids)
             else:
                 logger.warning(f"[{group_type}] No users found to send messages")
             
