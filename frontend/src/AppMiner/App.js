@@ -230,9 +230,7 @@ function App() {
     console.error("❌ เกิดข้อผิดพลาด:", err);
     if (err.response?.status === 400) {
       alert("กรุณาเชื่อมต่อ Facebook Page ก่อนใช้งาน");
-    } else {
-      alert(`เกิดข้อผิดพลาด: ${err.message || err}`);
-    }
+    } 
   } finally {
     setLoading(false);
   }

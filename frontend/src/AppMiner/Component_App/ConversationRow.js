@@ -102,7 +102,7 @@ const ConversationRow = React.memo(({
   return (
     <tr className={`table-row ${isSelected ? 'selected' : ''} ${isRecentlyUpdated ? 'recently-updated' : ''}`}>
       <td className="table-cell text-center">
-        <div className="row-number">{idx + 1}</div>
+        <div className="row-number">{idx + 1}</div> {/* แสดงหมายเลขแถว */}
       </td>
       
       <td className="table-cell">
@@ -111,7 +111,7 @@ const ConversationRow = React.memo(({
             {conv.user_name?.charAt(0) || 'U'}
           </div>
           <div className="user-details">
-            <div className="user-name">{conv.conversation_name || `บทสนทนาที่ ${idx + 1}`}</div>
+            <div className="user-name" >{conv.conversation_name || `บทสนทนาที่ ${idx + 1}`}</div>  {/* แสดงชื่อชื่อ */}
             {conv.source_type && <CustomerInfoBadge customer={conv} />}
           </div>
         </div>
@@ -120,11 +120,11 @@ const ConversationRow = React.memo(({
       <td className="table-cell">
         <div className="date-display">
           {conv.first_interaction_at
-            ? new Date(conv.first_interaction_at).toLocaleDateString("th-TH", {
+            ? new Date(conv.first_interaction_at).toLocaleDateString("th-TH", {  // แสดงวันที่ในรูปแบบไทย
                 year: 'numeric', month: 'short', day: 'numeric'
               })
             : conv.created_time
-              ? new Date(conv.created_time).toLocaleDateString("th-TH", {
+              ? new Date(conv.created_time).toLocaleDateString("th-TH", {  // ใช้ created_time ถ้าไม่มี first_interaction_at
                   year: 'numeric', month: 'short', day: 'numeric'
                 })
               : "-"
@@ -133,14 +133,14 @@ const ConversationRow = React.memo(({
       </td>
       
       <TimeAgoCell   
-        lastMessageTime={conv.last_user_message_time}
+        lastMessageTime={conv.last_user_message_time}  // ไว่้บอกระยะเวลาที่หายไป
         updatedTime={conv.updated_time}
         userId={conv.raw_psid}
         onInactivityChange={onInactivityChange}
       />
       
       <td className="table-cell">
-        <div className={`platform-badge ${platformInfo.className}`}>
+        <div className={`platform-badge ${platformInfo.className}`}>  
           {platformInfo.icon}
           {platformInfo.label}
         </div>
