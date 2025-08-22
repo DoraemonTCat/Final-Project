@@ -458,19 +458,19 @@ function App() {
   );
 
   // Filter Functions
-  const applyFilters = () => {
+   const applyFilters = () => {
     let filtered = [...allConversations];
     const { disappearTime, customerType, platformType, miningStatus, startDate, endDate } = filters;
 
     if (dateEntryFilter) {
-    filtered = filtered.filter(conv => {
-      const dateStr = conv.first_interaction_at || conv.created_time;
-      if (!dateStr) return false;
-      
-      const date = new Date(dateStr).toISOString().split('T')[0];
-      return date === dateEntryFilter;
-    });
-  }
+      filtered = filtered.filter(conv => {
+        const dateStr = conv.first_interaction_at || conv.created_time;
+        if (!dateStr) return false;
+
+        const date = new Date(dateStr).toISOString().split('T')[0];
+        return date === dateEntryFilter;
+      });
+    }
 
     if (disappearTime) {
       const now = new Date();
@@ -496,7 +496,16 @@ function App() {
     }
 
     if (customerType) {
-      filtered = filtered.filter(conv => conv.customerType === customerType);
+      const customerTypeMap = {
+        newCM: "ทักแล้วหาย",
+        intrestCM: "ทักแล้วคุย แต่ไม่ถามราคา",
+        dealDoneCM: "ทักแล้วถามราคา แต่ไม่ซื้อ",
+        exCM: "ทักแล้วซื้อ"
+      };
+
+      filtered = filtered.filter(
+        conv => conv.customer_type_knowledge_name === customerTypeMap[customerType]
+      );
     }
 
     if (platformType) {
@@ -507,14 +516,23 @@ function App() {
       filtered = filtered.filter(conv => conv.miningStatus === miningStatus);
     }
 
+    const toDateOnly = (dateStr) => {
+      if (!dateStr) return null;
+      return new Date(dateStr).toISOString().split("T")[0];
+    };
+
     if (startDate) {
-      const start = new Date(startDate);
-      filtered = filtered.filter(conv => new Date(conv.created_time) >= start);
+      filtered = filtered.filter(conv => {
+        const convDate = toDateOnly(conv.first_interaction_at);
+        return convDate && convDate >= startDate;
+      });
     }
-    
+
     if (endDate) {
-      const end = new Date(endDate);
-      filtered = filtered.filter(conv => new Date(conv.created_time) <= end);
+      filtered = filtered.filter(conv => {
+        const convDate = toDateOnly(conv.first_interaction_at);
+        return convDate && convDate <= endDate;
+      });
     }
 
     setFilteredConversations(filtered);

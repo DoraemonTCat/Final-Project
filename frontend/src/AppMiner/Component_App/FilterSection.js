@@ -68,10 +68,10 @@ const FilterSection = ({
                 onChange={(e) => handleFilterChange('customerType', e.target.value)}
               >
                 <option value="">ทั้งหมด</option>
-                <option value="newCM">ลูกค้าใหม่</option>
-                <option value="intrestCM">สนใจสินค้าสูง</option>
-                <option value="dealDoneCM">ใกล้ปิดการขาย</option>
-                <option value="exCM">ลูกค้าเก่า</option>
+                <option value="newCM">ทักแล้วหาย</option>
+                <option value="intrestCM">ทักแล้วคุย แต่ไม่ถามราคา</option>
+                <option value="dealDoneCM">ทักแล้วถามราคา แต่ไม่ซื้อ</option>
+                <option value="exCM">ทักแล้วซื้อ</option>
               </select>
             </div>
 
