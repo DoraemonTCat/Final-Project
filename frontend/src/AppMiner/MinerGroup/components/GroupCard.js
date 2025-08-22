@@ -34,7 +34,7 @@ const GroupCard = ({
       {isKnowledge && (
         <div className="knowledge-badge">
           <span className="badge-text">กลุ่มพื้นฐาน</span>
-          {isDisabled && <span className="disabled-indicator"> (ปิดใช้งาน)</span>}
+          
         </div>
       )}
       {isDefault && <div className="default-badge">พื้นฐาน</div>}
