@@ -247,7 +247,7 @@ function Settings() {
   };
 
   return (
-    <div className="settings-page" style={{marginLeft:"70px"}}>
+    <div className="settings-page" style={{marginLeft:"50px"}}>
       <Sidebar />
       <div className="settings-container">
         <div className="settings-header">

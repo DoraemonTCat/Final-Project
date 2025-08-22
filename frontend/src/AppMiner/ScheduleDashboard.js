@@ -850,7 +850,7 @@ function ScheduleDashboard() {
           {loading ? (
             <div className="loading-state">
               <div className="loading-spinner"></div>
-              <p>กำลังโหลดข้อมูล...</p>
+             
             </div>
           ) : (
             <>
