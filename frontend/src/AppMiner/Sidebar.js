@@ -73,7 +73,7 @@ function Sidebar() {
           {!isSidebarCollapsed && (
             <div className="logo-text">
               <span className="logo-title">MinerBot</span>
-              <span className="logo-subtitle">Pro Dashboard</span>
+              <span className="logo-subtitle">Miner Dashboard</span>
             </div>
           )}
         </div>

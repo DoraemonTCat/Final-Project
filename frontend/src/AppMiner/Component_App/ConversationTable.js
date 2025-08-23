@@ -24,12 +24,12 @@ const ConversationTable = ({
         <thead>
           <tr>
             <th className="th-number">ลำดับ</th>
-            <th className="th-user">ผู้ใช้</th>
+            <th className="th-user" style={{paddingLeft:"33px"}}>ผู้ใช้</th>
             <th className="th-date" style={{paddingLeft:"20px"}}>วันที่เข้า</th>
             <th className="th-time">ระยะเวลาที่หาย</th>    
             <th className="th-platform">Platform</th>
-            <th className="th-type">หมวดหมู่ลูกค้า</th>
-            <th className="th-status">สถานะการขุด</th>
+            <th className="th-type" style={{paddingLeft:"53px"}}>หมวดหมู่ลูกค้า</th>
+            <th className="th-status" style={{paddingLeft:"43px"}}>สถานะการขุด</th>
             <th className="th-select">
               <label className="select-all-checkbox">
                 <input
