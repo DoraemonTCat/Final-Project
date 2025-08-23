@@ -182,7 +182,10 @@ async def get_new_user_notifications(page_id: str):
 async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: int, db: Session):
     """ฟังก์ชันสำหรับ sync ข้อมูล user ใหม่แบบละเอียด พร้อมดึงข้อมูลเวลาที่ถูกต้อง"""
     try:
-        from backend.app.routes.facebook.conversations import page_tokens
+        from app.routes.facebook.auth import get_page_tokens
+        from app.service.facebook_api import fb_get
+        
+        page_tokens = get_page_tokens()
         access_token = page_tokens.get(page_id)
         
         if not access_token:
@@ -215,7 +218,7 @@ async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: 
         if conversations and "data" in conversations and conversations["data"]:
             conv = conversations["data"][0]
             
-            # หาข้อความแรกที่ user ส่งมา (ไม่ใช่จาก page)
+            # หาข้อความแรกที่ user ส่งมา
             if "messages" in conv and "data" in conv["messages"]:
                 user_messages = [
                     msg for msg in conv["messages"]["data"] 
@@ -223,10 +226,8 @@ async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: 
                 ]
                 
                 if user_messages:
-                    # เรียงตามเวลา เก่าสุดไปใหม่สุด
                     user_messages.sort(key=lambda x: x.get("created_time", ""))
                     
-                    # ข้อความแรกของ user
                     first_msg_time = user_messages[0].get("created_time")
                     if first_msg_time:
                         try:
@@ -234,7 +235,6 @@ async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: 
                         except:
                             first_interaction = datetime.now()
                     
-                    # ข้อความล่าสุดของ user
                     last_msg_time = user_messages[-1].get("created_time")
                     if last_msg_time:
                         try:
@@ -242,14 +242,12 @@ async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: 
                         except:
                             last_interaction = datetime.now()
             
-            # ถ้าหา first_interaction ไม่ได้ ใช้ updated_time ของ conversation
             if not first_interaction and conv.get("updated_time"):
                 try:
                     first_interaction = datetime.fromisoformat(conv["updated_time"].replace('Z', '+00:00'))
                 except:
                     first_interaction = datetime.now()
         
-        # ถ้ายังหาไม่ได้ ใช้เวลาปัจจุบัน
         if not first_interaction:
             first_interaction = datetime.now()
         
@@ -258,7 +256,7 @@ async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: 
             'name': user_name or f"User...{sender_id[-8:]}",
             'first_interaction_at': first_interaction,
             'last_interaction_at': last_interaction,
-            'source_type': 'new',  # ระบุว่าเป็น user ใหม่จาก webhook
+            'source_type': 'new',
             'metadata': {
                 'profile_pic': user_info.get('profile_pic', ''),
                 'gender': user_info.get('gender'),
@@ -271,10 +269,31 @@ async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: 
         customer = crud.create_or_update_customer(db, page_db_id, sender_id, customer_data)
         
         logger.info(f"✅ Auto sync สำเร็จสำหรับ user: {user_name} ({sender_id})")
-        logger.info(f"   - First interaction: {first_interaction}")
-        logger.info(f"   - Last interaction: {last_interaction}")
         
-        # 7. เก็บข้อมูลการแจ้งเตือน
+        # 🔥 ส่วนสำคัญ: ส่ง SSE Update ไปยัง Frontend
+        from app.routes.facebook.sse import customer_type_update_queue
+        
+        try:
+            # สร้าง update data
+            update_data = {
+                'page_id': page_id,
+                'psid': sender_id,
+                'name': user_name or f"User...{sender_id[-8:]}",
+                'first_interaction': first_interaction.isoformat() if first_interaction else None,
+                'last_interaction': last_interaction.isoformat() if last_interaction else None,
+                'source_type': 'new',
+                'action': 'new',  # ระบุว่าเป็น user ใหม่
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # ใส่เข้า queue เพื่อส่งไปยัง SSE
+            await customer_type_update_queue.put(update_data)
+            logger.info(f"📡 Sent SSE update for new user: {user_name}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error sending SSE update: {e}")
+        
+        # 7. เก็บข้อมูลการแจ้งเตือน (เดิม)
         if page_id not in new_user_notifications:
             new_user_notifications[page_id] = []
             
@@ -286,7 +305,7 @@ async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: 
             'first_interaction': first_interaction.isoformat() if first_interaction else None
         })
         
-        # ลบการแจ้งเตือนเก่าที่เกิน 24 ชั่วโมง
+        # ลบการแจ้งเตือนเก่า
         cutoff_time = datetime.now().timestamp() - (24 * 60 * 60)
         new_user_notifications[page_id] = [
             notif for notif in new_user_notifications[page_id]

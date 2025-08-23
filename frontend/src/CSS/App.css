@@ -2478,6 +2478,50 @@ body.no-animations * {
     padding: 3px 8px;
   }
 }
+/* frontend/src/CSS/App.css - เพิ่มต่อท้ายไฟล์ */
+
+/* New User Notification */
+.new-user-notification {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  z-index: 10000;
+  min-width: 300px;
+  max-width: 500px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideOutRight {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+/* Pulse animation for new users in table */
+.table-row.new-user {
+  animation: newUserPulse 2s ease-in-out;
+}
+
+@keyframes newUserPulse {
+  0% {
+    background-color: rgba(102, 126, 234, 0.3);
+  }
+  50% {
+    background-color: rgba(102, 126, 234, 0.1);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
 /* =====================================================
    END OF STYLESHEET
    ===================================================== */
