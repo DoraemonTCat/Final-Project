@@ -140,7 +140,7 @@ const DateEntryFilter = ({
                   <div className="user-preview">
                     {group.users.slice(0, 3).map((user, idx) => (
                       <span key={idx} className="preview-user">
-                        {user.name} ({user.time})
+                        {user.name} 
                       </span>
                     ))}
                     {group.count > 3 && (

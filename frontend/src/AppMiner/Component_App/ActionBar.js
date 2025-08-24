@@ -66,7 +66,7 @@ const ActionBar = ({
         {remainingMines !== undefined && (
           <div className="remaining-mines">
             <span className="remaining-icon">💎</span>
-            <span>เหลือ {remainingMines} ครั้ง</span>
+            <span>ขุดเหลือ {remainingMines} ครั้ง</span>
             {!canMineMore && (
               <div className="limit-reached-badge">
                 <span className="badge-icon">🚫</span>

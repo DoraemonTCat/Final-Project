@@ -9,8 +9,6 @@
 // - ใช้ TimeAgoCell สำหรับแสดงเวลา
 // =====================================================
 
-// frontend/src/AppMiner/Component_App/ConversationRow.js
-
 import React from 'react';
 import TimeAgoCell from './TimeAgoCell';
 import CustomerInfoBadge from './CustomerInfoBadge';
@@ -139,14 +137,14 @@ const ConversationRow = React.memo(({
         onInactivityChange={onInactivityChange}
       />
       
-      <td className="table-cell">
+      <td className="table-cell"style={{paddingLeft:"17px"}}>      {/* Platform	 */}
         <div className={`platform-badge ${platformInfo.className}`}>  
           {platformInfo.icon}
           {platformInfo.label}
         </div>
       </td>
       
-      <td className="table-cell">
+      <td className="table-cell" style={{paddingLeft:"47px"}}>  {/* หมวดหมู่ลูกค้า */}
         {customerTypes.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             {customerTypes.map((type, index) => (
@@ -191,21 +189,22 @@ const ConversationRow = React.memo(({
             padding: "4px 12px",
             borderRadius: "12px",
             fontSize: "13px",
-            display: "inline-block"
+            display: "inline-block",
+           
           }}>
             ยังไม่จัดกลุ่ม
           </span>
         )}
       </td>
       
-      <td className="table-cell">
+      <td className="table-cell">    {/* สถานะการขุด */}
         <div className="status-indicator" style={{ '--status-color': miningStatusInfo.color }}>
           <span className="status-icon">{miningStatusInfo.icon}</span>
           <span className="customer-type new">{miningStatusInfo.label}</span>
         </div>
       </td>
       
-      <td className="table-cell text-center">
+      <td className="table-cell text-center">    {/* Checkbox */}
         <label className="custom-checkbox">
           <input
             type="checkbox"

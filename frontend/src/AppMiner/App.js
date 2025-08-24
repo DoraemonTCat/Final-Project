@@ -83,6 +83,15 @@ function App() {
     }
     return 0;
   });
+
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+  const interval = setInterval(() => {
+    handleloadConversations(false); // ไม่แสดง notification
+  }, 30000); // รีเฟรชข้อมูลทุก 30 วินาที
+
+  return () => clearInterval(interval);
+}, [selectedPage]); // ให้รีเซ็ต interval เมื่อเปลี่ยนเพจ
   
   // Refs
   const inactivityUpdateTimerRef = useRef(null);
@@ -189,7 +198,7 @@ function App() {
     }
   };
 
-  const loadConversations = async (pageId, forceRefresh = false) => {
+  const loadConversations = async (pageId, forceRefresh = false, resetFilters = false) => {
   if (!pageId) return;
 
   // ถ้าไม่ใช่ force refresh และมี cache อยู่ ให้ใช้ cache
@@ -205,32 +214,31 @@ function App() {
   setLoading(true);
   try {
     const conversations = await fetchConversations(pageId);
-    console.log('📊 โหลดข้อมูลจาก database สำเร็จ');
-    console.log('📋 ข้อมูลที่ได้รับ (กรองแล้ว):', conversations);
-    
     setConversations(conversations);
     setAllConversations(conversations);
     setLastUpdateTime(new Date());
-    
-    // Reset filters
-    setFilters({
-      disappearTime: "",
-      startDate: "",
-      endDate: "",
-      customerType: "",
-      platformType: "",
-      miningStatus: ""
-    });
-    setFilteredConversations([]);
-    setSelectedConversationIds([]);
-    
+
+    // Reset filters เฉพาะตอนรีเฟรชเอง
+    if (resetFilters) {
+      setFilters({
+        disappearTime: "",
+        startDate: "",
+        endDate: "",
+        customerType: "",
+        platformType: "",
+        miningStatus: ""
+      });
+      setFilteredConversations([]);
+      setDateEntryFilter(null);
+    }
+
     // Update cache
     setCachedData(`conversations_${pageId}`, conversations, { current: {} });
   } catch (err) {
     console.error("❌ เกิดข้อผิดพลาด:", err);
     if (err.response?.status === 400) {
       alert("กรุณาเชื่อมต่อ Facebook Page ก่อนใช้งาน");
-    } 
+    }
   } finally {
     setLoading(false);
   }
@@ -903,33 +911,23 @@ const handleDateEntryFilterChange = (date) => {
     );
   };
 
-  // ในไฟล์ App.js - แก้ไขฟังก์ชัน handleloadConversations
-// ค้นหาบรรทัดนี้และแทนที่ด้วย code ด้านล่าง:
-
   // ฟังก์ชันโหลดข้อมูลแชท
-  const handleloadConversations = async () => {
+  const handleloadConversations = async (showSuccessNotification = false, resetFilters = false) => {
   console.log("🔄 เริ่มรีเฟรชข้อมูล...");
   
   if (!selectedPage) {
     showNotification('warning', 'กรุณาเลือกเพจก่อนรีเฟรช');
     return;
   }
-  
-  // Disconnect SSE temporarily
-  if (disconnect) {
-    disconnect();
-  }
-  
+  if (disconnect) disconnect();
+
   try {
-    // Force refresh with true parameter
-    await loadConversations(selectedPage, true);
-    
-    // Reconnect SSE
-    if (reconnect) {
-      setTimeout(() => reconnect(), 1000);
+    await loadConversations(selectedPage, true, resetFilters);
+    if (reconnect) setTimeout(() => reconnect(), 1000);
+
+    if (showSuccessNotification) {
+      showNotification('success', 'รีเฟรชข้อมูลสำเร็จ', `โหลดข้อมูล ${conversations.length} รายการ`);
     }
-    
-    showNotification('success', 'รีเฟรชข้อมูลสำเร็จ', `โหลดข้อมูล ${conversations.length} รายการ`);
   } catch (error) {
     console.error("Error refreshing data:", error);
     showNotification('error', 'รีเฟรชข้อมูลไม่สำเร็จ', error.message);
@@ -1046,7 +1044,7 @@ const handleDateEntryFilterChange = (date) => {
           loading={loading}
           selectedPage={selectedPage}
           onOpenPopup={handleOpenPopup}
-          onRefresh={handleloadConversations}  // <-- ตรวจสอบบรรทัดนี้
+          onRefresh={() => handleloadConversations(true, true)}  // กดรีเฟรชเอง รีเซ็ต filter
           canMineMore={canMineMore()}
           remainingMines={getRemainingMines()}
         />

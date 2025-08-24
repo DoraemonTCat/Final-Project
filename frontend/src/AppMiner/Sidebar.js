@@ -118,9 +118,9 @@ function Sidebar() {
                 className="select-page"
                 title={isSidebarCollapsed ? "เลือกเพจ" : ""}
               >
-                <option value="">-- เลือกเพจ --</option>
+                
                 {pages.map((page) => (
-                  <option key={page.id} value={page.id}>
+                  <option key={page.id} value={page.id} >
                     {page.name}
                   </option>
                 ))}
