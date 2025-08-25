@@ -23,10 +23,10 @@ const ConnectionStatusBar = ({
   onSyncComplete,
   syncDateRange,
   onClearDateFilter,
-  // เพิ่ม props สำหรับ DateEntryFilter
   conversations,
   onDateEntryFilterChange,
-  currentDateEntryFilter
+  currentDateEntryFilter,
+  isBackgroundLoading // เพิ่ม prop ใหม่
 }) => {
   const getUpdateStatus = () => {
     const diffMs = currentTime - lastUpdateTime;
@@ -56,7 +56,6 @@ const ConnectionStatusBar = ({
           />
         )}
         
-        
         {/* Date Entry Filter - เพิ่มตรงนี้ */}
         {selectedPage && conversations && (
           <DateEntryFilter
@@ -64,6 +63,16 @@ const ConnectionStatusBar = ({
             onFilterChange={onDateEntryFilterChange}
             currentFilter={currentDateEntryFilter}
           />
+        )}
+
+        {/* เพิ่ม indicator สำหรับ background loading */}
+        {isBackgroundLoading && (
+          <div className="background-loading-indicator">
+            <span className="pulse-dot"></span>
+            <span style={{ fontSize: '0.75rem', color: '#4299e1' }}>
+              กำลังซิงค์...
+            </span>
+          </div>
         )}
       </div>
       

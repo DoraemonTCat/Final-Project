@@ -63,6 +63,8 @@ function App() {
   const [pendingUpdates, setPendingUpdates] = useState([]);
   const [lastUpdateId, setLastUpdateId] = useState(null);
   const [recentlyUpdatedUsers, setRecentlyUpdatedUsers] = useState(new Set());
+  const [isBackgroundLoading, setIsBackgroundLoading] = useState(false);
+  const [tempConversations, setTempConversations] = useState([]);
   
   // เพิ่ม state สำหรับ date filter (ใน function App())
   const [dateEntryFilter, setDateEntryFilter] = useState(null);
@@ -84,14 +86,23 @@ function App() {
     return 0;
   });
 
-  // Auto-refresh every 30 seconds
+// Background Refresh Effect
   useEffect(() => {
-  const interval = setInterval(() => {
-    handleloadConversations(false); // ไม่แสดง notification
-  }, 30000); // รีเฟรชข้อมูลทุก 30 วินาที
+  if (!selectedPage) return;
+
+  // ฟังก์ชันสำหรับ background refresh
+  const backgroundRefresh = async () => {
+    // ตรวจสอบว่าไม่มีการโหลดอยู่
+    if (!loading && !isBackgroundLoading) {
+      await handleloadConversations(false, false, true); // เพิ่ม parameter isBackground = true
+    }
+  };
+
+  // เริ่ม interval
+  const interval = setInterval(backgroundRefresh, 30000); // ทุก 30 วินาที
 
   return () => clearInterval(interval);
-}, [selectedPage]); // ให้รีเซ็ต interval เมื่อเปลี่ยนเพจ
+}, [selectedPage, loading, isBackgroundLoading]);
   
   // Refs
   const inactivityUpdateTimerRef = useRef(null);
@@ -198,27 +209,40 @@ function App() {
     }
   };
 
-  const loadConversations = async (pageId, forceRefresh = false, resetFilters = false) => {
+  const loadConversations = async (pageId, forceRefresh = false, resetFilters = false, isBackground = false) => {
   if (!pageId) return;
 
-  // ถ้าไม่ใช่ force refresh และมี cache อยู่ ให้ใช้ cache
-  if (!forceRefresh) {
-    const cached = getCachedData(`conversations_${pageId}`, { current: {} });
-    if (cached) {
-      setConversations(cached);
-      setAllConversations(cached);
-      return;
-    }
+  // ถ้าเป็น background refresh ไม่ต้องแสดง loading
+  if (!isBackground) {
+    setLoading(true);
+  } else {
+    setIsBackgroundLoading(true);
   }
 
-  setLoading(true);
   try {
     const conversations = await fetchConversations(pageId);
-    setConversations(conversations);
-    setAllConversations(conversations);
-    setLastUpdateTime(new Date());
+    
+    // ถ้าเป็น background refresh ให้เช็คก่อนว่าข้อมูลเปลี่ยนหรือไม่
+    if (isBackground) {
+      // เปรียบเทียบข้อมูลเก่ากับใหม่
+      const hasChanges = JSON.stringify(conversations) !== JSON.stringify(allConversations);
+      
+      if (hasChanges) {
+        // ใช้ requestAnimationFrame เพื่อให้การอัพเดทราบรื่น
+        requestAnimationFrame(() => {
+          setConversations(conversations);
+          setAllConversations(conversations);
+          setLastUpdateTime(new Date());
+        });
+      }
+    } else {
+      // การโหลดปกติ
+      setConversations(conversations);
+      setAllConversations(conversations);
+      setLastUpdateTime(new Date());
+    }
 
-    // Reset filters เฉพาะตอนรีเฟรชเอง
+    // Reset filters เฉพาะเมื่อต้องการ
     if (resetFilters) {
       setFilters({
         disappearTime: "",
@@ -236,11 +260,15 @@ function App() {
     setCachedData(`conversations_${pageId}`, conversations, { current: {} });
   } catch (err) {
     console.error("❌ เกิดข้อผิดพลาด:", err);
-    if (err.response?.status === 400) {
+    if (!isBackground && err.response?.status === 400) {
       alert("กรุณาเชื่อมต่อ Facebook Page ก่อนใช้งาน");
     }
   } finally {
-    setLoading(false);
+    if (!isBackground) {
+      setLoading(false);
+    } else {
+      setIsBackgroundLoading(false);
+    }
   }
 };
 
@@ -912,25 +940,37 @@ const handleDateEntryFilterChange = (date) => {
   };
 
   // ฟังก์ชันโหลดข้อมูลแชท
-  const handleloadConversations = async (showSuccessNotification = false, resetFilters = false) => {
+  const handleloadConversations = async (showSuccessNotification = false, resetFilters = false, isBackground = false) => {
   console.log("🔄 เริ่มรีเฟรชข้อมูล...");
   
   if (!selectedPage) {
-    showNotification('warning', 'กรุณาเลือกเพจก่อนรีเฟรช');
+    if (!isBackground) {
+      showNotification('warning', 'กรุณาเลือกเพจก่อนรีเฟรช');
+    }
     return;
   }
-  if (disconnect) disconnect();
+
+  // ถ้าเป็น background refresh ไม่ต้อง disconnect SSE
+  if (!isBackground && disconnect) {
+    disconnect();
+  }
 
   try {
-    await loadConversations(selectedPage, true, resetFilters);
-    if (reconnect) setTimeout(() => reconnect(), 1000);
+    await loadConversations(selectedPage, true, resetFilters, isBackground);
+    
+    // reconnect SSE เฉพาะเมื่อไม่ใช่ background
+    if (!isBackground && reconnect) {
+      setTimeout(() => reconnect(), 1000);
+    }
 
-    if (showSuccessNotification) {
+    if (showSuccessNotification && !isBackground) {
       showNotification('success', 'รีเฟรชข้อมูลสำเร็จ', `โหลดข้อมูล ${conversations.length} รายการ`);
     }
   } catch (error) {
     console.error("Error refreshing data:", error);
-    showNotification('error', 'รีเฟรชข้อมูลไม่สำเร็จ', error.message);
+    if (!isBackground) {
+      showNotification('error', 'รีเฟรชข้อมูลไม่สำเร็จ', error.message);
+    }
   }
 };
 
@@ -955,10 +995,10 @@ const handleDateEntryFilterChange = (date) => {
           }}
           syncDateRange={syncDateRange}
           onClearDateFilter={handleClearDateFilter}
-          // เพิ่ม props สำหรับ DateEntryFilter
           conversations={allConversations}
           onDateEntryFilterChange={handleDateEntryFilterChange}
           currentDateEntryFilter={dateEntryFilter}
+          isBackgroundLoading={isBackgroundLoading} // เพิ่มบรรทัดนี้
         />
         
         <FileUploadSection 

@@ -2522,6 +2522,63 @@ body.no-animations * {
     background-color: transparent;
   }
 }
+
+/* Background Loading Indicator */
+.background-loading-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: rgba(66, 153, 225, 0.1);
+  border-radius: 20px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.background-loading-indicator .pulse-dot {
+  width: 6px;
+  height: 6px;
+  background: #4299e1;
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Smooth table transitions */
+.table-row {
+  transition: all 0.3s ease;
+  animation: none; /* ปิด animation เดิมที่ทำให้กระพริบ */
+}
+
+.table-row.updated {
+  animation: smoothUpdate 0.5s ease-out;
+}
+
+@keyframes smoothUpdate {
+  0% { 
+    background-color: transparent;
+  }
+  50% { 
+    background-color: rgba(66, 153, 225, 0.05);
+  }
+  100% { 
+    background-color: transparent;
+  }
+}
+
+/* Prevent layout shift */
+.table-container {
+  min-height: 400px; /* ป้องกันการกระโดดของ layout */
+  position: relative;
+}
+
+/* Smooth content updates */
+.content-area {
+  position: relative;
+  transition: opacity 0.3s ease;
+}
+
+.content-area.updating {
+  opacity: 0.95;
+}
 /* =====================================================
    END OF STYLESHEET
    ===================================================== */
