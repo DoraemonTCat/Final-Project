@@ -771,13 +771,7 @@ function ScheduleDashboard() {
                                 {status === 'กำลังทำงาน' ? '⏸️' : '▶️'}
                               </button>
                             )}
-                            <button 
-                              className="action-btn delete-btn"
-                              onClick={() => deleteSchedule(schedule)}
-                              title="ลบ"
-                            >
-                              🗑️
-                            </button>
+                           
                           </div>
                         </td>
                       </tr>
