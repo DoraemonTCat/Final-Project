@@ -17,7 +17,7 @@ const ActionBar = ({ selectedCount, onProceed, disabled }) => {
 
   return (
     <div
-      className={`action-bar custom-fade-bar${showBar ? ' hovered' : ''}`} style={{ marginBottom: "-18px" }}
+      className={`action-bar custom-fade-bar${showBar ? ' hovered' : ''}`} 
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >

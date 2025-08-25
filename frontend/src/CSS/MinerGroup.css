@@ -637,7 +637,7 @@
 }
 
 .custom-fade-bar:not(.hovered) {
-  opacity: 0.2;
+  opacity: 0;
   pointer-events: auto;
   transform: translateY(40px);
 }
