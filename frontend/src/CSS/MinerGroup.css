@@ -629,6 +629,24 @@
   transform: translateX(4px);
 }
 
+/* Custom fade bar animation */
+.custom-fade-bar {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.5s cubic-bezier(0.4,0,0.2,1), transform 0.5s cubic-bezier(0.4,0,0.2,1);
+}
+
+.custom-fade-bar:not(.hovered) {
+  opacity: 0.2;
+  pointer-events: auto;
+  transform: translateY(40px);
+}
+
+.custom-fade-bar.hovered {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
 /* =====================================
    10. MODALS
    ===================================== */

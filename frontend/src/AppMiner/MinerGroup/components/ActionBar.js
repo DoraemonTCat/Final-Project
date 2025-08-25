@@ -1,5 +1,5 @@
 // MinerGroup/components/ActionBar.js
-import React from 'react';
+import React, { useState } from 'react';
 
 /**
  * ActionBar Component
@@ -8,8 +8,19 @@ import React from 'react';
  * - ปุ่มดำเนินการต่อไป
  */
 const ActionBar = ({ selectedCount, onProceed, disabled }) => {
+  // ถ้าเลือก checkbox ให้ forceShow = true
+  const forceShow = selectedCount > 0;
+  const [isHovered, setIsHovered] = useState(false);
+
+  // ถ้า forceShow หรือ hover ให้แสดง bar
+  const showBar = isHovered || forceShow;
+
   return (
-    <div className="action-bar">
+    <div
+      className={`action-bar custom-fade-bar${showBar ? ' hovered' : ''}`} style={{ marginBottom: "-18px" }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       <div className="selection-info">
         <span className="selection-icon">✓</span>
         เลือกแล้ว {selectedCount} กลุ่ม

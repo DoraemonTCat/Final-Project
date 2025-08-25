@@ -868,6 +868,7 @@ background-color: whitesmoke;
 .action-left {
   display: flex;
   gap: var(--spacing-md);
+  margin-bottom: 15px;
 
 }
 
@@ -942,6 +943,44 @@ background-color: whitesmoke;
 
 .summary-icon {
   font-size: 1.125rem;
+}
+
+.action-bar {
+  position: fixed !important;
+  bottom: 0;
+  left: 250px;
+  right: 0;
+  z-index: 100;
+}
+
+.content-area {
+  padding-bottom: 100px !important;
+}
+
+@media (max-width: 1024px) {
+  .action-bar {
+    left: 0;
+  }
+}
+
+/* เพิ่มต่อท้ายไฟล์ d:\Final-Project\frontend\src\CSS\App.css */
+/* Custom fade bar animation */
+.custom-fade-bar {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.5s cubic-bezier(0.4,0,0.2,1), transform 0.5s cubic-bezier(0.4,0,0.2,1);
+}
+
+.custom-fade-bar:not(.hovered) {
+  opacity: 0;
+  pointer-events: auto;
+  transform: translateY(40px);
+}
+
+.custom-fade-bar.hovered {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
 }
 
 /* =====================================================

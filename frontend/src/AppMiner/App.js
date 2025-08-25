@@ -1291,6 +1291,7 @@ function App() {
           onRefresh={() => handleloadConversations(true, true)}
           canMineMore={canMineMore()}
           remainingMines={getRemainingMines()}
+          forceShow={selectedConversationIds.length > 0}
         />
 
         {isPopupOpen && (

@@ -9,7 +9,7 @@
 // - แสดงจำนวนการขุดที่เหลือ
 // =====================================================
 
-import React from 'react';
+import React, { useState } from 'react';
 
 const ActionBar = ({ 
   selectedCount, 
@@ -19,17 +19,21 @@ const ActionBar = ({
   onOpenPopup, 
   onRefresh,
   canMineMore,
-  remainingMines
+  remainingMines,
+  forceShow // เพิ่ม prop นี้
 }) => {
-  // เพิ่ม debug log
-  console.log("ActionBar props:", {
-    loading,
-    selectedPage,
-    hasOnRefresh: !!onRefresh
-  });
+  const [isHovered, setIsHovered] = useState(false);
+
+  // ถ้า forceShow ให้ถือว่า hovered เสมอ
+  const showBar = isHovered || forceShow;
 
   return (
-    <div className="action-bar">
+    <div
+      className={`action-bar custom-fade-bar${showBar ? ' hovered' : ''}` }
+      style={{ marginBottom: "-25px" }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       <div className="action-left">
         {/* ปุ่มขุด */}
         <button
@@ -62,7 +66,7 @@ const ActionBar = ({
         </button>
       </div>
 
-      <div className="action-right">
+      <div className="action-right" style={{marginBottom:"20px"}}>
         {remainingMines !== undefined && (
           <div className="remaining-mines">
             <span className="remaining-icon">💎</span>
