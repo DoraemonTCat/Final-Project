@@ -253,8 +253,8 @@ function Sidebar() {
           </div>
           
           <Link 
-            to="#" 
-            className={`nav-link`}
+            to="/dashboard" 
+            className={`nav-link ${isActive('/dashboard') ? 'active' : ''}`}
             title={isSidebarCollapsed ? "Dashboard" : ""}
           >
             <span className="nav-icon">📈</span>

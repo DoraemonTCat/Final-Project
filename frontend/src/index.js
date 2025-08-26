@@ -11,6 +11,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import GroupSchedule from './AppMiner/GroupSchedule';
 import Settings from './AppMiner/Settings';
 import ScheduleDashboard from './AppMiner/ScheduleDashboard';
+import Dashboard from './AppMiner/Dashboard';
 
 
 
@@ -28,6 +29,7 @@ root.render(
         <Route path="/GroupSchedule" element={<GroupSchedule />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/schedule-dashboard" element={<ScheduleDashboard />} />
+        <Route path="/dashboard" element={<Dashboard />} />
         
         
         {/* Add more routes as needed */}
