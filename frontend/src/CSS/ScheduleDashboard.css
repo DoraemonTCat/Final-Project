@@ -511,6 +511,7 @@ tr.drag-over {
   gap: 6px;
   justify-content: center;
   padding-bottom: 40px;
+  margin-bottom: 32px;
 }
 
 .action-btn {

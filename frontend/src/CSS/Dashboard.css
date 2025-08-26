@@ -1,0 +1,549 @@
+/* =================================================================
+   Dashboard.css - หน้า Dashboard ภาพรวมระบบ
+   ================================================================= */
+
+/* =====================================================
+   MAIN CONTAINER & LAYOUT
+   ===================================================== */
+
+/* Container หลักของ Dashboard */
+.main-dashboard-container {
+  min-height: 100vh;
+  background: #f5f7fa;
+  padding-left: 240px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+}
+
+/* =====================================================
+   HEADER SECTION
+   ===================================================== */
+
+/* Header gradient background */
+.main-dashboard-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 40px;
+  color: white;
+}
+
+.main-dashboard-header-content {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Dashboard title */
+.main-dashboard-title {
+  font-size: 32px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.main-dashboard-subtitle {
+  opacity: 0.9;
+  margin: 0;
+}
+
+/* =====================================================
+   MAIN CONTENT AREA
+   ===================================================== */
+
+.main-dashboard-content {
+  padding: 30px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* =====================================================
+   STATS CARDS GRID
+   ===================================================== */
+
+.main-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+/* Individual stat card */
+.main-stat-card {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.07);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Decorative circle in stat cards */
+.main-stat-card-decoration {
+  position: absolute;
+  top: -20px;
+  right: -20px;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  opacity: 0.1;
+}
+
+/* Gradient backgrounds for different card types */
+.main-stat-decoration-purple {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.main-stat-decoration-green {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+}
+
+.main-stat-decoration-blue {
+  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+}
+
+.main-stat-decoration-orange {
+  background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
+}
+
+/* Stat card content */
+.main-stat-content {
+  position: relative;
+  z-index: 1;
+}
+
+.main-stat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.main-stat-label {
+  color: #718096;
+  font-size: 14px;
+  margin: 0 0 8px 0;
+}
+
+.main-stat-value {
+  font-size: 32px;
+  font-weight: 700;
+  margin: 0;
+  color: #2d3748;
+}
+
+/* Icon box in stat cards */
+.main-stat-icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.main-stat-icon-purple {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.main-stat-icon-green {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+}
+
+.main-stat-icon-blue {
+  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+}
+
+.main-stat-icon-orange {
+  background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
+}
+
+/* Growth indicator */
+.main-stat-growth {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #48bb78;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* =====================================================
+   CHARTS CONTAINER
+   ===================================================== */
+
+/* Charts grid layout */
+.main-charts-row {
+  display: grid;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.main-charts-row-2col {
+  grid-template-columns: 2fr 1fr;
+}
+
+.main-charts-row-3col {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+/* Chart card base */
+.main-chart-card {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.07);
+}
+
+.main-chart-title {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+/* =====================================================
+   PIE CHART LEGEND
+   ===================================================== */
+
+.main-pie-legend {
+  margin-top: 20px;
+}
+
+.main-pie-legend-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.main-pie-legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  margin-right: 8px;
+}
+
+.main-pie-legend-text {
+  font-size: 14px;
+  color: #4a5568;
+}
+
+/* =====================================================
+   RETARGET TIERS SECTION
+   ===================================================== */
+
+.main-tier-item {
+  margin-bottom: 16px;
+  padding: 12px;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.main-tier-name {
+  font-weight: 600;
+  color: #2d3748;
+  font-size: 14px;
+}
+
+.main-tier-days {
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* =====================================================
+   EMPTY STATE CONTAINERS
+   ===================================================== */
+
+.main-empty-state {
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #a0aec0;
+}
+
+.main-empty-state-large {
+  padding: 40px;
+  text-align: center;
+  color: #a0aec0;
+}
+
+/* =====================================================
+   ACTIVITIES TABLE
+   ===================================================== */
+
+.main-table-container {
+  overflow-x: auto;
+}
+
+.main-activities-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.main-activities-table thead {
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.main-activities-table th {
+  text-align: left;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4a5568;
+}
+
+.main-activities-table tbody tr {
+  border-bottom: 1px solid #e2e8f0;
+  transition: background 0.2s;
+  cursor: pointer;
+}
+
+.main-activities-table tbody tr:hover {
+  background: #f7fafc;
+}
+
+.main-activities-table td {
+  padding: 12px;
+}
+
+/* User avatar in activities */
+.main-user-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.main-user-avatar {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.main-user-name {
+  font-size: 14px;
+  color: #2d3748;
+}
+
+/* Activity badges */
+.main-activity-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-block;
+}
+
+.main-activity-badge-new {
+  background: #c6f6d5;
+  color: #276749;
+}
+
+.main-activity-badge-message {
+  background: #bee3f8;
+  color: #2c5282;
+}
+
+.main-activity-type {
+  font-size: 14px;
+  color: #4a5568;
+}
+
+.main-activity-time {
+  font-size: 14px;
+  color: #718096;
+}
+
+/* =====================================================
+   CUSTOM TOOLTIP
+   ===================================================== */
+
+.main-custom-tooltip {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.main-tooltip-label {
+  margin: 0;
+  font-weight: 600;
+}
+
+.main-tooltip-value {
+  margin: 4px 0;
+}
+
+/* =====================================================
+   LOADING STATE
+   ===================================================== */
+
+.main-loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+}
+
+.main-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e2e8f0;
+  border-top: 4px solid #667eea;
+  border-radius: 50%;
+  animation: mainDashboardSpin 1s linear infinite;
+}
+
+@keyframes mainDashboardSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* =====================================================
+   RESPONSIVE DESIGN
+   ===================================================== */
+
+@media (max-width: 1024px) {
+  .main-dashboard-container {
+    padding-left: 200px;
+  }
+  
+  .main-charts-row-2col {
+    grid-template-columns: 1fr;
+  }
+  
+  .main-charts-row-3col {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .main-dashboard-container {
+    padding-left: 0;
+  }
+  
+  .main-dashboard-header {
+    padding: 20px;
+  }
+  
+  .main-dashboard-title {
+    font-size: 24px;
+  }
+  
+  .main-dashboard-content {
+    padding: 20px;
+  }
+  
+  .main-stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .main-stat-value {
+    font-size: 28px;
+  }
+  
+  .main-chart-card {
+    padding: 16px;
+  }
+  
+  .main-activities-table {
+    font-size: 12px;
+  }
+  
+  .main-activities-table th,
+  .main-activities-table td {
+    padding: 8px;
+  }
+  
+  .main-user-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-dashboard-title {
+    font-size: 20px;
+  }
+  
+  .main-dashboard-subtitle {
+    font-size: 14px;
+  }
+  
+  .main-stat-card {
+    padding: 16px;
+  }
+  
+  .main-stat-value {
+    font-size: 24px;
+  }
+  
+  .main-stat-icon-box {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+}
+
+/* =====================================================
+   UTILITY CLASSES
+   ===================================================== */
+
+.main-text-center {
+  text-align: center;
+}
+
+.main-mt-20 {
+  margin-top: 20px;
+}
+
+.main-mb-20 {
+  margin-bottom: 20px;
+}
+
+.main-gap-10 {
+  gap: 10px;
+}
+
+/* =====================================================
+   ANIMATIONS & TRANSITIONS
+   ===================================================== */
+
+.main-fade-in {
+  animation: mainFadeIn 0.5s ease-in;
+}
+
+@keyframes mainFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Hover effects */
+.main-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+  transition: all 0.3s ease;
+}
+
+.main-chart-card:hover {
+  box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+  transition: all 0.3s ease;
+}

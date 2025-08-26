@@ -1,14 +1,35 @@
+/**
+ * Dashboard.js - Main Dashboard Component
+ * ========================================
+ * หน้า Dashboard หลักสำหรับแสดงภาพรวมระบบ
+ * - แสดงสถิติลูกค้า
+ * - กราฟแนวโน้ม
+ * - ข้อมูลประเภทลูกค้า
+ * - กิจกรรมล่าสุด
+ */
+
 import React, { useState, useEffect } from 'react';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
+import { 
+  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, 
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
+  ResponsiveContainer, Area, AreaChart 
+} from 'recharts';
 import Sidebar from "./Sidebar";
+import '../CSS/Dashboard.css'; 
 
 const Dashboard = () => {
   // =====================================================
   // STATE MANAGEMENT
   // =====================================================
+  
+  /**
+   * State สำหรับจัดการข้อมูลต่างๆ
+   */
   const [selectedPage, setSelectedPage] = useState('');
   const [pages, setPages] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // สถิติหลัก
   const [stats, setStats] = useState({
     totalCustomers: 0,
     newCustomersToday: 0,
@@ -18,6 +39,8 @@ const Dashboard = () => {
     avgResponseTime: '0',
     growthRate: 0
   });
+  
+  // ข้อมูลกราฟและการแสดงผล
   const [customersByDate, setCustomersByDate] = useState([]);
   const [customersByType, setCustomersByType] = useState([]);
   const [inactivityData, setInactivityData] = useState([]);
@@ -29,7 +52,9 @@ const Dashboard = () => {
   // DATA FETCHING FUNCTIONS
   // =====================================================
   
-  // โหลดข้อมูลเพจ
+  /**
+   * โหลดข้อมูลเพจทั้งหมด
+   */
   const fetchPages = async () => {
     try {
       const response = await fetch('http://localhost:8000/pages');
@@ -50,7 +75,10 @@ const Dashboard = () => {
     }
   };
 
-  // โหลดสถิติหลัก
+  /**
+   * โหลดสถิติหลักของเพจ
+   * @param {string} pageId - ID ของเพจที่ต้องการโหลดข้อมูล
+   */
   const fetchMainStats = async (pageId) => {
     if (!pageId) return;
     
@@ -116,7 +144,10 @@ const Dashboard = () => {
     }
   };
 
-  // โหลดข้อมูลประเภทลูกค้า
+  /**
+   * โหลดข้อมูลประเภทลูกค้า
+   * @param {string} pageId - ID ของเพจ
+   */
   const fetchCustomerTypes = async (pageId) => {
     if (!pageId) return;
     
@@ -169,7 +200,10 @@ const Dashboard = () => {
     }
   };
 
-  // โหลดข้อมูล Schedules
+  /**
+   * โหลดข้อมูล Message Schedules
+   * @param {string} pageId - ID ของเพจ
+   */
   const fetchSchedules = async (pageId) => {
     if (!pageId) return;
     
@@ -211,7 +245,10 @@ const Dashboard = () => {
     }
   };
 
-  // โหลดข้อมูล Retarget Tiers
+  /**
+   * โหลดข้อมูล Retarget Tiers
+   * @param {string} pageId - ID ของเพจ
+   */
   const fetchRetargetTiers = async (pageId) => {
     if (!pageId) return;
     
@@ -227,7 +264,10 @@ const Dashboard = () => {
     }
   };
 
-  // โหลดกิจกรรมล่าสุด
+  /**
+   * โหลดกิจกรรมล่าสุด
+   * @param {string} pageId - ID ของเพจ
+   */
   const fetchRecentActivities = async (pageId) => {
     if (!pageId) return;
     
@@ -251,7 +291,7 @@ const Dashboard = () => {
         
         let timeAgo = '';
         if (diffDays > 0) timeAgo = `${diffDays} วันที่แล้ว`;
-        else if (diffHours > 0) timeAgo = `${diffHours} ชั่วโมงที่แล้ว`;
+        else if (diffHours > 0) timeAgo = `${diffHours} ชั่วโมง`;
         else if (diffMins > 0) timeAgo = `${diffMins} นาทีที่แล้ว`;
         else timeAgo = 'เมื่อสักครู่';
         
@@ -275,10 +315,16 @@ const Dashboard = () => {
   // LIFECYCLE HOOKS
   // =====================================================
   
+  /**
+   * Initial load - โหลดข้อมูลเพจเมื่อ component mount
+   */
   useEffect(() => {
     fetchPages();
   }, []);
 
+  /**
+   * โหลดข้อมูลทั้งหมดเมื่อเปลี่ยนเพจ
+   */
   useEffect(() => {
     if (selectedPage) {
       setLoading(true);
@@ -294,27 +340,39 @@ const Dashboard = () => {
     }
   }, [selectedPage]);
 
+  /**
+   * จัดการเมื่อมีการเปลี่ยนเพจจากภายนอก
+   */
+  useEffect(() => {
+    const handlePageChange = (event) => {
+      const newPageId = event.detail.pageId;
+      setSelectedPage(newPageId);
+    };
+    
+    window.addEventListener('pageChanged', handlePageChange);
+
+    return () => {
+      window.removeEventListener('pageChanged', handlePageChange);
+    };
+  }, []);
+
   // =====================================================
-  // UI COMPONENTS
+  // UI COMPONENTS & HELPERS
   // =====================================================
   
   // สีสำหรับ Pie Chart
   const COLORS = ['#667eea', '#764ba2', '#f093fb', '#4299e1', '#48bb78', '#ed8936'];
 
-  // Custom Tooltip สำหรับ Charts
+  /**
+   * Custom Tooltip Component สำหรับ Charts
+   */
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
-        <div style={{
-          background: 'white',
-          border: '1px solid #e2e8f0',
-          borderRadius: '8px',
-          padding: '10px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-        }}>
-          <p style={{ margin: 0, fontWeight: 600 }}>{label}</p>
+        <div className="main-custom-tooltip">
+          <p className="main-tooltip-label">{label}</p>
           {payload.map((entry, index) => (
-            <p key={index} style={{ margin: '4px 0', color: entry.color }}>
+            <p key={index} className="main-tooltip-value" style={{ color: entry.color }}>
               {entry.name}: {entry.value}
             </p>
           ))}
@@ -324,130 +382,50 @@ const Dashboard = () => {
     return null;
   };
 
-   
-//  Load Data เมื่อ selectedPage เปลี่ยน
-useEffect(() => {
-  const handlePageChange = (event) => {
-    const newPageId = event.detail.pageId;
-    setSelectedPage(newPageId);
-  };
-  window.addEventListener('pageChanged', handlePageChange);
-
-  // โหลดเพจครั้งแรก
-  fetchPages();
-
-  return () => {
-    window.removeEventListener('pageChanged', handlePageChange);
-  };
-}, []);
-
-
   // =====================================================
   // MAIN RENDER
   // =====================================================
-  
 
   return (
-
-    
-    <div style={{
-      minHeight: '100vh',
-      background: '#f5f7fa',
-      paddingLeft: '240px',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif'
-    }}>
+    <div className="main-dashboard-container">
       {/* Header Section */}
-      <div style={{
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        padding: '40px',
-        color: 'white'
-      }}>
-
+      <div className="main-dashboard-header">
         <div>
-         <Sidebar />
+          <Sidebar />
         </div>
         
-        <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
-          <h1 style={{
-            fontSize: '32px',
-            fontWeight: '700',
-            margin: '0 0 8px 0',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px'
-          }}>
+        <div className="main-dashboard-header-content">
+          <h1 className="main-dashboard-title">
             📊 Dashboard ภาพรวมระบบ
           </h1>
-          <p style={{ opacity: 0.9, margin: 0 }}>
+          <p className="main-dashboard-subtitle">
             ข้อมูลสถิติและการวิเคราะห์สำหรับการตัดสินใจทางธุรกิจ
           </p>
-          
-          {/* Page Selector */}
-          
         </div>
       </div>
 
       {/* Main Content */}
-      <div style={{ padding: '30px', maxWidth: '1400px', margin: '0 auto' }}>
+      <div className="main-dashboard-content">
         
         {/* Stats Cards */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-          gap: '20px',
-          marginBottom: '30px'
-        }}>
+        <div className="main-stats-grid">
           {/* Total Customers Card */}
-          <div style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.07)',
-            position: 'relative',
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              position: 'absolute',
-              top: '-20px',
-              right: '-20px',
-              width: '100px',
-              height: '100px',
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              borderRadius: '50%',
-              opacity: '0.1'
-            }}></div>
-            <div style={{ position: 'relative', zIndex: 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div className="main-stat-card">
+            <div className="main-stat-card-decoration main-stat-decoration-purple"></div>
+            <div className="main-stat-content">
+              <div className="main-stat-header">
                 <div>
-                  <p style={{ color: '#718096', fontSize: '14px', margin: '0 0 8px 0' }}>
-                    ลูกค้าทั้งหมด
-                  </p>
-                  <h2 style={{ fontSize: '32px', fontWeight: '700', margin: 0, color: '#2d3748' }}>
+                  <p className="main-stat-label">ลูกค้าทั้งหมด</p>
+                  <h2 className="main-stat-value">
                     {stats.totalCustomers.toLocaleString()}
                   </h2>
                 </div>
-                <div style={{
-                  width: '48px',
-                  height: '48px',
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  borderRadius: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '24px'
-                }}>
+                <div className="main-stat-icon-box main-stat-icon-purple">
                   👥
                 </div>
               </div>
               {stats.growthRate > 0 && (
-                <div style={{
-                  marginTop: '12px',
-                  fontSize: '12px',
-                  color: '#48bb78',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}>
+                <div className="main-stat-growth">
                   <span>↑</span>
                   <span>{stats.growthRate}% จากสัปดาห์ที่แล้ว</span>
                 </div>
@@ -456,44 +434,17 @@ useEffect(() => {
           </div>
 
           {/* New Customers Today */}
-          <div style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.07)',
-            position: 'relative',
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              position: 'absolute',
-              top: '-20px',
-              right: '-20px',
-              width: '100px',
-              height: '100px',
-              background: 'linear-gradient(135deg, #48bb78 0%, #38a169 100%)',
-              borderRadius: '50%',
-              opacity: '0.1'
-            }}></div>
-            <div style={{ position: 'relative', zIndex: 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div className="main-stat-card">
+            <div className="main-stat-card-decoration main-stat-decoration-green"></div>
+            <div className="main-stat-content">
+              <div className="main-stat-header">
                 <div>
-                  <p style={{ color: '#718096', fontSize: '14px', margin: '0 0 8px 0' }}>
-                    ลูกค้าใหม่วันนี้
-                  </p>
-                  <h2 style={{ fontSize: '32px', fontWeight: '700', margin: 0, color: '#2d3748' }}>
+                  <p className="main-stat-label">ลูกค้าใหม่วันนี้</p>
+                  <h2 className="main-stat-value">
                     {stats.newCustomersToday}
                   </h2>
                 </div>
-                <div style={{
-                  width: '48px',
-                  height: '48px',
-                  background: 'linear-gradient(135deg, #48bb78 0%, #38a169 100%)',
-                  borderRadius: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '24px'
-                }}>
+                <div className="main-stat-icon-box main-stat-icon-green">
                   🆕
                 </div>
               </div>
@@ -501,44 +452,17 @@ useEffect(() => {
           </div>
 
           {/* Active Customers */}
-          <div style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.07)',
-            position: 'relative',
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              position: 'absolute',
-              top: '-20px',
-              right: '-20px',
-              width: '100px',
-              height: '100px',
-              background: 'linear-gradient(135deg, #4299e1 0%, #3182ce 100%)',
-              borderRadius: '50%',
-              opacity: '0.1'
-            }}></div>
-            <div style={{ position: 'relative', zIndex: 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div className="main-stat-card">
+            <div className="main-stat-card-decoration main-stat-decoration-blue"></div>
+            <div className="main-stat-content">
+              <div className="main-stat-header">
                 <div>
-                  <p style={{ color: '#718096', fontSize: '14px', margin: '0 0 8px 0' }}>
-                    ลูกค้าที่ Active (7 วัน)
-                  </p>
-                  <h2 style={{ fontSize: '32px', fontWeight: '700', margin: 0, color: '#2d3748' }}>
+                  <p className="main-stat-label">ลูกค้าที่ Active (7 วัน)</p>
+                  <h2 className="main-stat-value">
                     {stats.activeCustomers7Days}
                   </h2>
                 </div>
-                <div style={{
-                  width: '48px',
-                  height: '48px',
-                  background: 'linear-gradient(135deg, #4299e1 0%, #3182ce 100%)',
-                  borderRadius: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '24px'
-                }}>
+                <div className="main-stat-icon-box main-stat-icon-blue">
                   ⚡
                 </div>
               </div>
@@ -546,44 +470,17 @@ useEffect(() => {
           </div>
 
           {/* Messages Sent */}
-          <div style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.07)',
-            position: 'relative',
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              position: 'absolute',
-              top: '-20px',
-              right: '-20px',
-              width: '100px',
-              height: '100px',
-              background: 'linear-gradient(135deg, #ed8936 0%, #dd6b20 100%)',
-              borderRadius: '50%',
-              opacity: '0.1'
-            }}></div>
-            <div style={{ position: 'relative', zIndex: 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div className="main-stat-card">
+            <div className="main-stat-card-decoration main-stat-decoration-orange"></div>
+            <div className="main-stat-content">
+              <div className="main-stat-header">
                 <div>
-                  <p style={{ color: '#718096', fontSize: '14px', margin: '0 0 8px 0' }}>
-                    ข้อความที่ส่ง
-                  </p>
-                  <h2 style={{ fontSize: '32px', fontWeight: '700', margin: 0, color: '#2d3748' }}>
+                  <p className="main-stat-label">ข้อความที่ส่ง</p>
+                  <h2 className="main-stat-value">
                     {stats.totalMessagesSent.toLocaleString()}
                   </h2>
                 </div>
-                <div style={{
-                  width: '48px',
-                  height: '48px',
-                  background: 'linear-gradient(135deg, #ed8936 0%, #dd6b20 100%)',
-                  borderRadius: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '24px'
-                }}>
+                <div className="main-stat-icon-box main-stat-icon-orange">
                   💬
                 </div>
               </div>
@@ -592,20 +489,10 @@ useEffect(() => {
         </div>
 
         {/* Charts Row 1 */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '2fr 1fr',
-          gap: '20px',
-          marginBottom: '20px'
-        }}>
+        <div className="main-charts-row main-charts-row-2col">
           {/* Customer Growth Chart */}
-          <div style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.07)'
-          }}>
-            <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: '600', color: '#2d3748' }}>
+          <div className="main-chart-card">
+            <h3 className="main-chart-title">
               📈 แนวโน้มลูกค้าใหม่ (7 วันล่าสุด)
             </h3>
             <ResponsiveContainer width="100%" height={300}>
@@ -632,13 +519,8 @@ useEffect(() => {
           </div>
 
           {/* Customer Types Pie Chart */}
-          <div style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.07)'
-          }}>
-            <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: '600', color: '#2d3748' }}>
+          <div className="main-chart-card">
+            <h3 className="main-chart-title">
               🎯 หมวดหมู่ลูกค้า
             </h3>
             <ResponsiveContainer width="100%" height={300}>
@@ -662,21 +544,14 @@ useEffect(() => {
             </ResponsiveContainer>
             
             {/* Legend */}
-            <div style={{ marginTop: '20px' }}>
+            <div className="main-pie-legend">
               {customersByType.map((entry, index) => (
-                <div key={entry.name} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  marginBottom: '8px'
-                }}>
-                  <div style={{
-                    width: '12px',
-                    height: '12px',
-                    backgroundColor: COLORS[index % COLORS.length],
-                    borderRadius: '2px',
-                    marginRight: '8px'
-                  }}></div>
-                  <span style={{ fontSize: '14px', color: '#4a5568' }}>
+                <div key={entry.name} className="main-pie-legend-item">
+                  <div 
+                    className="main-pie-legend-color"
+                    style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                  ></div>
+                  <span className="main-pie-legend-text">
                     {entry.name} ({entry.value})
                   </span>
                 </div>
@@ -686,20 +561,10 @@ useEffect(() => {
         </div>
 
         {/* Charts Row 2 */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr 1fr',
-          gap: '20px',
-          marginBottom: '20px'
-        }}>
+        <div className="main-charts-row main-charts-row-3col">
           {/* Inactivity Distribution */}
-          <div style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.07)'
-          }}>
-            <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: '600', color: '#2d3748' }}>
+          <div className="main-chart-card">
+            <h3 className="main-chart-title">
               ⏰ ระยะเวลาที่ลูกค้าหายไป
             </h3>
             <ResponsiveContainer width="100%" height={200}>
@@ -714,13 +579,8 @@ useEffect(() => {
           </div>
 
           {/* Message Schedules */}
-          <div style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.07)'
-          }}>
-            <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: '600', color: '#2d3748' }}>
+          <div className="main-chart-card">
+            <h3 className="main-chart-title">
               📅 ประเภทการส่งข้อความ
             </h3>
             {messageSchedules.length > 0 ? (
@@ -767,72 +627,42 @@ useEffect(() => {
                 </div>
               </>
             ) : (
-              <div style={{
-                height: '200px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#a0aec0'
-              }}>
+              <div className="main-empty-state">
                 ยังไม่มีข้อมูล Schedule
               </div>
             )}
           </div>
 
           {/* Retarget Tiers */}
-          <div style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.07)'
-          }}>
-            <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: '600', color: '#2d3748' }}>
+          <div className="main-chart-card">
+            <h3 className="main-chart-title">
               🎯 Retarget Tiers
             </h3>
             {retargetTiers.length > 0 ? (
               <div>
                 {retargetTiers.map((tier, index) => (
-                  <div key={tier.id} style={{
-                    marginBottom: '16px',
-                    padding: '12px',
-                    background: `linear-gradient(135deg, ${COLORS[index % COLORS.length]}15 0%, ${COLORS[index % COLORS.length]}05 100%)`,
-                    borderRadius: '8px',
-                    borderLeft: `4px solid ${COLORS[index % COLORS.length]}`
-                  }}>
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}>
-                      <span style={{
-                        fontWeight: '600',
-                        color: '#2d3748',
-                        fontSize: '14px'
-                      }}>
-                        {tier.tier_name}
-                      </span>
-                      <span style={{
-                        background: COLORS[index % COLORS.length],
-                        color: 'white',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        fontWeight: '600'
-                      }}>
-                        {tier.days_since_last_contact} วัน
-                      </span>
-                    </div>
+                  <div 
+                    key={tier.id} 
+                    className="main-tier-item"
+                    style={{
+                      background: `linear-gradient(135deg, ${COLORS[index % COLORS.length]}15 0%, ${COLORS[index % COLORS.length]}05 100%)`,
+                      borderLeft: `4px solid ${COLORS[index % COLORS.length]}`
+                    }}
+                  >
+                    <span className="main-tier-name">
+                      {tier.tier_name}
+                    </span>
+                    <span 
+                      className="main-tier-days"
+                      style={{ background: COLORS[index % COLORS.length] }}
+                    >
+                      {tier.days_since_last_contact} วัน
+                    </span>
                   </div>
                 ))}
               </div>
             ) : (
-              <div style={{
-                height: '200px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#a0aec0'
-              }}>
+              <div className="main-empty-state">
                 ยังไม่มีข้อมูล Tiers
               </div>
             )}
@@ -840,99 +670,47 @@ useEffect(() => {
         </div>
 
         {/* Recent Activities Table */}
-        <div style={{
-          background: 'white',
-          borderRadius: '12px',
-          padding: '24px',
-          boxShadow: '0 4px 6px rgba(0,0,0,0.07)'
-        }}>
-          <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: '600', color: '#2d3748' }}>
+        <div className="main-chart-card">
+          <h3 className="main-chart-title">
             🔔 กิจกรรมล่าสุด
           </h3>
           {recentActivities.length > 0 ? (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{
-                width: '100%',
-                borderCollapse: 'collapse'
-              }}>
+            <div className="main-table-container">
+              <table className="main-activities-table">
                 <thead>
-                  <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
-                    <th style={{
-                      textAlign: 'left',
-                      padding: '12px',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      color: '#4a5568'
-                    }}>ลูกค้า</th>
-                    <th style={{
-                      textAlign: 'left',
-                      padding: '12px',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      color: '#4a5568'
-                    }}>กิจกรรม</th>
-                    <th style={{
-                      textAlign: 'left',
-                      padding: '12px',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      color: '#4a5568'
-                    }}>ประเภท</th>
-                    <th style={{
-                      textAlign: 'left',
-                      padding: '12px',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      color: '#4a5568'
-                    }}>เวลา</th>
+                  <tr>
+                    <th>ลูกค้า</th>
+                    <th>กิจกรรม</th>
+                    <th>ประเภท</th>
+                    <th>เวลา</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {recentActivities.map((activity, index) => (
-                    <tr key={activity.id} style={{
-                      borderBottom: '1px solid #e2e8f0',
-                      transition: 'background 0.2s',
-                      cursor: 'pointer'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = '#f7fafc'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
-                      <td style={{ padding: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div style={{
-                            width: '40px',
-                            height: '40px',
-                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                            borderRadius: '50%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: 'white',
-                            fontSize: '16px',
-                            fontWeight: '600'
-                          }}>
+                  {recentActivities.map((activity) => (
+                    <tr key={activity.id}>
+                      <td>
+                        <div className="main-user-cell">
+                          <div className="main-user-avatar">
                             {activity.name.charAt(0)}
                           </div>
-                          <span style={{ fontSize: '14px', color: '#2d3748' }}>
+                          <span className="main-user-name">
                             {activity.name}
                           </span>
                         </div>
                       </td>
-                      <td style={{ padding: '12px' }}>
-                        <span style={{
-                          background: activity.action === 'ลูกค้าใหม่' ? '#c6f6d5' : '#bee3f8',
-                          color: activity.action === 'ลูกค้าใหม่' ? '#276749' : '#2c5282',
-                          padding: '4px 12px',
-                          borderRadius: '12px',
-                          fontSize: '13px',
-                          fontWeight: '500'
-                        }}>
+                      <td>
+                        <span className={`main-activity-badge ${
+                          activity.action === 'ลูกค้าใหม่' 
+                            ? 'main-activity-badge-new' 
+                            : 'main-activity-badge-message'
+                        }`}>
                           {activity.action}
                         </span>
                       </td>
-                      <td style={{ padding: '12px', fontSize: '14px', color: '#4a5568' }}>
+                      <td className="main-activity-type">
                         {activity.type}
                       </td>
-                      <td style={{ padding: '12px', fontSize: '14px', color: '#718096' }}>
+                      <td className="main-activity-time">
                         {activity.time}
                       </td>
                     </tr>
@@ -941,17 +719,11 @@ useEffect(() => {
               </table>
             </div>
           ) : (
-            <div style={{
-              padding: '40px',
-              textAlign: 'center',
-              color: '#a0aec0'
-            }}>
+            <div className="main-empty-state-large">
               ยังไม่มีกิจกรรมล่าสุด
             </div>
           )}
         </div>
-
-       
 
       </div>
     </div>
