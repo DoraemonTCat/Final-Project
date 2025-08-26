@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import '../CSS/GroupSchedule.css';
-import { fetchPages, connectFacebook } from "../Features/Tool";
-import Sidebar from "./Sidebar"; 
+import { fetchPages } from "../Features/Tool";
+import Sidebar from "./Sidebar";
+import '../CSS/GroupSchedule.css';  // Import CSS file
 
 function GroupSchedule() {
   // State declarations 
@@ -51,21 +51,21 @@ function GroupSchedule() {
   };
 
   // Listen for page changes from Sidebar
-useEffect(() => {
-  window.addEventListener('pageChanged', handlePageChange);
-  
-  const savedPage = localStorage.getItem("selectedPage");
-  if (savedPage) {
-    setSelectedPage(savedPage);
-  }
+  useEffect(() => {
+    window.addEventListener('pageChanged', handlePageChange);
+    
+    const savedPage = localStorage.getItem("selectedPage");
+    if (savedPage) {
+      setSelectedPage(savedPage);
+    }
 
-  return () => {
-    window.removeEventListener('pageChanged', handlePageChange);
-  };
-}, []);
+    return () => {
+      window.removeEventListener('pageChanged', handlePageChange);
+    };
+  }, []);
 
   // เพิ่มฟังก์ชัน toggleDropdown ถ้าใช้
-const toggleDropdown = () => {
+  const toggleDropdown = () => {
     setIsDropdownOpen(!isDropdownOpen);
   };
 
@@ -313,38 +313,82 @@ const toggleDropdown = () => {
     return true;
   };
 
-
   // ฟังก์ชันบันทึก schedule หลักที่รองรับทั้ง user groups และ knowledge groups
   const saveSchedule = async () => {
-  if (!validateSchedule()) return;
-  
-  setSavingSchedule(true);
-  
-  try {
-    const dbId = await getPageDbId(selectedPage);
-    if (!dbId) {
-      alert('ไม่พบข้อมูลเพจในระบบ');
-      return;
-    }
+    if (!validateSchedule()) return;
     
-    const groupId = selectedGroups[0].id;
-    const isKnowledge = isKnowledgeGroup(groupId);
+    setSavingSchedule(true);
     
-    if (isKnowledge) {
-      const knowledgeId = groupId.replace('knowledge_', '');
+    try {
+      const dbId = await getPageDbId(selectedPage);
+      if (!dbId) {
+        alert('ไม่พบข้อมูลเพจในระบบ');
+        return;
+      }
       
-      // ขั้นตอนที่ 1: ลบ schedules เก่าทั้งหมด
-      console.log('🗑️ Deleting old schedules for knowledge group:', knowledgeId);
-      await deleteKnowledgeGroupSchedules(selectedPage, knowledgeId);
+      const groupId = selectedGroups[0].id;
+      const isKnowledge = isKnowledgeGroup(groupId);
       
-      // ขั้นตอนที่ 2: ดึงข้อความและสร้าง schedules ใหม่
-      const messagesResponse = await fetch(
-        `http://localhost:8000/knowledge-group-messages/${selectedPage}/${knowledgeId}`
-      );
-      
-      if (messagesResponse.ok) {
-        const messages = await messagesResponse.json();
-        const messageIds = messages.map(msg => msg.id);
+      if (isKnowledge) {
+        const knowledgeId = groupId.replace('knowledge_', '');
+        
+        // ขั้นตอนที่ 1: ลบ schedules เก่าทั้งหมด
+        console.log('🗑️ Deleting old schedules for knowledge group:', knowledgeId);
+        await deleteKnowledgeGroupSchedules(selectedPage, knowledgeId);
+        
+        // ขั้นตอนที่ 2: ดึงข้อความและสร้าง schedules ใหม่
+        const messagesResponse = await fetch(
+          `http://localhost:8000/knowledge-group-messages/${selectedPage}/${knowledgeId}`
+        );
+        
+        if (messagesResponse.ok) {
+          const messages = await messagesResponse.json();
+          const messageIds = messages.map(msg => msg.id);
+          
+          // สร้าง schedules ใหม่
+          const schedulePromises = messageIds.map(async (messageId) => {
+            const scheduleData = {
+              customer_type_message_id: messageId,
+              send_type: SCHEDULE_TYPE_MAP[scheduleType],
+              scheduled_at: scheduleType === 'scheduled' ? 
+                `${scheduleDate}T${scheduleTime}:00` : null,
+              send_after_inactive: scheduleType === 'user-inactive' ? 
+                `${inactivityPeriod} ${inactivityUnit}` : null,
+              frequency: repeatType
+            };
+            
+            const response = await fetch('http://localhost:8000/message-schedules', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(scheduleData)
+            });
+            
+            if (!response.ok) {
+              throw new Error('Failed to create schedule');
+            }
+            
+            return response.json();
+          });
+          
+          await Promise.all(schedulePromises);
+          console.log('✅ All new schedules created successfully');
+        }
+      } else {
+        // สำหรับ user groups (ใช้โค้ดเดิม)
+        const dbGroupId = groupId;
+        
+        // ลบ schedules เก่า
+        await deleteExistingSchedules(dbId, dbGroupId);
+        
+        // โหลด message IDs
+        if (!messageIds || messageIds.length === 0) {
+          const ids = await loadMessageIds(dbId, groupId, isKnowledge);
+          if (ids.length === 0) {
+            alert('ไม่พบข้อความในกลุ่มนี้');
+            navigate('/GroupDefault');
+            return;
+          }
+        }
         
         // สร้าง schedules ใหม่
         const schedulePromises = messageIds.map(async (messageId) => {
@@ -360,111 +404,66 @@ const toggleDropdown = () => {
           
           const response = await fetch('http://localhost:8000/message-schedules', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json'
+            },
             body: JSON.stringify(scheduleData)
           });
           
           if (!response.ok) {
-            throw new Error('Failed to create schedule');
+            const error = await response.json();
+            throw new Error(`Failed to save schedule: ${error.detail || 'Unknown error'}`);
           }
           
           return response.json();
         });
         
         await Promise.all(schedulePromises);
-        console.log('✅ All new schedules created successfully');
-      }
-    } else {
-      // สำหรับ user groups (ใช้โค้ดเดิม)
-      const dbGroupId = groupId;
-      
-      // ลบ schedules เก่า
-      await deleteExistingSchedules(dbId, dbGroupId);
-      
-      // โหลด message IDs
-      if (!messageIds || messageIds.length === 0) {
-        const ids = await loadMessageIds(dbId, groupId, isKnowledge);
-        if (ids.length === 0) {
-          alert('ไม่พบข้อความในกลุ่มนี้');
-          navigate('/GroupDefault');
-          return;
-        }
       }
       
-      // สร้าง schedules ใหม่
-      const schedulePromises = messageIds.map(async (messageId) => {
-        const scheduleData = {
-          customer_type_message_id: messageId,
-          send_type: SCHEDULE_TYPE_MAP[scheduleType],
-          scheduled_at: scheduleType === 'scheduled' ? 
-            `${scheduleDate}T${scheduleTime}:00` : null,
-          send_after_inactive: scheduleType === 'user-inactive' ? 
-            `${inactivityPeriod} ${inactivityUnit}` : null,
-          frequency: repeatType
-        };
-        
-        const response = await fetch('http://localhost:8000/message-schedules', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(scheduleData)
-        });
-        
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(`Failed to save schedule: ${error.detail || 'Unknown error'}`);
-        }
-        
-        return response.json();
-      });
+      alert("บันทึกการตั้งเวลาสำเร็จ!");
       
-      await Promise.all(schedulePromises);
+      localStorage.removeItem("selectedCustomerGroups");
+      localStorage.removeItem("selectedCustomerGroupsPageId");
+      localStorage.removeItem("editingScheduleId");
+      
+      navigate('/MinerGroup');
+      
+    } catch (error) {
+      console.error('❌ Error saving schedule:', error);
+      alert('เกิดข้อผิดพลาดในการบันทึกการตั้งเวลา: ' + error.message);
+    } finally {
+      setSavingSchedule(false);
     }
-    
-    alert("บันทึกการตั้งเวลาสำเร็จ!");
-    
-    localStorage.removeItem("selectedCustomerGroups");
-    localStorage.removeItem("selectedCustomerGroupsPageId");
-    localStorage.removeItem("editingScheduleId");
-    
-    navigate('/MinerGroup');
-    
-  } catch (error) {
-    console.error('❌ Error saving schedule:', error);
-    alert('เกิดข้อผิดพลาดในการบันทึกการตั้งเวลา: ' + error.message);
-  } finally {
-    setSavingSchedule(false);
-  }
-};
+  };
 
   // ฟังก์ชันช่วยในการลบ schedules เก่า
   const deleteExistingSchedules = async (dbId, dbGroupId) => {
-  try {
-    console.log('🔍 Checking for existing schedules for group:', dbGroupId);
-    
-    const existingSchedulesResponse = await fetch(
-      `http://localhost:8000/message-schedules/group/${dbId}/${dbGroupId}`
-    );
-    
-    if (existingSchedulesResponse.ok) {
-      const existingSchedules = await existingSchedulesResponse.json();
-      console.log(`📋 Found ${existingSchedules.length} existing schedules to delete`);
+    try {
+      console.log('🔍 Checking for existing schedules for group:', dbGroupId);
       
-      for (const oldSchedule of existingSchedules) {
-        console.log(`🗑️ Deleting old schedule: ${oldSchedule.id}`);
-        await fetch(`http://localhost:8000/message-schedules/${oldSchedule.id}`, {
-          method: 'DELETE'
-        });
+      const existingSchedulesResponse = await fetch(
+        `http://localhost:8000/message-schedules/group/${dbId}/${dbGroupId}`
+      );
+      
+      if (existingSchedulesResponse.ok) {
+        const existingSchedules = await existingSchedulesResponse.json();
+        console.log(`📋 Found ${existingSchedules.length} existing schedules to delete`);
+        
+        for (const oldSchedule of existingSchedules) {
+          console.log(`🗑️ Deleting old schedule: ${oldSchedule.id}`);
+          await fetch(`http://localhost:8000/message-schedules/${oldSchedule.id}`, {
+            method: 'DELETE'
+          });
+        }
+        
+        console.log('✅ All old schedules deleted successfully');
       }
-      
-      console.log('✅ All old schedules deleted successfully');
+    } catch (error) {
+      console.error('❌ Error deleting old schedules:', error);
+      // ไม่ throw error เพื่อให้สามารถดำเนินการสร้าง schedule ใหม่ต่อได้
     }
-  } catch (error) {
-    console.error('❌ Error deleting old schedules:', error);
-    // ไม่ throw error เพื่อให้สามารถดำเนินการสร้าง schedule ใหม่ต่อได้
-  }
-};
+  };
 
   // ฟังก์ชันช่วยในการโหลด message IDs
   const loadMessageIds = async (dbId, groupId, isKnowledge) => {
@@ -543,297 +542,341 @@ const toggleDropdown = () => {
       
       if (endDate) {
         summary += ` จนถึง ${new Date(endDate).toLocaleDateString('th-TH')}`;
+        }
       }
-    }
-    
-    return summary;
-  };
-
-  const deleteKnowledgeGroupSchedules = async (pageId, knowledgeId) => {
-  try {
-    const response = await fetch(
-      `http://localhost:8000/message-schedules/knowledge-group/${pageId}/${knowledgeId}`,
-      { method: 'DELETE' }
-    );
-    
-    if (!response.ok) {
-      throw new Error('Failed to delete schedules');
-    }
-    
-    const result = await response.json();
-    console.log('✅ Deleted schedules:', result);
-    return result;
-  } catch (error) {
-    console.error('Error deleting knowledge group schedules:', error);
-    throw error;
-  }
-};
-
-  const selectedPageInfo = pages.find(p => p.id === selectedPage);
-  const isForKnowledgeGroup = selectedGroups.some(g => g.isKnowledge);
-
-  return (
-    <div className="app-container">
-       <Sidebar />
-
-      <div className="schedule-container">
-        <div className="schedule-header">
-          <h1 className="schedule-title">
-            <span className="title-icon">⏰</span>
-            {editingScheduleId ? 'แก้ไขการตั้งเวลา' : 
-             isForKnowledgeGroup ? 'ตั้งเวลาและความถี่การส่ง - กลุ่มพื้นฐาน' :
-             'ตั้งเวลาและความถี่การส่ง'}
-            {selectedPageInfo && (
-              <span style={{ fontSize: '18px', color: '#718096', marginLeft: '10px' }}>
-                - {selectedPageInfo.name}
-              </span>
-            )}
-          </h1>
-          <div className="breadcrumb">
-            <span className="breadcrumb-item">1. เลือกกลุ่ม</span>
-            <span className="breadcrumb-separator">›</span>
-            <span className="breadcrumb-item">2. ตั้งค่าข้อความ</span>
-            <span className="breadcrumb-separator">›</span>
-            <span className="breadcrumb-item active">3. ตั้งเวลา</span>
-          </div>
-        </div>
-
-        <div className="schedule-summary">
-          <h3>สรุปการตั้งค่า:</h3>
-          <div className="summary-grid">
-            <div className="summary-item">
-              <span className="summary-label">เพจ:</span>
-              <span className="summary-value">{selectedPageInfo?.name || '-'}</span>
-            </div>
-            <div className="summary-item">
-              <span className="summary-label">กลุ่มที่เลือก:</span>
-              <span className="summary-value">
-                {selectedGroups.map(g => (
-                  <span key={g.id}>
-                    {g.isKnowledge && '🧠 '}
-                    {g.name}
+      
+      return summary;
+    };
+  
+    const deleteKnowledgeGroupSchedules = async (pageId, knowledgeId) => {
+      try {
+        const response = await fetch(
+          `http://localhost:8000/message-schedules/knowledge-group/${pageId}/${knowledgeId}`,
+          { method: 'DELETE' }
+        );
+        
+        if (!response.ok) {
+          throw new Error('Failed to delete schedules');
+        }
+        
+        const result = await response.json();
+        console.log('✅ Deleted schedules:', result);
+        return result;
+      } catch (error) {
+        console.error('Error deleting knowledge group schedules:', error);
+        throw error;
+      }
+    };
+  
+    const selectedPageInfo = pages.find(p => p.id === selectedPage);
+    const isForKnowledgeGroup = selectedGroups.some(g => g.isKnowledge);
+  
+    return (
+      <div style={{display: 'flex'}}>
+        <Sidebar />
+        
+        <div className="schedule-container">
+          <div className="background-pattern"></div>
+          
+          <div className="content-wrapper">
+            <div className="schedule-header">
+              <h1 className="schedule-title">
+                <span className="title-icon">⏰</span>
+                {editingScheduleId ? 'แก้ไขการตั้งเวลา' :  
+                 isForKnowledgeGroup ? 'ตั้งเวลาและความถี่การส่ง - กลุ่มพื้นฐาน' :
+                 'ตั้งเวลาและความถี่การส่ง'}
+                {selectedPageInfo && (
+                  <span className="page-info">
+                    {selectedPageInfo.name}
                   </span>
-                )).reduce((prev, curr, i) => [prev, i > 0 && ', ', curr], [])}
-              </span>
+                )}
+              </h1>
+              <div className="breadcrumb">
+                <span className="breadcrumb-item">1. เลือกกลุ่ม</span>
+                <span className="breadcrumb-separator">›</span>
+                <span className="breadcrumb-item">2. ตั้งค่าข้อความ</span>
+                <span className="breadcrumb-separator">›</span>
+                <span className="breadcrumb-item breadcrumb-active">3. ตั้งเวลา</span>
+              </div>
             </div>
-            <div className="summary-item">
-              <span className="summary-label">จำนวนข้อความ:</span>
-              <span className="summary-value">
-                {messageIds.length} ข้อความ
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="schedule-form">
-          <div className="form-section">
-            <h3 className="section-title">🕐 เวลาที่ต้องการส่ง</h3>
-            
-            <div className="schedule-type-selector">
-              <label className="radio-option">
-                <input
-                  type="radio"
-                  name="scheduleType"
-                  value="immediate"
-                  checked={scheduleType === 'immediate'}
-                  onChange={(e) => setScheduleType(e.target.value)}
-                />
-                <span className="radio-label">
-                  <span className="radio-icon">⚡</span>
-                  ส่งทันที
-                </span>
-              </label>
-              
-              <label className="radio-option">
-                <input
-                  type="radio"
-                  name="scheduleType"
-                  value="scheduled"
-                  checked={scheduleType === 'scheduled'}
-                  onChange={(e) => setScheduleType(e.target.value)}
-                />
-                <span className="radio-label">
-                  <span className="radio-icon">📅</span>
-                  กำหนดเวลา
-                </span>
-              </label>
-
-              <label className="radio-option">
-                <input
-                  type="radio"
-                  name="scheduleType"
-                  value="user-inactive"
-                  checked={scheduleType === 'user-inactive'}
-                  onChange={(e) => setScheduleType(e.target.value)}
-                />
-                <span className="radio-label">
-                  <span className="radio-icon">🕰️</span>
-                  ตามระยะเวลาที่หาย
-                </span>
-              </label>
-            </div>
-
-            {scheduleType === 'scheduled' && (
-              <div className="datetime-inputs">
-                <div className="form-group">
-                  <label className="form-label">วันที่:</label>
-                  <input
-                    type="date"
-                    value={scheduleDate}
-                    onChange={(e) => setScheduleDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
-                    className="form-input"
-                  />
+  
+            <div className="schedule-summary">
+              <h3 className="summary-title">
+                📊 สรุปการตั้งค่า
+              </h3>
+              <div className="summary-grid">
+                <div className="summary-item">
+                  <div className="summary-label">เพจที่เลือก</div>
+                  <div className="summary-value">
+                    📱 {selectedPageInfo?.name || '-'}
+                  </div>
                 </div>
+                <div className="summary-item">
+                  <div className="summary-label">กลุ่มเป้าหมาย</div>
+                  <div className="summary-value">
+                    {selectedGroups.map(g => (
+                      <span key={g.id}>
+                        {g.isKnowledge ? '🧠' : '👥'} {g.name}
+                      </span>
+                    )).reduce((prev, curr, i) => [prev, i > 0 && ', ', curr], [])}
+                  </div>
+                </div>
+                <div className="summary-item">
+                  <div className="summary-label">จำนวนข้อความ</div>
+                  <div className="summary-value">
+                    💬 {messageIds.length} ข้อความ
+                  </div>
+                </div>
+              </div>
+            </div>
+  
+            <div className="schedule-form">
+              <div className="form-section">
+                <h3 className="section-title">
+                  <span className="section-title-icon">🕐</span>
+                  เวลาที่ต้องการส่ง
+                </h3>
                 
-                <div className="form-group">
-                  <label className="form-label">เวลา:</label>
-                  <input
-                    type="time"
-                    value={scheduleTime}
-                    onChange={(e) => setScheduleTime(e.target.value)}
-                    className="form-input"
-                  />
+                <div className="schedule-type-selector">
+                  <label className="radio-option">
+                    <input
+                      type="radio"
+                      name="scheduleType"
+                      value="immediate"
+                      checked={scheduleType === 'immediate'}
+                      onChange={(e) => setScheduleType(e.target.value)}
+                      className="radio-input" 
+                    />
+                    <span className={`radio-label ${scheduleType === 'immediate' ? 'radio-label-selected' : ''}`}>
+                      <span className="radio-icon">⚡</span>
+                      ส่งทันที
+                    </span>
+                  </label>
+                  
+                  <label className="radio-option">
+                    <input
+                      type="radio"
+                      name="scheduleType"
+                      value="scheduled"
+                      checked={scheduleType === 'scheduled'}
+                      onChange={(e) => setScheduleType(e.target.value)}
+                      className="radio-input"
+                    />
+                    <span className={`radio-label ${scheduleType === 'scheduled' ? 'radio-label-selected' : ''}`}>
+                      <span className="radio-icon">📅</span>
+                      กำหนดเวลา
+                    </span>
+                  </label>
+  
+                  <label className="radio-option">
+                    <input
+                      type="radio"
+                      name="scheduleType"
+                      value="user-inactive"
+                      checked={scheduleType === 'user-inactive'}
+                      onChange={(e) => setScheduleType(e.target.value)}
+                      className="radio-input"
+                    />
+                    <span className={`radio-label ${scheduleType === 'user-inactive' ? 'radio-label-selected' : ''}`}>
+                      <span className="radio-icon">🕰️</span>
+                      ตามระยะเวลาที่หาย
+                    </span>
+                  </label>
+                </div>
+  
+                {scheduleType === 'scheduled' && (
+                  <div className="datetime-inputs">
+                    <div className="form-group">
+                      <label className="form-label">
+                        📅 วันที่
+                      </label>
+                      <input
+                        type="date"
+                        value={scheduleDate}
+                        onChange={(e) => setScheduleDate(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                        className="form-input"
+                      />
+                    </div>
+                    
+                    <div className="form-group">
+                      <label className="form-label">
+                        ⏰ เวลา
+                      </label>
+                      <input
+                        type="time"
+                        value={scheduleTime}
+                        onChange={(e) => setScheduleTime(e.target.value)}
+                        className="form-input"
+                      />
+                    </div>
+                  </div>
+                )}
+  
+                {scheduleType === 'user-inactive' && (
+                  <div className="inactivity-settings">
+                    <label className="form-label">ส่งข้อความเมื่อ User หายไปเกิน:</label>
+                    <div className="inactivity-inputs">
+                      <input
+                        type="number"
+                        value={inactivityPeriod}
+                        onChange={(e) => setInactivityPeriod(e.target.value)}
+                        min="1"
+                        className="form-input inactivity-number"
+                      />
+                      <select
+                        value={inactivityUnit}
+                        onChange={(e) => setInactivityUnit(e.target.value)}
+                        className="form-input inactivity-select"
+                      >
+                        <option value="minutes">นาที</option>
+                        <option value="hours">ชั่วโมง</option>
+                        <option value="days">วัน</option>
+                        <option value="weeks">สัปดาห์</option>
+                        <option value="months">เดือน</option>
+                      </select>
+                    </div>
+                    <p className="inactivity-hint">
+                      💡 ระบบจะตรวจสอบทุกๆ ชั่วโมง และส่งข้อความไปยัง User ที่ไม่มีการตอบกลับตามระยะเวลาที่กำหนด
+                    </p>
+                  </div>
+                )}
+              </div>
+  
+              <div className="form-section form-section-last">
+                <h3 className="section-title">
+                  <span className="section-title-icon">🔄</span>
+                  ความถี่ในการส่ง
+                </h3>
+                
+                <div className="schedule-type-selector">
+                  <label className="radio-option">
+                    <input
+                      type="radio"
+                      name="repeatType"
+                      value="once"
+                      checked={repeatType === 'once'}
+                      onChange={(e) => setRepeatType(e.target.value)}
+                      className="radio-input"
+                    />
+                    <span className={`radio-label ${repeatType === 'once' ? 'radio-label-selected' : ''}`}>
+                      ครั้งเดียว
+                    </span>
+                  </label>
+                  
+                  <label className="radio-option">
+                    <input
+                      type="radio"
+                      name="repeatType"
+                      value="daily"
+                      checked={repeatType === 'daily'}
+                      onChange={(e) => setRepeatType(e.target.value)}
+                      className="radio-input"
+                    />
+                    <span className={`radio-label ${repeatType === 'daily' ? 'radio-label-selected' : ''}`}>
+                      ทุกวัน
+                    </span>
+                  </label>
+                  
+                  <label className="radio-option">
+                    <input
+                      type="radio"
+                      name="repeatType"
+                      value="weekly"
+                      checked={repeatType === 'weekly'}
+                      onChange={(e) => setRepeatType(e.target.value)}
+                      className="radio-input"
+                    />
+                    <span className={`radio-label ${repeatType === 'weekly' ? 'radio-label-selected' : ''}`}>
+                      ทุกสัปดาห์
+                    </span>
+                  </label>
+                  
+                  <label className="radio-option">
+                    <input
+                      type="radio"
+                      name="repeatType"
+                      value="monthly"
+                      checked={repeatType === 'monthly'}
+                      onChange={(e) => setRepeatType(e.target.value)}
+                      className="radio-input"
+                    />
+                    <span className={`radio-label ${repeatType === 'monthly' ? 'radio-label-selected' : ''}`}>
+                      ทุกเดือน
+                    </span>
+                  </label>
+                </div>
+  
+                {repeatType === 'weekly' && (
+                  <div style={{marginTop: '24px'}}>
+                    <label className="form-label">เลือกวันที่ต้องการส่ง:</label>
+                    <div className="weekdays-grid">
+                      {weekDays.map(day => (
+                        <button
+                          key={day.id}
+                          type="button"
+                          className={`weekday-btn ${repeatDays.includes(day.id) ? 'weekday-btn-active' : ''}`}
+                          onClick={() => toggleWeekDay(day.id)}
+                        >
+                          {day.short}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+  
+                {repeatType !== 'once' && (
+                  <div style={{marginTop: '50px' , marginBottom: '-45px'}}>
+                    <div className="form-group">
+                      <label className="form-label">
+                        📆 สิ้นสุดวันที่ (ไม่บังคับ)
+                      </label>
+                      <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        min={scheduleDate || new Date().toISOString().split('T')[0]}
+                        className="form-input"
+                        style={{maxWidth: '250px'}}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+  
+              <div className="schedule-preview">
+                <div className="preview-decoration"></div>
+                <h3 className="preview-title">
+                  📋 สรุปการตั้งเวลา
+                </h3>
+                <div className="preview-content">
+                  {getScheduleSummary()}
                 </div>
               </div>
-            )}
+                
+              
+              <div className="action-buttons">
+                  <Link to="/GroupDefault" className="back-btn">
+                    ← กลับ
+                  </Link>
+               
+                  <button
+                    onClick={saveSchedule}
+                    className="save-schedule-btn"
+                    disabled={savingSchedule}
 
-            {scheduleType === 'user-inactive' && (
-              <div className="inactivity-settings">
-                <label className="form-label">ส่งข้อความเมื่อ User หายไปเกิน:</label>
-                <div className="inactivity-inputs">
-                  <input
-                    type="number"
-                    value={inactivityPeriod}
-                    onChange={(e) => setInactivityPeriod(e.target.value)}
-                    min="1"
-                    className="form-input inactivity-number"
-                  />
-                  <select
-                    value={inactivityUnit}
-                    onChange={(e) => setInactivityUnit(e.target.value)}
-                    className="form-input inactivity-select"
+                    style={{marginLeft: 'auto'}}
                   >
-                    <option value="minutes">นาที</option>
-                    <option value="hours">ชั่วโมง</option>
-                    <option value="days">วัน</option>
-                    <option value="weeks">สัปดาห์</option>
-                    <option value="months">เดือน</option>
-                  </select>
-                </div>
-                <p className="inactivity-hint">
-                  💡 ระบบจะตรวจสอบทุกๆ ชั่วโมง และส่งข้อความไปยัง User ที่ไม่มีการตอบกลับตามระยะเวลาที่กำหนด
-                </p>
+                    <span className="btn-icon">💾</span>
+                    {savingSchedule ? 'กำลังบันทึก...' : (editingScheduleId ? 'บันทึกการแก้ไข' : 'บันทึกการตั้งค่า')}
+                  </button>
+      
               </div>
-            )}
-          </div>
-
-          <div className="form-section">
-            <h3 className="section-title">🔄 ความถี่ในการส่ง</h3>
-            
-            <div className="repeat-type-selector">
-              <label className="radio-option">
-                <input
-                  type="radio"
-                  name="repeatType"
-                  value="once"
-                  checked={repeatType === 'once'}
-                  onChange={(e) => setRepeatType(e.target.value)}
-                />
-                <span className="radio-label">ครั้งเดียว</span>
-              </label>
-              
-              <label className="radio-option">
-                <input
-                  type="radio"
-                  name="repeatType"
-                  value="daily"
-                  checked={repeatType === 'daily'}
-                  onChange={(e) => setRepeatType(e.target.value)}
-                />
-                <span className="radio-label">ทุกวัน</span>
-              </label>
-              
-              <label className="radio-option">
-                <input
-                  type="radio"
-                  name="repeatType"
-                  value="weekly"
-                  checked={repeatType === 'weekly'}
-                  onChange={(e) => setRepeatType(e.target.value)}
-                />
-                <span className="radio-label">ทุกสัปดาห์</span>
-              </label>
-              
-              <label className="radio-option">
-                <input
-                  type="radio"
-                  name="repeatType"
-                  value="monthly"
-                  checked={repeatType === 'monthly'}
-                  onChange={(e) => setRepeatType(e.target.value)}
-                />
-                <span className="radio-label">ทุกเดือน</span>
-              </label>
             </div>
-
-            {repeatType === 'weekly' && (
-              <div className="weekdays-selector">
-                <label className="form-label">เลือกวันที่ต้องการส่ง:</label>
-                <div className="weekdays-grid">
-                  {weekDays.map(day => (
-                    <button
-                      key={day.id}
-                      type="button"
-                      className={`weekday-btn ${repeatDays.includes(day.id) ? 'active' : ''}`}
-                      onClick={() => toggleWeekDay(day.id)}
-                    >
-                      {day.short}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {repeatType !== 'once' && (
-              <div className="repeat-options">
-                <div className="form-group">
-                  <label className="form-label">สิ้นสุดวันที่ (ไม่บังคับ):</label>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    min={scheduleDate || new Date().toISOString().split('T')[0]}
-                    className="form-input"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="schedule-preview">
-            <h3 className="preview-title">📋 สรุปการตั้งเวลา</h3>
-            <div className="preview-content">
-              {getScheduleSummary()}
-            </div>
-          </div>
-
-          <div className="action-buttons_D">
-            <Link to="/GroupDefault" className="back-btn">
-              ← กลับ
-            </Link>
-            <button
-                onClick={saveSchedule}
-                className="save-schedule-btn"
-                disabled={savingSchedule}>
-                <span className="btn-icon">💾</span>
-                {savingSchedule ? 'กำลังบันทึก...' : (editingScheduleId ? 'บันทึกการแก้ไข' : 'บันทึกการตั้งค่า')}
-            </button>
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-export default GroupSchedule;
+    );
+  }
+  
+  export default GroupSchedule;

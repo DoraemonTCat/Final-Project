@@ -42,6 +42,7 @@ def classify_and_assign_tier_hybrid(db: Session, page_id: int):
     )
 
     now = datetime.now(timezone.utc)
+    pending_updates = []  # <-- เก็บ SSE updates ไว้ก่อน
 
     for cust in customers:
         # ดึงข้อความล่าสุด
@@ -72,43 +73,27 @@ def classify_and_assign_tier_hybrid(db: Session, page_id: int):
             elif message_type == "attachment":
                 category_id = classify_with_gemini_image(message_text, knowledge_map)
 
-        # update knowledge id และส่ง SSE update
-        if category_id != cust.customer_type_knowledge_id:
+        # update knowledge id
+        if category_id and category_id != cust.customer_type_knowledge_id:
             cust.customer_type_knowledge_id = category_id
-            
-            # ส่ง SSE update แบบ async
-            if category_id:
-                knowledge_type = db.query(models.CustomerTypeKnowledge).filter(
-                    models.CustomerTypeKnowledge.id == category_id
-                ).first()
-                
-                if knowledge_type:
-                    try:
-                        from app.routes.facebook.sse import customer_type_update_queue
-                        
-                        # ดึง page_id string จาก database
-                        page_record = db.query(models.FacebookPage).filter(
-                            models.FacebookPage.ID == page_id
-                        ).first()
-                        
-                        if page_record:
-                            update_data = {
-                                'page_id': page_record.page_id,  # ใช้ Facebook page_id string
-                                'psid': cust.customer_psid,
-                                'customer_type_knowledge_id': category_id,
-                                'customer_type_knowledge_name': knowledge_type.type_name,
-                                'timestamp': datetime.now(timezone.utc).isoformat()
-                            }
-                            
-                            # สร้าง async task เพื่อส่ง update
-                            loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(loop)
-                            loop.run_until_complete(customer_type_update_queue.put(update_data))
-                            loop.close()
-                            
-                            print(f"📡 Sent SSE update for customer {cust.customer_psid} -> {knowledge_type.type_name}")
-                    except Exception as e:
-                        print(f"❌ Error sending SSE update: {e}")
+
+            # เก็บ pending update แทนการยิงทันที
+            knowledge_type = db.query(models.CustomerTypeKnowledge).filter(
+                models.CustomerTypeKnowledge.id == category_id
+            ).first()
+            page_record = db.query(models.FacebookPage).filter(
+                models.FacebookPage.ID == page_id
+            ).first()
+
+            if knowledge_type and page_record:
+                update_data = {
+                    'page_id': page_record.page_id,
+                    'psid': cust.customer_psid,
+                    'customer_type_knowledge_id': category_id,
+                    'customer_type_knowledge_name': knowledge_type.type_name,
+                    'timestamp': datetime.now(timezone.utc).isoformat()
+                }
+                pending_updates.append(update_data)
 
         # 5️⃣ หา tier จากวัน
         if cust.last_interaction_at:
@@ -121,7 +106,21 @@ def classify_and_assign_tier_hybrid(db: Session, page_id: int):
             if selected_tier:
                 cust.current_tier = selected_tier
 
+    # ✅ Commit ก่อน
     db.commit()
+
+    # ✅ ค่อยยิง SSE หลัง commit สำเร็จ
+    if pending_updates:
+        try:
+            from app.routes.facebook.sse import customer_type_update_queue
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            for update in pending_updates:
+                loop.run_until_complete(customer_type_update_queue.put(update))
+                print(f"📡 Sent SSE update after commit for {update['psid']} -> {update['customer_type_knowledge_name']}")
+            loop.close()
+        except Exception as e:
+            print(f"❌ Error sending SSE update after commit: {e}")
 
 
 def match_by_keyword(message_text: str, knowledge_map: dict):
