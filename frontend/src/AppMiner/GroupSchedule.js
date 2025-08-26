@@ -778,7 +778,7 @@ function GroupSchedule() {
                     </span>
                   </label>
                   
-                  <label className="radio-option">
+                  <label className="radio-option" >
                     <input
                       type="radio"
                       name="repeatType"
@@ -787,7 +787,7 @@ function GroupSchedule() {
                       onChange={(e) => setRepeatType(e.target.value)}
                       className="radio-input"
                     />
-                    <span className={`radio-label ${repeatType === 'weekly' ? 'radio-label-selected' : ''}`}>
+                    <span className={`radio-label ${repeatType === 'weekly' ? 'radio-label-selected' : ''}`} >
                       ทุกสัปดาห์
                     </span>
                   </label>
