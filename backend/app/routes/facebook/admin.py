@@ -1,4 +1,3 @@
-# backend/app/routes/facebook/admin.py
 """
 Facebook Admin Component
 จัดการ:

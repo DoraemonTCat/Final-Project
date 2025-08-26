@@ -107,6 +107,7 @@ body.font-size-xlarge h2 { font-size: calc(20px * 1.25); }
 /* Compact Mode */
 .compact-mode .settings-container {
   padding: var(--spacing-md);
+  
 }
 
 .compact-mode .setting-group {
@@ -126,6 +127,7 @@ body.font-size-xlarge h2 { font-size: calc(20px * 1.25); }
 .sidebar-right .settings-container {
   margin-left: 0;
   margin-right: var(--sidebar-width);
+  
 }
 
 /* High Contrast Mode */
@@ -161,6 +163,7 @@ body.font-size-xlarge h2 { font-size: calc(20px * 1.25); }
   min-height: 100vh;
   background: var(--bg-primary);
   transition: background-color var(--transition-speed);
+  
 }
 
 .settings-container {
@@ -169,6 +172,7 @@ body.font-size-xlarge h2 { font-size: calc(20px * 1.25); }
   margin: 0 auto;
   padding: var(--spacing-xl);
   margin-left: var(--sidebar-width);
+  
 }
 
 /* =======================
@@ -181,6 +185,7 @@ body.font-size-xlarge h2 { font-size: calc(20px * 1.25); }
   margin-bottom: var(--spacing-xl);
   padding-bottom: var(--spacing-lg);
   border-bottom: 2px solid var(--border-color);
+ 
 }
 
 .settings-title {

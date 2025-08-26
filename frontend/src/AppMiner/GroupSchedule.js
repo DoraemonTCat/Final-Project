@@ -585,11 +585,7 @@ function GroupSchedule() {
                 {editingScheduleId ? 'แก้ไขการตั้งเวลา' :  
                  isForKnowledgeGroup ? 'ตั้งเวลาและความถี่การส่ง - กลุ่มพื้นฐาน' :
                  'ตั้งเวลาและความถี่การส่ง'}
-                {selectedPageInfo && (
-                  <span className="page-info">
-                    {selectedPageInfo.name}
-                  </span>
-                )}
+                
               </h1>
               <div className="breadcrumb">
                 <span className="breadcrumb-item">1. เลือกกลุ่ม</span>
