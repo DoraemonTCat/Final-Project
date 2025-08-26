@@ -1,8 +1,28 @@
+// frontend/src/Features/Tool.js
 import axios from "axios";
 
 export const fetchPages = () => {
   return axios.get("http://localhost:8000/pages")
     .then(res => res.data.pages || []);
+};
+
+// 🆕 ฟังก์ชันดึงข้อมูล Admin ของ Page
+export const fetchPageAdmin = async (pageId) => {
+  try {
+    const response = await axios.get(`http://localhost:8000/admin/${pageId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching admin info:", error);
+    // Return default admin info if error
+    return {
+      primary_admin: {
+        name: "Page Admin",
+        role: "ADMIN",
+        picture: null
+      },
+      all_admins: []
+    };
+  }
 };
 
 export const sendMessage = (selectedPage, conversationId, newMessage) => {
