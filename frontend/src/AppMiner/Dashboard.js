@@ -1,11 +1,12 @@
 /**
- * Dashboard.js - Main Dashboard Component
- * ========================================
+ * Dashboard.js - Main Dashboard Component with Fixed Bottom Bar
+ * =============================================================
  * หน้า Dashboard หลักสำหรับแสดงภาพรวมระบบ
  * - แสดงสถิติลูกค้า
  * - กราฟแนวโน้ม
  * - ข้อมูลประเภทลูกค้า
  * - กิจกรรมล่าสุด
+ * - Fixed Bottom Bar สำหรับเลือกช่วงเวลา
  */
 
 import React, { useState, useEffect } from 'react';
@@ -15,7 +16,7 @@ import {
   ResponsiveContainer, Area, AreaChart 
 } from 'recharts';
 import Sidebar from "./Sidebar";
-import '../CSS/Dashboard.css'; 
+import '../CSS/Dashboard.css'; // Import CSS file
 
 const Dashboard = () => {
   // =====================================================
@@ -28,6 +29,12 @@ const Dashboard = () => {
   const [selectedPage, setSelectedPage] = useState('');
   const [pages, setPages] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedDateRange, setSelectedDateRange] = useState('7วัน');
+  const [customDateRange, setCustomDateRange] = useState({
+    startDate: '',
+    endDate: ''
+  });
   
   // สถิติหลัก
   const [stats, setStats] = useState({
@@ -47,6 +54,21 @@ const Dashboard = () => {
   const [messageSchedules, setMessageSchedules] = useState([]);
   const [recentActivities, setRecentActivities] = useState([]);
   const [retargetTiers, setRetargetTiers] = useState([]);
+
+  // =====================================================
+  // DATE RANGE OPTIONS
+  // =====================================================
+  
+  const dateRangeOptions = [
+    { value: 'วันนี้', label: 'วันนี้', days: 0 },
+    { value: '7วัน', label: '7 วัน', days: 7 },
+    { value: '30วัน', label: '30 วัน', days: 30 },
+    { value: '90วัน', label: '90 วัน', days: 90 },
+    { value: '6เดือน', label: '6 เดือน', days: 180 },
+    { value: '1ปี', label: '1 ปี', days: 365 },
+    { value: 'ตั้งแต่ต้นปี', label: 'ตั้งแต่ต้นปี', special: 'yearStart' },
+    { value: 'กำหนดเอง', label: 'กำหนดเอง', custom: true }
+  ];
 
   // =====================================================
   // DATA FETCHING FUNCTIONS
@@ -76,16 +98,66 @@ const Dashboard = () => {
   };
 
   /**
-   * โหลดสถิติหลักของเพจ
+   * คำนวณช่วงวันที่ตาม option ที่เลือก
+   */
+  const getDateRange = (option) => {
+    const endDate = new Date();
+    let startDate = new Date();
+    
+    switch(option) {
+      case 'วันนี้':
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case '7วัน':
+        startDate.setDate(endDate.getDate() - 7);
+        break;
+      case '30วัน':
+        startDate.setDate(endDate.getDate() - 30);
+        break;
+      case '90วัน':
+        startDate.setDate(endDate.getDate() - 90);
+        break;
+      case '6เดือน':
+        startDate.setMonth(endDate.getMonth() - 6);
+        break;
+      case '1ปี':
+        startDate.setFullYear(endDate.getFullYear() - 1);
+        break;
+      case 'ตั้งแต่ต้นปี':
+        startDate = new Date(endDate.getFullYear(), 0, 1);
+        break;
+      case 'กำหนดเอง':
+        if (customDateRange.startDate && customDateRange.endDate) {
+          startDate = new Date(customDateRange.startDate);
+          endDate.setTime(new Date(customDateRange.endDate).getTime());
+        }
+        break;
+      default:
+        startDate.setDate(endDate.getDate() - 7);
+    }
+    
+    return { startDate, endDate };
+  };
+
+  /**
+   * โหลดสถิติหลักของเพจตามช่วงเวลาที่เลือก
    * @param {string} pageId - ID ของเพจที่ต้องการโหลดข้อมูล
    */
   const fetchMainStats = async (pageId) => {
     if (!pageId) return;
     
     try {
+      const { startDate, endDate } = getDateRange(selectedDateRange);
+      
       // ดึงข้อมูลลูกค้า
       const customersRes = await fetch(`http://localhost:8000/fb-customers/by-page/${pageId}`);
       const customers = await customersRes.json();
+      
+      // กรองข้อมูลตามช่วงเวลา
+      const filteredCustomers = customers.filter(c => {
+        const customerDate = new Date(c.created_at);
+        return customerDate >= startDate && customerDate <= endDate;
+      });
       
       // ดึงสถิติลูกค้า
       const statsRes = await fetch(`http://localhost:8000/customer-statistics/${pageId}`);
@@ -95,36 +167,39 @@ const Dashboard = () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      const newToday = customers.filter(c => {
+      const newToday = filteredCustomers.filter(c => {
         const createdDate = new Date(c.created_at);
         createdDate.setHours(0, 0, 0, 0);
         return createdDate.getTime() === today.getTime();
       }).length;
       
-      // คำนวณอัตราการเติบโต (เทียบกับเมื่อ 7 วันที่แล้ว)
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      const customersSevenDaysAgo = customers.filter(c => 
-        new Date(c.created_at) < sevenDaysAgo
+      // คำนวณอัตราการเติบโต
+      const midPoint = new Date((startDate.getTime() + endDate.getTime()) / 2);
+      const firstHalf = filteredCustomers.filter(c => 
+        new Date(c.created_at) < midPoint
       ).length;
+      const secondHalf = filteredCustomers.length - firstHalf;
       
-      const growthRate = customersSevenDaysAgo > 0 
-        ? ((customers.length - customersSevenDaysAgo) / customersSevenDaysAgo * 100).toFixed(1)
+      const growthRate = firstHalf > 0 
+        ? ((secondHalf - firstHalf) / firstHalf * 100).toFixed(1)
         : 0;
       
       setStats({
-        totalCustomers: statsData?.statistics?.total_customers || customers.length,
+        totalCustomers: filteredCustomers.length,
         newCustomersToday: newToday,
         activeCustomers7Days: statsData?.statistics?.active_7days || 0,
-        totalConversations: customers.length,
-        totalMessagesSent: Math.floor(customers.length * 2.5), // Mock data
-        avgResponseTime: '15 นาที', // Mock data
+        totalConversations: filteredCustomers.length,
+        totalMessagesSent: Math.floor(filteredCustomers.length * 2.5),
+        avgResponseTime: '15 นาที',
         growthRate: parseFloat(growthRate)
       });
       
-      // จัดกลุ่มลูกค้าตามวันที่
-      const last7Days = [];
-      for (let i = 6; i >= 0; i--) {
+      // จัดกลุ่มลูกค้าตามวันที่สำหรับกราฟ
+      const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+      const dataPoints = Math.min(daysDiff, 30); // จำกัดไม่เกิน 30 จุด
+      const chartData = [];
+      
+      for (let i = dataPoints - 1; i >= 0; i--) {
         const date = new Date();
         date.setDate(date.getDate() - i);
         const dateStr = date.toISOString().split('T')[0];
@@ -132,12 +207,12 @@ const Dashboard = () => {
           c.created_at && c.created_at.startsWith(dateStr)
         ).length;
         
-        last7Days.push({
+        chartData.push({
           date: date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }),
           customers: count
         });
       }
-      setCustomersByDate(last7Days);
+      setCustomersByDate(chartData);
       
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -152,12 +227,19 @@ const Dashboard = () => {
     if (!pageId) return;
     
     try {
+      const { startDate, endDate } = getDateRange(selectedDateRange);
       const response = await fetch(`http://localhost:8000/fb-customers/by-page/${pageId}`);
       const customers = await response.json();
       
+      // กรองข้อมูลตามช่วงเวลา
+      const filteredCustomers = customers.filter(c => {
+        const customerDate = new Date(c.created_at);
+        return customerDate >= startDate && customerDate <= endDate;
+      });
+      
       // นับจำนวนลูกค้าตาม Knowledge Type
       const typeCount = {};
-      customers.forEach(customer => {
+      filteredCustomers.forEach(customer => {
         const typeName = customer.customer_type_knowledge_name || 'ยังไม่จัดกลุ่ม';
         typeCount[typeName] = (typeCount[typeName] || 0) + 1;
       });
@@ -165,7 +247,7 @@ const Dashboard = () => {
       const pieData = Object.entries(typeCount).map(([name, value]) => ({
         name,
         value,
-        percentage: ((value / customers.length) * 100).toFixed(1)
+        percentage: ((value / filteredCustomers.length) * 100).toFixed(1)
       }));
       
       setCustomersByType(pieData);
@@ -179,7 +261,7 @@ const Dashboard = () => {
         { name: '> 30 วัน', min: 30, max: Infinity, count: 0 }
       ];
       
-      customers.forEach(customer => {
+      filteredCustomers.forEach(customer => {
         if (customer.last_interaction_at) {
           const lastInteraction = new Date(customer.last_interaction_at);
           const now = new Date();
@@ -272,12 +354,17 @@ const Dashboard = () => {
     if (!pageId) return;
     
     try {
+      const { startDate, endDate } = getDateRange(selectedDateRange);
       const response = await fetch(`http://localhost:8000/fb-customers/by-page/${pageId}`);
       const customers = await response.json();
       
-      // เรียงตามเวลาล่าสุด
+      // กรองและเรียงตามเวลาล่าสุด
       const sortedCustomers = customers
-        .filter(c => c.last_interaction_at)
+        .filter(c => {
+          if (!c.last_interaction_at) return false;
+          const interactionDate = new Date(c.last_interaction_at);
+          return interactionDate >= startDate && interactionDate <= endDate;
+        })
         .sort((a, b) => new Date(b.last_interaction_at) - new Date(a.last_interaction_at))
         .slice(0, 10);
       
@@ -291,7 +378,7 @@ const Dashboard = () => {
         
         let timeAgo = '';
         if (diffDays > 0) timeAgo = `${diffDays} วันที่แล้ว`;
-        else if (diffHours > 0) timeAgo = `${diffHours} ชั่วโมง`;
+        else if (diffHours > 0) timeAgo = `${diffHours} ชั่วโมงที่แล้ว`;
         else if (diffMins > 0) timeAgo = `${diffMins} นาทีที่แล้ว`;
         else timeAgo = 'เมื่อสักครู่';
         
@@ -311,6 +398,52 @@ const Dashboard = () => {
     }
   };
 
+  /**
+   * จัดการการเลือกช่วงเวลา
+   */
+  const handleDateRangeSelect = (option) => {
+    if (option.custom) {
+      // แสดง date picker สำหรับกำหนดเอง
+      setShowDatePicker(true);
+    } else {
+      setSelectedDateRange(option.value);
+      setShowDatePicker(false);
+      // โหลดข้อมูลใหม่ตามช่วงเวลาที่เลือก
+      if (selectedPage) {
+        loadAllData(selectedPage);
+      }
+    }
+  };
+
+  /**
+   * จัดการ custom date range
+   */
+  const handleCustomDateSubmit = () => {
+    if (customDateRange.startDate && customDateRange.endDate) {
+      setSelectedDateRange('กำหนดเอง');
+      setShowDatePicker(false);
+      if (selectedPage) {
+        loadAllData(selectedPage);
+      }
+    }
+  };
+
+  /**
+   * โหลดข้อมูลทั้งหมด
+   */
+  const loadAllData = (pageId) => {
+    setLoading(true);
+    Promise.all([
+      fetchMainStats(pageId),
+      fetchCustomerTypes(pageId),
+      fetchSchedules(pageId),
+      fetchRetargetTiers(pageId),
+      fetchRecentActivities(pageId)
+    ]).finally(() => {
+      setLoading(false);
+    });
+  };
+
   // =====================================================
   // LIFECYCLE HOOKS
   // =====================================================
@@ -327,18 +460,9 @@ const Dashboard = () => {
    */
   useEffect(() => {
     if (selectedPage) {
-      setLoading(true);
-      Promise.all([
-        fetchMainStats(selectedPage),
-        fetchCustomerTypes(selectedPage),
-        fetchSchedules(selectedPage),
-        fetchRetargetTiers(selectedPage),
-        fetchRecentActivities(selectedPage)
-      ]).finally(() => {
-        setLoading(false);
-      });
+      loadAllData(selectedPage);
     }
-  }, [selectedPage]);
+  }, [selectedPage, selectedDateRange]);
 
   /**
    * จัดการเมื่อมีการเปลี่ยนเพจจากภายนอก
@@ -382,6 +506,18 @@ const Dashboard = () => {
     return null;
   };
 
+  /**
+   * คำนวณและแสดงช่วงวันที่ปัจจุบัน
+   */
+  const getCurrentDateRangeDisplay = () => {
+    if (selectedDateRange === 'กำหนดเอง') {
+      const { startDate, endDate } = getDateRange(selectedDateRange);
+      return `${startDate.toLocaleDateString('th-TH')} - ${endDate.toLocaleDateString('th-TH')}`;
+    }
+    const { startDate, endDate } = getDateRange(selectedDateRange);
+    return `${startDate.toLocaleDateString('th-TH')} - ${endDate.toLocaleDateString('th-TH')}`;
+  };
+
   // =====================================================
   // MAIN RENDER
   // =====================================================
@@ -405,7 +541,7 @@ const Dashboard = () => {
       </div>
 
       {/* Main Content */}
-      <div className="main-dashboard-content">
+      <div className="main-dashboard-content" style={{ paddingBottom: '80px' }}>
         
         {/* Stats Cards */}
         <div className="main-stats-grid">
@@ -427,7 +563,7 @@ const Dashboard = () => {
               {stats.growthRate > 0 && (
                 <div className="main-stat-growth">
                   <span>↑</span>
-                  <span>{stats.growthRate}% จากสัปดาห์ที่แล้ว</span>
+                  <span>{stats.growthRate}% จากช่วงก่อนหน้า</span>
                 </div>
               )}
             </div>
@@ -493,7 +629,7 @@ const Dashboard = () => {
           {/* Customer Growth Chart */}
           <div className="main-chart-card">
             <h3 className="main-chart-title">
-              📈 แนวโน้มลูกค้าใหม่ (7 วันล่าสุด)
+              📈 แนวโน้มลูกค้าใหม่ ({selectedDateRange})
             </h3>
             <ResponsiveContainer width="100%" height={300}>
               <AreaChart data={customersByDate}>
@@ -726,6 +862,92 @@ const Dashboard = () => {
         </div>
 
       </div>
+
+      {/* Fixed Bottom Bar */}
+      <div className="main-fixed-bottom-bar">
+        <div className="main-bottom-bar-content">
+          <div className="main-date-range-selector">
+            <button 
+              className="main-date-range-button"
+              onClick={() => setShowDatePicker(!showDatePicker)}
+            >
+              <span className="main-calendar-icon">📅</span>
+             
+              <span className="main-dropdown-arrow"> เลือกเวลา {showDatePicker ? '▲' : '▼'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Date Picker Dropdown */}
+      {showDatePicker && (
+        <>
+          <div 
+            className="main-date-picker-overlay"
+            onClick={() => setShowDatePicker(false)}
+          ></div>
+          <div className="main-date-picker-dropdown">
+            <div className="main-date-picker-header">
+              <h4>เลือกช่วงเวลา</h4>
+              <button 
+                className="main-date-picker-close"
+                onClick={() => setShowDatePicker(false)}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="main-date-options-grid">
+              {dateRangeOptions.map((option) => (
+                <button
+                  key={option.value}
+                  className={`main-date-option-button ${
+                    selectedDateRange === option.value ? 'active' : ''
+                  }`}
+                  onClick={() => handleDateRangeSelect(option)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            {selectedDateRange === 'กำหนดเอง' && (
+              <div className="main-custom-date-section">
+                <div className="main-date-input-group">
+                  <label>วันเริ่มต้น:</label>
+                  <input
+                    type="date"
+                    value={customDateRange.startDate}
+                    onChange={(e) => setCustomDateRange({
+                      ...customDateRange,
+                      startDate: e.target.value
+                    })}
+                    className="main-date-input"
+                  />
+                </div>
+                <div className="main-date-input-group">
+                  <label>วันสิ้นสุด:</label>
+                  <input
+                    type="date"
+                    value={customDateRange.endDate}
+                    onChange={(e) => setCustomDateRange({
+                      ...customDateRange,
+                      endDate: e.target.value
+                    })}
+                    className="main-date-input"
+                  />
+                </div>
+                <button 
+                  className="main-apply-date-button"
+                  onClick={handleCustomDateSubmit}
+                >
+                  ใช้งานช่วงเวลานี้
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 };
