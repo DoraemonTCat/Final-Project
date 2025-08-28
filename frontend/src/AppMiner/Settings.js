@@ -92,11 +92,7 @@ function Settings() {
         border: '#4a5568'
       }
     },
-    auto: {
-      name: 'อัตโนมัติ',
-      icon: '🌓',
-      colors: null
-    }
+    
   };
 
   // Color presets
@@ -303,36 +299,6 @@ function Settings() {
     }
   };
 
-  // Export settings
-  const exportSettings = () => {
-    const dataStr = JSON.stringify(settings, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    const exportFileDefaultName = `settings_${new Date().toISOString().split('T')[0]}.json`;
-    
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
-  };
-
-  // Import settings
-  const importSettings = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const importedSettings = JSON.parse(e.target.result);
-          setSettings(importedSettings);
-          saveSettings();
-        } catch (error) {
-          alert('ไม่สามารถอ่านไฟล์การตั้งค่าได้');
-        }
-      };
-      reader.readAsText(file);
-    }
-  };
-
   // Tab content renderer
   const renderTabContent = () => {
     switch(activeTab) {
@@ -490,12 +456,7 @@ const GeneralSettings = ({ settings, updateSetting }) => {
           >
             🌙 มืด
           </div>
-          <div 
-            className={`theme-option ${settings.theme === 'auto' ? 'active' : ''}`}
-            onClick={() => updateSetting('theme', 'auto')}
-          >
-            🌓 อัตโนมัติ
-          </div>
+          
         </div>
       </div>
 
