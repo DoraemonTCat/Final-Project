@@ -26,6 +26,22 @@ function ScheduleDashboard() {
   // กลุ่ม Default IDs
   const DEFAULT_GROUP_IDS = ['default_1', 'default_2', 'default_3'];
 
+  // ฟังชันค์รับ event เปลี่ยนหน้า
+  useEffect(() => {
+  const handlePageChange = (event) => {
+    const newPageId = event.detail.pageId;
+    setSelectedPage(newPageId);
+    localStorage.setItem("selectedPage", newPageId);
+    loadAllData(newPageId);
+  };
+
+  window.addEventListener('pageChanged', handlePageChange);
+
+  return () => {
+    window.removeEventListener('pageChanged', handlePageChange);
+  };
+}, []);
+  
   // ฟังก์ชันดึง page DB ID
   const getPageDbId = async (pageId) => {
     try {
@@ -662,7 +678,7 @@ function ScheduleDashboard() {
           </div>
         </div>
       )}
-      
+
     </div>
   );
 }
