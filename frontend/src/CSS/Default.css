@@ -61,6 +61,7 @@ body {
   box-sizing: border-box;
   min-height: 100vh;
   width: calc(100% - 250px);
+  
 }
 
 /* =====================================================
@@ -73,6 +74,8 @@ body {
   color: #2c3e50;
   font-weight: 700;
   animation: fadeInDown 0.5s ease;
+  
+
 }
 
 .page-info {
@@ -144,6 +147,7 @@ body {
   margin-bottom: 20px;
   flex-wrap: wrap;
   gap: 15px;
+  
 }
 
 .sequence-hint {
