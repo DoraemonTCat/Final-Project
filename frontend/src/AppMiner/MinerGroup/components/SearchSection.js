@@ -14,11 +14,11 @@ const SearchSection = ({ searchTerm, onSearchChange, disabled }) => {
         <span className="search-icon">🔍</span>
         <input
           type="text"
-          placeholder="ค้นหากลุ่มลูกค้า..."
+          placeholder="    ค้นหากลุ่มลูกค้า..."
           value={searchTerm}
           onChange={(e) => onSearchChange(e.target.value)}
           className="search-input"
-          disabled={disabled}
+          disabled={disabled}  style={{paddingLeft: '50px'}}
         />
       </div>
     </div>

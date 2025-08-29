@@ -171,27 +171,18 @@ function ManageMessageSets() {
 
                 <div className="content-controls">
                     <div className="search-section">
-                        <div className="search-box">
-                            <span className="search-icon">🔍</span>
-                            <input
-                                type="text"
-                                placeholder="ค้นหาชุดข้อความ..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="search-input"
-                            />
-                        </div>
+                       
                         <select 
                             value={sortOrder} 
                             onChange={(e) => setSortOrder(e.target.value)}
-                            className="sort-select"
+                            className="sort-select"   style={{marginBottom:"12px"}}
                         >
                             <option value="newest">ใหม่ล่าสุด</option>
                             <option value="oldest">เก่าที่สุด</option>
                             
                         </select>
                     </div>
-                    <button onClick={() => navigate('/default')} className="add-btn">
+                    <button onClick={() => navigate('/default')} className="add-btn" style={{marginBottom:"10px"}}>
                         <span className="btn-icon">➕</span>
                         เพิ่มชุดข้อความ
                     </button>

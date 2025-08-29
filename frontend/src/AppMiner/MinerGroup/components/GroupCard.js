@@ -100,7 +100,7 @@ const GroupCard = ({
             <button onClick={(e) => {
               e.stopPropagation();
               onViewDetails(group);
-            }} className="action-btn detail-btn" style={{ width: isKnowledge && isDisabled ? '100%' : '190px' }}>
+            }} className="action-btn detail-btn" style={{ width: isKnowledge && isDisabled ? '100%' : '190px' , fontSize: '14px' }}>
               📋 รายละเอียด
             </button>
           )}

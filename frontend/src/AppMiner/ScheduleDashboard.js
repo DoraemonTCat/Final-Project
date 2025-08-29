@@ -458,12 +458,13 @@ function ScheduleDashboard() {
         {/* 🆕 Search and Filter Bar */}
         <div className="search-filter-bar">
           <div className="search-box">
+            <span className="search-icon">🔍</span>
             <input
               type="text"
-              placeholder="🔍 ค้นหาชื่อกลุ่ม..."
+              placeholder=" ค้นหาชื่อกลุ่ม..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="search-input"
+              className="search-input" style={{paddingLeft: '45px'}}
             />
             {searchTerm && (
               <button 
@@ -552,16 +553,7 @@ function ScheduleDashboard() {
           ) : processedSchedules.length === 0 ? (
             <div className="empty-state">
               <p>ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา</p>
-              <button 
-                className="reset-filters"
-                onClick={() => {
-                  setSearchTerm('');
-                  setFilterType('all');
-                  setFilterStatus('all');
-                }}
-              >
-                ล้างตัวกรอง
-              </button>
+             
             </div>
           ) : (
             <>
