@@ -82,27 +82,20 @@ const ConversationRow = React.memo(({
     'not_mined': { 
       label: "ยังไม่ขุด", 
       color: "#e53e3e",
-      icon: "⭕",
-      bgColor: "#fed7d7"
+      icon: "⭕"
     },
     'mined': { 
       label: "ขุดแล้ว", 
       color: "#48bb78",
-      icon: "✅",
-      bgColor: "#c6f6d5"
+      icon: "✅"
     },
     'responded': { 
       label: "มีการตอบกลับ", 
       color: "#3182ce",
-      icon: "💬",
-      bgColor: "#bee3f8",
-      animation: "pulse 2s infinite" // เพิ่ม animation สำหรับ responded
+      icon: "💬"
     }
   };
-  
-  // ใช้ mining status จาก conv object
-  const miningStatus = conv.miningStatus || 'not_mined';
-  const miningStatusInfo = miningStatusMap[miningStatus] || miningStatusMap['not_mined'];
+  const miningStatusInfo = miningStatusMap[conv.miningStatus] || miningStatusMap['not_mined'];
 
   return (
     <tr className={`table-row ${isSelected ? 'selected' : ''} ${isRecentlyUpdated ? 'recently-updated' : ''}`}>
@@ -151,7 +144,7 @@ const ConversationRow = React.memo(({
         </div>
       </td>
       
-      <td className="table-cell" style={{paddingLeft:"65px"}}>  {/* หมวดหมู่ลูกค้า */}
+      <td className="table-cell" style={{paddingLeft:"47px"}}>  {/* หมวดหมู่ลูกค้า */}
         {customerTypes.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             {customerTypes.map((type, index) => (
@@ -204,32 +197,10 @@ const ConversationRow = React.memo(({
         )}
       </td>
       
-      <td className="table-cell" style={{  paddingLeft:"34px",}}>    {/* สถานะการขุด */}
-        <div 
-          className="status-indicator" 
-          style={{ 
-            '--status-color': miningStatusInfo.color,
-            backgroundColor: miningStatusInfo.bgColor,
-            padding: '6px 12px',
-            borderRadius: '20px',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            animation: miningStatusInfo.animation || 'none',
-            boxShadow: miningStatus === 'responded' ? '0 2px 8px rgba(49, 130, 206, 0.3)' : 'none'
-          }}
-        >
+      <td className="table-cell">    {/* สถานะการขุด */}
+        <div className="status-indicator" style={{ '--status-color': miningStatusInfo.color }}>
           <span className="status-icon">{miningStatusInfo.icon}</span>
-          <span 
-            className="status-label" 
-            style={{ 
-              color: miningStatusInfo.color,
-              fontWeight: '600',
-              fontSize: '13px'
-            }}
-          >
-            {miningStatusInfo.label}
-          </span>
+          <span className="customer-type new">{miningStatusInfo.label}</span>
         </div>
       </td>
       

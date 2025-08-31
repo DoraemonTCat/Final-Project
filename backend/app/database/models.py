@@ -121,19 +121,12 @@ class FbCustomer(Base):
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     source_type = Column(Text, server_default="new", nullable=False)
     
-    # เพิ่มคอลัมน์ใหม่สำหรับ mining status
-    mining_status = Column(String(20), server_default="not_mined", nullable=False)
-   
-    
     __table_args__ = (
         CheckConstraint(
             "source_type IN ('new', 'imported')",
             name="fb_customers_source_type_check"
         ),
-        CheckConstraint(
-            "mining_status IN ('not_mined', 'mined', 'responded')",
-            name="fb_customers_mining_status_check"
-        ),
+        
     )
     
     # Relationships
@@ -141,7 +134,6 @@ class FbCustomer(Base):
     customer_type_custom = relationship("CustomerTypeCustom", back_populates="customers")
     customer_type_knowledge = relationship("CustomerTypeKnowledge", back_populates="customers")
     customermessage = relationship("CustomerMessage", back_populates="customer", cascade="all, delete-orphan")
-
 
 class MessageSets(Base):
     __tablename__ = "message_sets"
