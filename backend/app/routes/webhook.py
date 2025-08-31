@@ -166,6 +166,132 @@ async def webhook_post(
     
     return PlainTextResponse("EVENT_RECEIVED", status_code=200)
 
+# API สำหรับรับข้อความจาก Facebook Webhook
+@router.post("/webhook")
+async def webhook_post(
+    request: Request, 
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks()
+):
+    body = await request.json()
+    
+    for entry in body.get("entry", []):
+        page_id = entry.get("id")  # Page ID
+        
+        # ดึง page จาก database
+        page = crud.get_page_by_page_id(db, page_id) if page_id else None
+        
+        for msg_event in entry.get("messaging", []):
+            sender_id = msg_event["sender"]["id"]
+            
+            # ตรวจสอบว่าไม่ใช่ข้อความจาก page เอง
+            if page and sender_id != page_id:
+                try:
+                    # ตรวจสอบว่ามี user ในระบบแล้วหรือไม่
+                    existing_customer = crud.get_customer_by_psid(db, page.ID, sender_id)
+                    
+                    if existing_customer:
+                        # ถ้าเป็นข้อความจากลูกค้า (ไม่ใช่จาก page)
+                        # และสถานะปัจจุบันเป็น 'mined' ให้เปลี่ยนเป็น 'responded'
+                        if existing_customer.mining_status == 'mined':
+                            crud.update_customer_mining_status(
+                                db, 
+                                page.ID, 
+                                sender_id, 
+                                'responded'
+                            )
+                            logger.info(f"🔄 Changed mining status to 'responded' for {sender_id}")
+                            
+                            # ส่ง SSE notification ถ้าต้องการ
+                            await send_mining_status_update(page_id, sender_id, 'responded')
+                        
+                        # อัพเดท last_interaction_at
+                        crud.update_customer_interaction(db, page.ID, sender_id)
+                        
+                    else:
+                        # User ใหม่ - สร้างด้วยสถานะ 'not_mined'
+                        logger.info(f"🆕 พบ User ใหม่: {sender_id} ในเพจ {page.page_name}")
+                        
+                        # Sync ข้อมูลในพื้นหลัง
+                        background_tasks.add_task(
+                            sync_new_user_data_with_status,
+                            page_id,
+                            sender_id,
+                            page.ID,
+                            db
+                        )
+                    
+                except Exception as e:
+                    logger.error(f"❌ Error processing webhook: {e}")
+    
+    return PlainTextResponse("EVENT_RECEIVED", status_code=200)
+
+# ฟังก์ชันสำหรับ sync user ใหม่พร้อมตั้งค่า mining_status
+async def sync_new_user_data_with_status(page_id: str, sender_id: str, page_db_id: int, db: Session):
+    """Sync ข้อมูล user ใหม่พร้อมตั้งค่า mining_status เป็น 'not_mined'"""
+    try:
+        from app.routes.facebook.auth import get_page_tokens
+        from app.service.facebook_api import fb_get
+        
+        page_tokens = get_page_tokens()
+        access_token = page_tokens.get(page_id)
+        
+        if not access_token:
+            logger.error(f"❌ ไม่พบ access token สำหรับ page {page_id}")
+            return None
+            
+        # ดึงข้อมูล user profile
+        user_fields = "id,name,first_name,last_name,profile_pic"
+        user_info = fb_get(sender_id, {"fields": user_fields}, access_token)
+        
+        # ดึงชื่อผู้ใช้
+        user_name = user_info.get("name", "")
+        if not user_name:
+            user_name = f"{user_info.get('first_name', '')} {user_info.get('last_name', '')}".strip()
+        
+        # เตรียมข้อมูลสำหรับบันทึก
+        customer_data = {
+            'name': user_name or f"User...{sender_id[-8:]}",
+            'first_interaction_at': datetime.now(),
+            'last_interaction_at': datetime.now(),
+            'source_type': 'new',
+            'mining_status': 'not_mined'  # ตั้งค่าเริ่มต้นเป็น not_mined
+        }
+        
+        # บันทึกข้อมูลลง database
+        customer = crud.create_or_update_customer(db, page_db_id, sender_id, customer_data)
+        
+        logger.info(f"✅ Created new user with mining_status='not_mined': {user_name} ({sender_id})")
+        
+        # ส่ง SSE Update
+        await send_mining_status_update(page_id, sender_id, 'not_mined')
+        
+        return customer
+        
+    except Exception as e:
+        logger.error(f"❌ Error syncing new user data: {e}")
+        return None
+
+# ฟังก์ชันส่ง SSE สำหรับ mining status update
+async def send_mining_status_update(page_id: str, psid: str, status: str):
+    """ส่ง mining status update ผ่าน SSE"""
+    try:
+        from app.routes.facebook.sse import customer_type_update_queue
+        
+        update = {
+            'page_id': page_id,
+            'psid': psid,
+            'mining_status': status,
+            'timestamp': datetime.now().isoformat(),
+            'type': 'mining_status_update'
+        }
+        
+        await customer_type_update_queue.put(update)
+        logger.info(f"📡 Sent mining status update for {psid}: {status}")
+        
+    except Exception as e:
+        logger.error(f"❌ Error sending mining status update: {e}")
+
 # เพิ่ม endpoint สำหรับดึงการแจ้งเตือน user ใหม่
 @router.get("/new-user-notifications/{page_id}")
 async def get_new_user_notifications(page_id: str):

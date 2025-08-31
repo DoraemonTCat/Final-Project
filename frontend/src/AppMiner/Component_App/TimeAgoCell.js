@@ -107,7 +107,7 @@ const TimeAgoCell = React.memo(({ lastMessageTime, updatedTime, userId, onInacti
 
   return (
     <td className={`table-cell  ${isRecent ? 'recent-message' : '' } ` }>
-      <div className="time-display" style={{paddingLeft:"17px"}} >
+      <div className="time-display" style={{paddingLeft:"19px"}} >
         {isRecent && <span className="pulse-dot" ></span>}
         {displayTime}
         <span className="inactivity-minutes" style={{ display: 'none' }}>

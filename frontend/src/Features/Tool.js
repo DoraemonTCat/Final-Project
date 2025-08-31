@@ -73,19 +73,6 @@ export const fetchConversations = async (pageId) => {
     }
 
     console.log("✅ Raw customer data from backend:", res.data);
-    
-    // Debug: ตรวจสอบข้อมูล customer type
-    res.data.forEach((customer, idx) => {
-      if (idx < 5) { // แสดง 5 คนแรก
-        console.log(`Customer ${idx + 1}:`, {
-          name: customer.name,
-          customer_type_custom_id: customer.customer_type_custom_id,
-          customer_type_name: customer.customer_type_name,
-          customer_type_knowledge_id: customer.customer_type_knowledge_id,
-          customer_type_knowledge_name: customer.customer_type_knowledge_name
-        });
-      }
-    });
 
     // Format ข้อมูลให้ตรงกับที่ frontend ต้องการ
     const formattedConversations = res.data.map((conv, idx) => ({
@@ -104,7 +91,11 @@ export const fetchConversations = async (pageId) => {
       customer_type_custom_id: conv.customer_type_custom_id,
       customer_type_name: conv.customer_type_name,
       customer_type_knowledge_id: conv.customer_type_knowledge_id,
-      customer_type_knowledge_name: conv.customer_type_knowledge_name
+      customer_type_knowledge_name: conv.customer_type_knowledge_name,
+      // 🔥 เพิ่ม mining status
+      miningStatus: conv.mining_status || 'not_mined',
+      current_tier: conv.current_tier,
+      platform: 'FB' // default platform
     }));
 
     return formattedConversations;

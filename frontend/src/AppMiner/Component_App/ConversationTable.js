@@ -28,7 +28,7 @@ const ConversationTable = ({
             <th className="th-date" style={{paddingLeft:"20px"}}>วันที่เข้า</th>
             <th className="th-time">ระยะเวลาที่หาย</th>    
             <th className="th-platform">Platform</th>
-            <th className="th-type" style={{paddingLeft:"53px"}}>หมวดหมู่ลูกค้า</th>
+            <th className="th-type" style={{paddingLeft:"73px"}}>หมวดหมู่ลูกค้า</th>
             <th className="th-status" style={{paddingLeft:"43px"}}>สถานะการขุด</th>
             <th className="th-select">
               <label className="select-all-checkbox">

@@ -88,8 +88,8 @@ class FbCustomerSchema(BaseModel):
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
     source_type: str
-    mining_status: str  # เพิ่มบรรทัดนี้
-    last_mined_at: Optional[datetime]  # เพิ่มบรรทัดนี้
+    mining_status: str  # เพิ่มฟิลด์นี้
+    current_tier: Optional[str]  # เพิ่มฟิลด์นี้
 
     class Config:
         orm_mode = True
