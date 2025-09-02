@@ -1,4 +1,3 @@
-# backend/app/LLM/agent.py
 import re
 import requests
 from io import BytesIO
@@ -8,9 +7,16 @@ import google.generativeai as genai
 from PIL import Image
 from app.database import models
 import asyncio
+import time
+import random
+
+# simple cache
+_cache_text = {}
+_cache_image = {}
+
 
 def classify_and_assign_tier_hybrid(db: Session, page_id: int):
-    # 1️⃣ load knowledge config ที่ enabled
+    # 1️⃣ โหลด knowledge config ที่ enabled
     enabled_knowledge_ids = [
         pk.customer_type_knowledge_id
         for pk in db.query(models.PageCustomerTypeKnowledge)
@@ -22,12 +28,13 @@ def classify_and_assign_tier_hybrid(db: Session, page_id: int):
     ]
 
     knowledge_map = {
-        ck.id: ck for ck in db.query(models.CustomerTypeKnowledge)
+        ck.id: ck
+        for ck in db.query(models.CustomerTypeKnowledge)
         .filter(models.CustomerTypeKnowledge.id.in_(enabled_knowledge_ids))
         .all()
     }
 
-    # 2️⃣ load tier config
+    # 2️⃣ โหลด tier config
     tier_configs = (
         db.query(models.RetargetTiersConfig)
         .filter(models.RetargetTiersConfig.page_id == page_id)
@@ -42,7 +49,7 @@ def classify_and_assign_tier_hybrid(db: Session, page_id: int):
     )
 
     now = datetime.now(timezone.utc)
-    pending_updates = []  # <-- เก็บ SSE updates ไว้ก่อน
+    pending_updates = []
 
     for cust in customers:
         # ดึงข้อความล่าสุด
@@ -57,27 +64,27 @@ def classify_and_assign_tier_hybrid(db: Session, page_id: int):
             continue
 
         message_text, message_type = last_message
-
         if not message_text:
             continue
 
-        # 3️⃣ Keyword-based matching ก่อน (ถ้าเป็น text)
+        # 3️⃣ Classification (text → keyword → Gemini, attachment → image classifier)
         category_id = None
+
         if message_type == "text":
             category_id = match_by_keyword(message_text, knowledge_map)
+            if not category_id:
+                short_text = message_text[:350]
+                category_id = classify_with_gemini(short_text, knowledge_map)
 
-        # 4️⃣ Fallback → Gemini
-        if not category_id:
-            if message_type == "text":
-                category_id = classify_with_gemini(message_text, knowledge_map)
-            elif message_type == "attachment":
+        elif message_type == "attachment":
+            # ตรวจว่าเป็นไฟล์รูปจริงหรือไม่ (รองรับ query string ต่อท้าย)
+            if re.search(r'\.(png|jpe?g)(\?.*)?$', message_text, re.IGNORECASE):
                 category_id = classify_with_gemini_image(message_text, knowledge_map)
 
-        # update knowledge id
+        # 4️⃣ Update knowledge id ถ้ามีการเปลี่ยน
         if category_id and category_id != cust.customer_type_knowledge_id:
             cust.customer_type_knowledge_id = category_id
 
-            # เก็บ pending update แทนการยิงทันที
             knowledge_type = db.query(models.CustomerTypeKnowledge).filter(
                 models.CustomerTypeKnowledge.id == category_id
             ).first()
@@ -102,25 +109,31 @@ def classify_and_assign_tier_hybrid(db: Session, page_id: int):
             for tier in sorted(tier_configs, key=lambda x: x.days_since_last_contact):
                 if days_since_last >= tier.days_since_last_contact:
                     selected_tier = tier.tier_name
-
             if selected_tier:
                 cust.current_tier = selected_tier
 
     # ✅ Commit ก่อน
     db.commit()
 
-    # ✅ ค่อยยิง SSE หลัง commit สำเร็จ
+    # ✅ ส่ง SSE หลัง commit สำเร็จ
     if pending_updates:
         try:
             from app.routes.facebook.sse import customer_type_update_queue
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            for update in pending_updates:
-                loop.run_until_complete(customer_type_update_queue.put(update))
-                print(f"📡 Sent SSE update after commit for {update['psid']} -> {update['customer_type_knowledge_name']}")
-            loop.close()
+
+            async def send_all():
+                for update in pending_updates:
+                    await customer_type_update_queue.put(update)
+                    print(f"📡 Queueing SSE update: {update['psid']} -> {update['customer_type_knowledge_name']}")
+
+            # ใช้ existing loop ถ้ามี, ไม่สร้างใหม่ทุกครั้ง
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(send_all())
+            except RuntimeError:
+                asyncio.run(send_all())
+
         except Exception as e:
-            print(f"❌ Error sending SSE update after commit: {e}")
+            print(f"❌ Error sending SSE updates: {e}")
 
 
 def match_by_keyword(message_text: str, knowledge_map: dict):
@@ -135,10 +148,17 @@ def match_by_keyword(message_text: str, knowledge_map: dict):
     return None
 
 
-def classify_with_gemini(message_text: str, knowledge_map: dict):
-    """ใช้ Gemini API (text)"""
-    prompt_parts = ["คุณคือผู้เชี่ยวชาญในการจัดหมวดหมู่ลูกค้าจากข้อความแชท กรุณาวิเคราะห์ข้อความและเลือกหมวดหมู่ที่เหมาะสมที่สุด",
-                    "\n--- หมวดหมู่ทั้งหมด ---"]
+def classify_with_gemini(message_text: str, knowledge_map: dict, max_retries: int = 3):
+    """ใช้ Gemini API (text) พร้อม retry/backoff + cache"""
+
+    # 🔹 check cache ก่อน
+    if message_text in _cache_text:
+        return _cache_text[message_text]
+
+    prompt_parts = [
+        "คุณคือผู้เชี่ยวชาญในการจัดหมวดหมู่ลูกค้าจากข้อความแชท กรุณาวิเคราะห์ข้อความและเลือกหมวดหมู่ที่เหมาะสมที่สุด",
+        "\n--- หมวดหมู่ทั้งหมด ---"
+    ]
     for k in knowledge_map.values():
         prompt_parts.append(f"ID {k.id}: {k.type_name} (คำอธิบาย: {k.rule_description})")
 
@@ -149,45 +169,83 @@ def classify_with_gemini(message_text: str, knowledge_map: dict):
 
     prompt = "\n".join(prompt_parts)
 
-    try:
-        model = genai.GenerativeModel(
-            model_name="gemini-2.5-flash-lite",
-            generation_config={"temperature": 0, "max_output_tokens": 10}
-        )
-        response = model.generate_content(prompt)
-        answer = response.text.strip()
+    model = genai.GenerativeModel(
+        model_name="gemini-2.5-flash-lite",
+        generation_config={"temperature": 0, "max_output_tokens": 30}
+    )
 
-        if answer.isdigit() and int(answer) in knowledge_map:
-            print(f"Gemini classified text into Category ID: {answer}")
-            return int(answer)
+    for attempt in range(max_retries):
+        try:
+            response = model.generate_content(prompt)
+            answer = response.text.strip()
 
-    except Exception as e:
-        print(f"Gemini API error: {e}")
+            if answer.isdigit() and int(answer) in knowledge_map:
+                category_id = int(answer)
+                print(f"Gemini classified text into Category ID: {category_id}")
+                _cache_text[message_text] = category_id
+                return category_id
+            else:
+                print(f"⚠️ Gemini returned invalid answer: {answer}")
+                return None
+
+        except Exception as e:
+            err_msg = str(e)
+            if "429" in err_msg and attempt < max_retries - 1:
+                wait_time = (2 ** attempt) + random.uniform(0, 1)
+                print(f"⏳ Gemini text rate limited. Retrying in {wait_time:.1f}s...")
+                time.sleep(wait_time)
+                continue
+            else:
+                print(f"❌ Gemini text API error: {e}")
+                return None
 
     return None
 
 
-def classify_with_gemini_image(image_url: str, knowledge_map: dict):
-    """ใช้ Gemini Vision วิเคราะห์ภาพก่อนแล้ว map กับ category"""
+def classify_with_gemini_image(image_url: str, knowledge_map: dict, max_retries: int = 3):
+    """ใช้ Gemini Vision วิเคราะห์ภาพ + retry/backoff + cache"""
+
+    # 🔹 check cache ก่อน
+    if image_url in _cache_image:
+        return _cache_image[image_url]
+
     try:
         # โหลดรูปจาก url
         img_bytes = requests.get(image_url, timeout=10).content
         image = Image.open(BytesIO(img_bytes))
 
-        # ส่งเข้า Gemini Vision
-        model = genai.GenerativeModel("gemini-1.5-flash")  # vision support
-        response = model.generate_content(
-            [
-                image,
-                "\nโปรดอธิบายรูปนี้สั้นๆ ว่าคืออะไร เช่น slip, receipt, สินค้า, หรืออย่างอื่น"
-            ]
-        )
-        caption = response.text.strip()
-        print(f"Gemini Vision caption: {caption}")
-
-        # ส่ง caption เข้า classifier แบบ text
-        return classify_with_gemini(caption, knowledge_map)
-
     except Exception as e:
-        print(f"Gemini Vision error: {e}")
+        print(f"❌ Error loading image: {e}")
         return None
+
+    model = genai.GenerativeModel("gemini-1.5-flash")
+
+    for attempt in range(max_retries):
+        try:
+            response = model.generate_content(
+                [
+                    image,
+                    "\nโปรดอธิบายรูปนี้สั้นๆ ว่าคืออะไร เช่น slip, receipt, สินค้า, หรืออย่างอื่น"
+                ]
+            )
+            caption = response.text.strip()
+            print(f"Gemini Vision caption: {caption}")
+
+            # ส่ง caption เข้า classifier แบบ text
+            category_id = classify_with_gemini(caption, knowledge_map)
+            if category_id:
+                _cache_image[image_url] = category_id
+            return category_id
+
+        except Exception as e:
+            err_msg = str(e)
+            if "429" in err_msg and attempt < max_retries - 1:
+                wait_time = (2 ** attempt) + random.uniform(0, 1)
+                print(f"⏳ Gemini image rate limited. Retrying in {wait_time:.1f}s...")
+                time.sleep(wait_time)
+                continue
+            else:
+                print(f"❌ Gemini image API error: {e}")
+                return None
+
+    return None
