@@ -1123,20 +1123,34 @@ function App() {
     }
   }, []);
 
-  /**
-   * Effect: Load Data เมื่อ selectedPage เปลี่ยน
-   */
-  useEffect(() => {
-    if (selectedPage) {
-      Promise.all([
-        loadMessages(selectedPage),
-        loadConversations(selectedPage)
-      ]).catch(err => console.error("Error loading data:", err));
-    } else {
-      setDefaultMessages([]);
-      setConversations([]);
-    }
-  }, [selectedPage]);
+/**
+ * Effect: Load Data เมื่อ selectedPage เปลี่ยน
+ * */
+useEffect(() => {
+  if (selectedPage) {
+    // 🔴 เพิ่มการ clear filters และ selections เมื่อเปลี่ยนเพจ
+    setDateEntryFilter(null);          // ล้าง date filter
+    setFilteredConversations([]);       // ล้างข้อมูลที่กรองไว้
+    setSyncDateRange(null);             // ล้าง sync date range (ถ้ามี)
+    setSelectedConversationIds([]);    // 🆕 ล้าง checkbox ที่เลือกไว้
+    setSelectedMessageSetIds([]);      // 🆕 ล้าง message sets ที่เลือกไว้ (ถ้ามี)
+    
+    // โหลดข้อมูลใหม่ของเพจที่เลือก
+    Promise.all([
+      loadMessages(selectedPage),
+      loadConversations(selectedPage)
+    ]).catch(err => console.error("Error loading data:", err));
+  } else {
+    // กรณีไม่มีเพจที่เลือก ล้างข้อมูลทั้งหมด
+    setDefaultMessages([]);
+    setConversations([]);
+    setDateEntryFilter(null);
+    setFilteredConversations([]);
+    setSyncDateRange(null);
+    setSelectedConversationIds([]);    // 🆕 ล้าง checkbox
+    setSelectedMessageSetIds([]);      // 🆕 ล้าง message sets
+  }
+}, [selectedPage]);
 
   /**
    * Effect: Clock Update

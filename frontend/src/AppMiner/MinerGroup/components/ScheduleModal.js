@@ -177,7 +177,7 @@ const ScheduleModal = ({ show, schedules, groupName, onClose, onDeleteSchedule }
                         fontSize: '14px',
                         fontWeight: '600'
                       }}>
-                        เงื่อนไข #{index + 1}
+                        เงื่อนไข
                       </span>
                       {formatScheduleDetail(schedule)}
                     </p>

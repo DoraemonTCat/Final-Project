@@ -576,16 +576,7 @@ const DisplaySettings = ({ settings, updateSetting }) => {
         </label>
       </div>
 
-      <div className="setting-group">
-        <label className="setting-label">
-          <input
-            type="checkbox"
-            checked={settings.highContrast}
-            onChange={(e) => updateSetting('highContrast', e.target.checked)}
-          />
-          โหมดความคมชัดสูง
-        </label>
-      </div>
+     
     </div>
   );
 };
