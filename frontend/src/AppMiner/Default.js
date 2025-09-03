@@ -342,9 +342,9 @@ function SetDefault() {
       <div className="message-settings-container">
         
        
-        <h1 className="header" >
+        <h3 className="header" style={{background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" , width:"380px" , marginLeft:"30%" , borderRadius:"20px" , color:"white" , boxShadow: "0 4px 15px rgba(0, 0, 0, 0.3)" }} >
           {isEditMode ? "แก้ไขชุดข้อความ" : "ตั้งค่าลำดับข้อความ Default"}
-        </h1>
+        </h3>
        
         
 
