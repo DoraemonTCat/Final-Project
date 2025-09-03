@@ -73,8 +73,7 @@ def classify_and_assign_tier_hybrid(db: Session, page_id: int):
         if message_type == "text":
             category_id = match_by_keyword(message_text, knowledge_map)
             if not category_id:
-                short_text = message_text[:350]
-                category_id = classify_with_gemini(short_text, knowledge_map)
+                category_id = classify_with_gemini(message_text, knowledge_map)  # ✅ ใช้เต็มข้อความ + flash-lite default
 
         elif message_type == "attachment":
             # ตรวจว่าเป็นไฟล์รูปจริงหรือไม่ (รองรับ query string ต่อท้าย)
@@ -148,59 +147,87 @@ def match_by_keyword(message_text: str, knowledge_map: dict):
     return None
 
 
-def classify_with_gemini(message_text: str, knowledge_map: dict, max_retries: int = 3):
-    """ใช้ Gemini API (text) พร้อม retry/backoff + cache"""
+def safe_extract_text(response):
+    """ดึงข้อความจาก Gemini response แบบปลอดภัย"""
+    if not response.candidates:
+        return None, "no_candidates"
 
-    # 🔹 check cache ก่อน
+    cand = response.candidates[0]
+    if cand.finish_reason != 1:  # 1 = SUCCESS
+        return None, f"finish_reason={cand.finish_reason}"
+
+    if not cand.content.parts:
+        return None, "no_parts"
+
+    return cand.content.parts[0].text.strip(), None
+
+def classify_with_gemini(
+    message_text: str,
+    knowledge_map: dict,
+    max_retries: int = 3,
+    model_name: str = "gemini-2.5-flash-lite"  # 👈 default คือ flash-lite
+):
     if message_text in _cache_text:
         return _cache_text[message_text]
 
     prompt_parts = [
-        "คุณคือผู้เชี่ยวชาญในการจัดหมวดหมู่ลูกค้าจากข้อความแชท กรุณาวิเคราะห์ข้อความและเลือกหมวดหมู่ที่เหมาะสมที่สุด",
+        "คุณคือผู้เชี่ยวชาญในการจัดหมวดหมู่ลูกค้าจากข้อความแชท",
+        "กรุณาเลือกหมวดหมู่ที่ตรงที่สุดจากข้อความนี้",
         "\n--- หมวดหมู่ทั้งหมด ---"
     ]
     for k in knowledge_map.values():
-        prompt_parts.append(f"ID {k.id}: {k.type_name} (คำอธิบาย: {k.rule_description})")
+        prompt_parts.append(f"ID {k.id}: {k.type_name} (คำอธิบาย: {k.rule_description}) (ตัวอย่าง: {k.examples})")
 
     prompt_parts.append("\n--- ข้อความของลูกค้า ---")
     prompt_parts.append(message_text)
-    prompt_parts.append("\n--- คำสั่ง ---")
-    prompt_parts.append("ตอบกลับด้วยตัวเลข ID ของหมวดหมู่ที่ตรงที่สุดเพียงอย่างเดียว ไม่ต้องมีข้อความอื่นใดๆ")
+    prompt_parts.append(
+        """--- คำสั่ง ---
+        1. ถ้ามีข้อความที่เหมือนหรือใกล้เคียงกับ "ตัวอย่าง" ของหมวดใด ให้เลือกหมวดนั้นทันที
+        2. ถ้าไม่เจอตรงกับตัวอย่าง ให้ใช้คำอธิบายหมวดเพื่อเลือก
+        3. ห้ามเลือกหมวดอื่นที่ไม่ตรง
+        4. ตอบกลับด้วยตัวเลข ID อย่างเดียว"""
+    )
 
     prompt = "\n".join(prompt_parts)
 
-    model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash-lite",
-        generation_config={"temperature": 0, "max_output_tokens": 30}
-    )
-
     for attempt in range(max_retries):
         try:
+            model = genai.GenerativeModel(
+                model_name=model_name,
+                generation_config={"temperature": 0, "max_output_tokens": 20}
+            )
             response = model.generate_content(prompt)
-            answer = response.text.strip()
 
-            if answer.isdigit() and int(answer) in knowledge_map:
-                category_id = int(answer)
-                print(f"Gemini classified text into Category ID: {category_id}")
+            answer, err = safe_extract_text(response)
+            if not answer:
+                print(f"⚠️ Gemini {model_name} returned no usable text ({err})")
+                if "finish_reason=2" in (err or "") and attempt < max_retries - 1:
+                    time.sleep(1 + random.random())
+                    continue
+                return None
+
+            match = re.search(r'\d+', answer)
+            if match and int(match.group(0)) in knowledge_map:
+                category_id = int(match.group(0))
+                print(f"Gemini classified text into Category ID: {category_id} (via {model_name})")
                 _cache_text[message_text] = category_id
                 return category_id
             else:
-                print(f"⚠️ Gemini returned invalid answer: {answer}")
+                print(f"⚠️ Gemini {model_name} returned invalid answer: {answer}")
                 return None
 
         except Exception as e:
             err_msg = str(e)
             if "429" in err_msg and attempt < max_retries - 1:
                 wait_time = (2 ** attempt) + random.uniform(0, 1)
-                print(f"⏳ Gemini text rate limited. Retrying in {wait_time:.1f}s...")
+                print(f"⏳ Gemini {model_name} rate limited. Retrying in {wait_time:.1f}s...")
                 time.sleep(wait_time)
                 continue
             else:
-                print(f"❌ Gemini text API error: {e}")
+                print(f"❌ Gemini {model_name} API error: {e}")
                 return None
 
     return None
-
 
 def classify_with_gemini_image(image_url: str, knowledge_map: dict, max_retries: int = 3):
     """ใช้ Gemini Vision วิเคราะห์ภาพ + retry/backoff + cache"""
