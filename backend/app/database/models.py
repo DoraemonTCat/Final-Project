@@ -113,6 +113,7 @@ class FbCustomer(Base):
     page_id = Column(Integer, ForeignKey("facebook_pages.ID", ondelete="CASCADE"), nullable=False)
     customer_psid = Column(String(50), nullable=False)
     name = Column(Text, server_default="")
+    profile_pic = Column(Text, server_default="")  # 🆕 เพิ่มฟิลด์นี้สำหรับเก็บ URL รูปโปรไฟล์
     customer_type_custom_id = Column(Integer, ForeignKey("customer_type_custom.id", ondelete="SET NULL"), nullable=True)
     customer_type_knowledge_id = Column(Integer, ForeignKey("customer_type_knowledge.id", ondelete="SET NULL"), nullable=True)
     first_interaction_at = Column(TIMESTAMP(timezone=True), nullable=True)
