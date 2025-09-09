@@ -68,11 +68,11 @@ def scheduled_hybrid_classification():
         pages = db.query(models.FacebookPage).all()
         for page in pages:
             try:
-                logger.info(f"🔁 Running hybrid classification for page_id={page.ID}")
-                classify_and_assign_tier_hybrid(db, page.ID)
-                logger.info(f"✅ Done hybrid classification for page_id={page.ID}")
+                logger.info(f"🔁 Running hybrid classification for page_id={page.id}")
+                classify_and_assign_tier_hybrid(db, page.id)
+                logger.info(f"✅ Done hybrid classification for page_id={page.id}")
             except Exception as e:
-                logger.error(f"❌ Error classifying page_id={page.ID}: {e}")
+                logger.error(f"❌ Error classifying page_id={page.id}: {e}")
     finally:
         db.close()
 

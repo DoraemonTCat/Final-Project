@@ -466,10 +466,11 @@ def get_customer_type_statistics(db: Session, page_id: int):
 def get_customers_updated_after(db: Session, page_id: int, after_time: datetime):
     """Get customers updated after specific time with both custom and knowledge types"""
     try:
-        # ใช้ joinedload เพื่อดึงข้อมูลทั้ง 2 ประเภท
         customers = db.query(models.FbCustomer).options(
-            joinedload(models.FbCustomer.customer_type_custom),
-            joinedload(models.FbCustomer.customer_type_knowledge)  # เพิ่ม joinedload สำหรับ knowledge
+            joinedload(models.FbCustomer.custom_classifications).joinedload(
+                models.FBCustomerCustomClassification.new_category
+            ),
+            joinedload(models.FbCustomer.current_category)
         ).filter(
             models.FbCustomer.page_id == page_id,
             models.FbCustomer.updated_at > after_time

@@ -49,7 +49,7 @@ async def event_generator(page_id: str, db: Session) -> AsyncGenerator:
                     page = crud.get_page_by_page_id(db, page_id)
                     if page:
                         customers = crud.get_customers_updated_after(
-                            db, page.ID, last_check
+                            db, page.id, last_check
                         )
                         
                         if customers:

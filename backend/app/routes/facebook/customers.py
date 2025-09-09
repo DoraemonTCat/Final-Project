@@ -247,7 +247,7 @@ async def get_customer_statistics(
             content={"error": f"ไม่พบเพจ {page_id} ในระบบ"}
         )
     
-    stats = crud.get_customer_statistics(db, page.ID)
+    stats = crud.get_customer_statistics(db, page.id)
     
     return {
         "page_id": page_id,
