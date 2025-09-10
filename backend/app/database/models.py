@@ -7,7 +7,7 @@ from app.database.database import Base
 class FacebookPage(Base):
     __tablename__ = "facebook_pages"
 
-    id = Column("ID", Integer, primary_key=True)
+    ID = Column( Integer, primary_key=True)
     page_id = Column(String(50), unique=True, nullable=False)
     page_name = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
