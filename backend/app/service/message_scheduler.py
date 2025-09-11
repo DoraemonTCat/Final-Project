@@ -320,11 +320,11 @@ class MessageScheduler:
                                 continue
                             
                             # ตรวจสอบว่า customer อยู่ใน knowledge group ที่ต้องการหรือไม่
-                            if not customer.customer_type_knowledge_id or customer.customer_type_knowledge_id not in knowledge_group_ids:
+                            if not customer.current_category_id or customer.current_category_id not in knowledge_group_ids:
                                 logger.info(f"[{group_type}] User {user_id} not in knowledge group {knowledge_group_ids}, skipping")
                                 continue
                             
-                            logger.info(f"[{group_type}] User {user_id} is in knowledge group {customer.customer_type_knowledge_id}")
+                            logger.info(f"[{group_type}] User {user_id} is in knowledge group {customer.current_category_id}")
                         
                         inactive_users.append(user_id)
                         logger.info(f"[{group_type}] User {user_id} matches: {user_inactivity_minutes} min (target: {target_minutes}±{min_tolerance})")
@@ -382,7 +382,7 @@ class MessageScheduler:
                     # ดึง customers ที่อยู่ใน knowledge group
                     customers = db.query(models.FbCustomer).filter(
                         models.FbCustomer.page_id == page.ID,
-                        models.FbCustomer.customer_type_knowledge_id.in_(knowledge_group_ids)
+                        models.FbCustomer.current_category_id.in_(knowledge_group_ids)
                     ).all()
                     
                     all_psids = [customer.customer_psid for customer in customers]
@@ -432,20 +432,20 @@ class MessageScheduler:
     
     async def send_messages_to_users(self, page_id: str, psids: List[str], messages: List[Dict], 
                                 access_token: str, schedule: Dict[str, Any] = None, group_type: str = ""):
-        """ส่งข้อความไปยัง users พร้อมอัพเดท customer type และแสดงประเภท"""
+        """ส่งข้อความไปยัง users พร้อมอัพเดท customer type (knowledge/custom)"""
         success_count = 0
         fail_count = 0
-        
+
         logger.info(f"[{group_type}] Starting to send messages to {len(psids)} users")
-        
+
         db = SessionLocal()
-        
+
         try:
             page = crud.get_page_by_page_id(db, page_id)
             if not page:
                 logger.error(f"Page {page_id} not found in database")
                 return
-            
+
             for psid in psids:
                 try:
                     # ส่งข้อความ
@@ -453,7 +453,7 @@ class MessageScheduler:
                         message_type = message.get('type', 'text')
                         content = message.get('content', '')
                         logger.info(f"[{group_type}] Sending {message_type} message to {psid}")
-                        
+
                         if message_type == 'text':
                             result = send_message(psid, content, access_token)
                         elif message_type == 'image':
@@ -468,7 +468,7 @@ class MessageScheduler:
                             result = send_video_binary(psid, video_path, access_token)
                         else:
                             continue
-                            
+
                         if 'error' in result:
                             logger.error(f"[{group_type}] Error sending message to {psid}: {result}")
                             fail_count += 1
@@ -476,88 +476,93 @@ class MessageScheduler:
                         else:
                             logger.info(f"[{group_type}] Successfully sent message to {psid}")
                             await asyncio.sleep(0.5)
-                    
+
                     # อัพเดท customer type ถ้าส่งสำเร็จ
                     if schedule and 'groups' in schedule and len(schedule['groups']) > 0:
                         group_id = schedule['groups'][0]
-                        
-                        # ตรวจสอบว่าเป็น knowledge group หรือ user group
+
+                        # ✅ Knowledge group
                         if str(group_id).startswith('knowledge_'):
-                            # Knowledge group - อัพเดท customer_type_knowledge_id
                             try:
                                 knowledge_id = int(str(group_id).replace('knowledge_', ''))
                                 customer = crud.get_customer_by_psid(db, page.ID, psid)
                                 if customer:
-                                    # อัพเดทในฐานข้อมูล
-                                    customer.customer_type_knowledge_id = knowledge_id
+                                    # อัพเดท current_category_id ของ FbCustomer
+                                    customer.current_category_id = knowledge_id
                                     customer.updated_at = datetime.now()
                                     db.commit()
                                     db.refresh(customer)
                                     logger.info(f"[{group_type}] ✅ Updated customer {psid} to knowledge group {knowledge_id}")
-                                    
-                                    # ดึงชื่อ knowledge type และส่ง SSE update
+
+                                    # ส่ง SSE update
                                     knowledge_type = db.query(models.CustomerTypeKnowledge).filter(
                                         models.CustomerTypeKnowledge.id == knowledge_id
                                     ).first()
-                                    
                                     if knowledge_type:
                                         from app.routes.facebook.sse import send_customer_type_update
-                                        
-                                        # ส่ง SSE update
                                         await send_customer_type_update(
                                             page_id=page_id,
                                             psid=psid,
-                                            customer_type_knowledge_id=knowledge_id,
+                                            current_category_id=knowledge_id,
                                             customer_type_knowledge_name=knowledge_type.type_name
                                         )
                                         logger.info(f"[{group_type}] 📡 Sent SSE update for knowledge type: {knowledge_type.type_name}")
-                                            
+
                             except Exception as e:
                                 logger.error(f"[{group_type}] ❌ Error updating customer knowledge type: {e}")
                                 db.rollback()
-                        
+
+                        # ✅ Custom group
                         elif not str(group_id).startswith('default_'):
-                            # User custom group - อัพเดท customer_type_custom_id
                             try:
                                 customer = crud.get_customer_by_psid(db, page.ID, psid)
                                 if customer:
                                     group_id_int = int(group_id) if isinstance(group_id, str) else group_id
-                                    customer_group = db.query(models.CustomerTypeCustom).filter(
+                                    custom_group = db.query(models.CustomerTypeCustom).filter(
                                         models.CustomerTypeCustom.id == group_id_int
                                     ).first()
-                                    if customer_group:
-                                        # อัพเดทในฐานข้อมูล
-                                        customer.customer_type_custom_id = group_id_int
+                                    if custom_group:
+                                        # ➡️ Insert new record into FBCustomerCustomClassification
+                                        new_classification = models.FBCustomerCustomClassification(
+                                            customer_id=customer.id,
+                                            old_category_id=None,  # หรือใส่ group เดิมถ้ามี logic
+                                            new_category_id=group_id_int,
+                                            page_id=page.ID,
+                                            classified_by="system"
+                                        )
+                                        db.add(new_classification)
                                         customer.updated_at = datetime.now()
                                         db.commit()
                                         db.refresh(customer)
-                                        logger.info(f"[{group_type}] ✅ Updated customer {psid} to custom group {group_id_int}")
-                                        
+
+                                        logger.info(f"[{group_type}] ✅ Inserted classification for customer {psid} into custom group {group_id_int}")
+
                                         # ส่ง SSE update
                                         from app.routes.facebook.sse import send_customer_type_update
                                         await send_customer_type_update(
                                             page_id=page_id,
                                             psid=psid,
-                                            customer_type_name=customer_group.type_name,
+                                            customer_type_name=custom_group.type_name,
                                             customer_type_custom_id=group_id_int
                                         )
-                                        logger.info(f"[{group_type}] 📡 Sent SSE update for custom type: {customer_group.type_name}")
-                                        
+                                        logger.info(f"[{group_type}] 📡 Sent SSE update for custom type: {custom_group.type_name}")
+
                             except Exception as e:
-                                logger.error(f"[{group_type}] ❌ Error updating customer type: {e}")
+                                logger.error(f"[{group_type}] ❌ Error inserting customer custom classification: {e}")
                                 db.rollback()
-                    
+
                     success_count += 1
                     await asyncio.sleep(1)
-                    
+
                 except Exception as e:
                     logger.error(f"[{group_type}] Error sending messages to {psid}: {e}")
                     fail_count += 1
-                    
+
         finally:
             db.close()
-            
+
         logger.info(f"[{group_type}] Sent messages complete: {success_count} success, {fail_count} failed")
+
     
     async def update_inactivity_from_conversations(self, page_id: str):
         """อัพเดทข้อมูล inactivity จาก conversations โดยตรง"""
