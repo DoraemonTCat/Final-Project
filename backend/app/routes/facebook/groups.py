@@ -107,6 +107,12 @@ async def get_customer_groups(
         
         result = []
         for group in groups:
+            # นับจำนวนลูกค้าโดยใช้ query แทนการเข้าถึง relationship โดยตรง
+            customer_count = db.query(models.FbCustomer).filter(
+                models.FbCustomer.page_id == page_id,
+                models.FbCustomer.current_category_id == group.id  # ใช้ current_category_id
+            ).count()
+            
             result.append({
                 "id": group.id,
                 "page_id": group.page_id,
@@ -117,7 +123,7 @@ async def get_customer_groups(
                 "is_active": group.is_active,
                 "created_at": group.created_at,
                 "updated_at": group.updated_at,
-                "customer_count": len(group.customers)
+                "customer_count": customer_count  # ใช้ค่าที่นับมา
             })
         
         return result
@@ -340,11 +346,12 @@ async def get_page_customer_type_knowledge(
                 db, page_db_id
             )
         
-        # สร้าง response
+        # สร้าง response - แก้ไขการเข้าถึง relationship
         result = []
         for pk_record in page_knowledge_records:
-            if pk_record.customer_type_knowledge:
-                kt = pk_record.customer_type_knowledge
+            # ใช้ knowledge แทน customer_type_knowledge (ตาม model ที่กำหนดใน models.py)
+            if pk_record.knowledge:  
+                kt = pk_record.knowledge
                 result.append({
                     "id": f"knowledge_{kt.id}",
                     "knowledge_id": kt.id,
@@ -358,7 +365,7 @@ async def get_page_customer_type_knowledge(
                     "image_label_keywords": kt.image_label_keywords,
                     "is_knowledge": True,
                     "is_enabled": pk_record.is_enabled,
-                    "is_active": True,  # แสดงเสมอ
+                    "is_active": True,
                     "created_at": pk_record.created_at.isoformat() if pk_record.created_at else None
                 })
                 
@@ -466,6 +473,7 @@ async def _create_default_page_knowledge_records(db: Session, page_db_id: int):
     all_knowledge_types = db.query(models.CustomerTypeKnowledge).all()
     
     # สร้าง page_customer_type_knowledge records สำหรับ page นี้
+    created_records = []
     for kt in all_knowledge_types:
         new_record = models.PageCustomerTypeKnowledge(
             page_id=page_db_id,
@@ -473,15 +481,18 @@ async def _create_default_page_knowledge_records(db: Session, page_db_id: int):
             is_enabled=True
         )
         db.add(new_record)
+        created_records.append(new_record)
     
     try:
         db.commit()
         logger.info(f"Created {len(all_knowledge_types)} page_knowledge records")
         
-        # ดึง records ที่เพิ่งสร้างใหม่
-        return db.query(models.PageCustomerTypeKnowledge).filter(
-            models.PageCustomerTypeKnowledge.page_id == page_db_id
-        ).all()
+        # Refresh records เพื่อโหลด relationships
+        for record in created_records:
+            db.refresh(record)
+        
+        return created_records
+        
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating page_knowledge records: {e}")
