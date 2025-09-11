@@ -18,7 +18,7 @@ _cache_image = {}
 def classify_and_assign_tier_hybrid(db: Session, page_id: int):
     # 1️⃣ โหลด knowledge config ที่ enabled
     enabled_knowledge_ids = [
-        pk.customer_type_knowledge_id
+        pk.customer_type_knowledge_id  # ✅ แก้ไข field name
         for pk in db.query(models.PageCustomerTypeKnowledge)
         .filter(
             models.PageCustomerTypeKnowledge.page_id == page_id,
@@ -67,36 +67,50 @@ def classify_and_assign_tier_hybrid(db: Session, page_id: int):
         if not message_text:
             continue
 
-        # 3️⃣ Classification (text → keyword → Gemini, attachment → image classifier)
+        # 3️⃣ Classification
         category_id = None
 
         if message_type == "text":
             category_id = match_by_keyword(message_text, knowledge_map)
             if not category_id:
-                category_id = classify_with_gemini(message_text, knowledge_map)  # ✅ ใช้เต็มข้อความ + flash-lite default
+                category_id = classify_with_gemini(message_text, knowledge_map)
 
         elif message_type == "attachment":
-            # ตรวจว่าเป็นไฟล์รูปจริงหรือไม่ (รองรับ query string ต่อท้าย)
             if re.search(r'\.(png|jpe?g)(\?.*)?$', message_text, re.IGNORECASE):
                 category_id = classify_with_gemini_image(message_text, knowledge_map)
 
-        # 4️⃣ Update knowledge id ถ้ามีการเปลี่ยน
-        if category_id and category_id != cust.customer_type_knowledge_id:
-            cust.customer_type_knowledge_id = category_id
+        # 4️⃣ Update category ถ้ามีการเปลี่ยน
+        if category_id and category_id != cust.current_category_id:
+            # บันทึกประวัติการเปลี่ยนแปลง
+            old_category_id = cust.current_category_id
+            
+            # อัพเดท current_category_id
+            cust.current_category_id = category_id
+            
+            # บันทึกประวัติใน FBCustomerClassification
+            classification = models.FBCustomerClassification(
+                customer_id=cust.id,
+                old_category_id=old_category_id,
+                new_category_id=category_id,
+                classified_by='hybrid_system',
+                page_id=page_id
+            )
+            db.add(classification)
 
             knowledge_type = db.query(models.CustomerTypeKnowledge).filter(
                 models.CustomerTypeKnowledge.id == category_id
             ).first()
+            
             page_record = db.query(models.FacebookPage).filter(
-                models.FacebookPage.ID == page_id
+                models.FacebookPage.ID == page_id  # ✅ ใช้ ID (uppercase)
             ).first()
 
             if knowledge_type and page_record:
                 update_data = {
-                    'page_id': page_record.page_id,
+                    'page_id': page_record.page_id,  # facebook page_id string
                     'psid': cust.customer_psid,
-                    'customer_type_knowledge_id': category_id,
-                    'customer_type_knowledge_name': knowledge_type.type_name,
+                    'current_category_id': category_id,
+                    'current_category_name': knowledge_type.type_name,
                     'timestamp': datetime.now(timezone.utc).isoformat()
                 }
                 pending_updates.append(update_data)
@@ -122,7 +136,7 @@ def classify_and_assign_tier_hybrid(db: Session, page_id: int):
             async def send_all():
                 for update in pending_updates:
                     await customer_type_update_queue.put(update)
-                    print(f"📡 Queueing SSE update: {update['psid']} -> {update['customer_type_knowledge_name']}")
+                    print(f"📡 Queueing SSE update: {update['psid']} -> {update['current_category_name']}")
 
             # ใช้ existing loop ถ้ามี, ไม่สร้างใหม่ทุกครั้ง
             try:

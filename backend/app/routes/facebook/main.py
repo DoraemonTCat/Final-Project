@@ -19,6 +19,7 @@ from .schedules import router as schedules_router
 from .imported_customers import router as imported_customers_router
 from .psids_sync import router as psids_sync_router
 from .admin import router as admin_router  # 🆕 เพิ่ม admin router
+from .statistics import router as statistics_router
 
 # สร้าง main router
 router = APIRouter()
@@ -36,6 +37,7 @@ router.include_router(psids_sync_router, tags=["psids_sync"])
 router.include_router(schedules_router, tags=["Facebook Schedules"])
 router.include_router(imported_customers_router, tags=["Facebook ImportedCustomers"])
 router.include_router(admin_router, tags=["Facebook Admin"])  # 🆕 เพิ่ม admin router
+router.include_router(statistics_router, tags=["Facebook Statistics"])
 
 # API สำหรับตรวจสอบว่า router ทำงานได้หรือไม่
 @router.get("/debug/tokens")

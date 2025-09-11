@@ -74,20 +74,7 @@ export const fetchConversations = async (pageId) => {
 
     console.log("✅ Raw customer data from backend:", res.data);
     
-    // Debug: ตรวจสอบข้อมูล customer type
-    res.data.forEach((customer, idx) => {
-      if (idx < 5) { // แสดง 5 คนแรก
-        console.log(`Customer ${idx + 1}:`, {
-          name: customer.name,
-          customer_type_custom_id: customer.customer_type_custom_id,
-          customer_type_name: customer.customer_type_name,
-          customer_type_knowledge_id: customer.customer_type_knowledge_id,
-          customer_type_knowledge_name: customer.customer_type_knowledge_name
-        });
-      }
-    });
-
-    // Format ข้อมูลให้ตรงกับที่ frontend ต้องการ
+    // Format ข้อมูลให้ตรงกับที่ frontend ต้องการ (ใช้ field ใหม่)
     const formattedConversations = res.data.map((conv, idx) => ({
       id: idx + 1,
       updated_time: conv.updated_at,
@@ -100,11 +87,12 @@ export const fetchConversations = async (pageId) => {
       user_name: conv.name,
       raw_psid: conv.customer_psid,
       source_type: conv.source_type,
-      // เพิ่มข้อมูล customer type ทั้ง 2 ประเภท
-      customer_type_custom_id: conv.customer_type_custom_id,
-      customer_type_name: conv.customer_type_name,
-      customer_type_knowledge_id: conv.customer_type_knowledge_id,
-      customer_type_knowledge_name: conv.customer_type_knowledge_name
+      // ใช้ current_category แทน customer_type_knowledge
+      current_category_id: conv.current_category_id,
+      current_category_name: conv.customer_type_knowledge_name, // มาจาก relationship
+      // classifications สำหรับ custom groups
+      custom_classifications: conv.custom_classifications_count,
+      classifications: conv.classifications_count
     }));
 
     return formattedConversations;

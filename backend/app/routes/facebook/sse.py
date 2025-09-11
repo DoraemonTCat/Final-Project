@@ -48,13 +48,19 @@ async def event_generator(page_id: str, db: Session) -> AsyncGenerator:
                     # Check for new/updated customers
                     page = crud.get_page_by_page_id(db, page_id)
                     if page:
+                        # ✅ แก้ไข: เปลี่ยนจาก page.id เป็น page.ID
                         customers = crud.get_customers_updated_after(
-                            db, page.id, last_check
+                            db, page.ID, last_check  # ✅ ใช้ page.ID แทน page.id
                         )
                         
                         if customers:
                             updates = []
                             for customer in customers:
+                                # ตรวจสอบว่า customer.current_category มีหรือไม่
+                                knowledge_name = None
+                                if customer.current_category:
+                                    knowledge_name = customer.current_category.type_name
+                                
                                 update_data = {
                                     'id': customer.id,
                                     'psid': customer.customer_psid,
@@ -62,12 +68,9 @@ async def event_generator(page_id: str, db: Session) -> AsyncGenerator:
                                     'first_interaction': customer.first_interaction_at.isoformat() if customer.first_interaction_at else None,
                                     'last_interaction': customer.last_interaction_at.isoformat() if customer.last_interaction_at else None,
                                     'source_type': customer.source_type,
-                                    # User Groups
-                                    'customer_type_custom_id': customer.customer_type_custom_id,
-                                    'customer_type_name': customer.customer_type_custom.type_name if customer.customer_type_custom else None,
-                                    # Knowledge Groups - เพิ่มข้อมูลนี้
-                                    'customer_type_knowledge_id': customer.customer_type_knowledge_id,
-                                    'customer_type_knowledge_name': customer.customer_type_knowledge.type_name if customer.customer_type_knowledge else None,
+                                    # ใช้ current_category แทน
+                                    'current_category_id': customer.current_category_id,
+                                    'current_category_name': knowledge_name,
                                     'action': 'update'
                                 }
                                 updates.append(update_data)

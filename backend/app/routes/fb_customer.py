@@ -30,12 +30,12 @@ def get_customers_by_page(page_id: str, db: Session = Depends(get_db)):
 
     install_date = page.created_at
 
-    # ✅ joinedload ใช้ relationship ของ FbCustomer
+    # ✅ แก้ไข: ใช้ page.ID แทน page.id
     customers_query = db.query(FbCustomer).options(
         joinedload(FbCustomer.classifications),
         joinedload(FbCustomer.custom_classifications),
         joinedload(FbCustomer.current_category)
-    ).filter(FbCustomer.page_id == page.id)
+    ).filter(FbCustomer.page_id == page.ID)  # ✅ เปลี่ยนจาก page.id เป็น page.ID
 
     customers = customers_query.filter(
         and_(
@@ -79,10 +79,11 @@ def debug_customer_types(page_id: str, db: Session = Depends(get_db)):
     if not page:
         return {"error": "Page not found"}
 
+    # ✅ แก้ไข: ใช้ page.ID แทน page.id
     customers = db.query(FbCustomer).options(
         joinedload(FbCustomer.custom_classifications),
         joinedload(FbCustomer.current_category)
-    ).filter(FbCustomer.page_id == page.id).limit(10).all()
+    ).filter(FbCustomer.page_id == page.ID).limit(10).all()  # ✅ เปลี่ยนจาก page.id เป็น page.ID
 
     result = []
     for customer in customers:

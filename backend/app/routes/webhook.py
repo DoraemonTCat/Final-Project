@@ -256,12 +256,8 @@ async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: 
             'first_interaction_at': first_interaction,
             'last_interaction_at': last_interaction,
             'source_type': 'new',
-            'metadata': {
-                'profile_pic': user_info.get('profile_pic', ''),
-                'gender': user_info.get('gender'),
-                'locale': user_info.get('locale'),
-                'timezone': user_info.get('timezone')
-            }
+            'profile_pic': user_info.get('profile_pic', ''),
+            # ไม่ใส่ customer_type_custom_id และ customer_type_knowledge_id เพราะไม่มีใน model แล้ว
         }
         
         # 6. บันทึกข้อมูลลง database
@@ -269,7 +265,7 @@ async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: 
         
         logger.info(f"✅ Auto sync สำเร็จสำหรับ user: {user_name} ({sender_id})")
         
-        # 🔥 ส่วนสำคัญ: ส่ง SSE Update ไปยัง Frontend
+        # 7. ส่ง SSE Update ไปยัง Frontend (แก้ไขให้ตรงกับ model ใหม่)
         from app.routes.facebook.sse import customer_type_update_queue
         
         try:
@@ -282,7 +278,10 @@ async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: 
                 'last_interaction': last_interaction.isoformat() if last_interaction else None,
                 'source_type': 'new',
                 'action': 'new',  # ระบุว่าเป็น user ใหม่
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(),
+                # เพิ่มข้อมูล category ถ้ามี
+                'current_category_id': customer.current_category_id if customer else None,
+                'current_category_name': customer.current_category.type_name if (customer and customer.current_category) else None
             }
             
             # ใส่เข้า queue เพื่อส่งไปยัง SSE
@@ -291,25 +290,6 @@ async def sync_new_user_data_enhanced(page_id: str, sender_id: str, page_db_id: 
             
         except Exception as e:
             logger.error(f"❌ Error sending SSE update: {e}")
-        
-        # 7. เก็บข้อมูลการแจ้งเตือน (เดิม)
-        if page_id not in new_user_notifications:
-            new_user_notifications[page_id] = []
-            
-        new_user_notifications[page_id].append({
-            'user_name': user_name,
-            'psid': sender_id,
-            'timestamp': datetime.now().isoformat(),
-            'profile_pic': user_info.get('profile_pic', ''),
-            'first_interaction': first_interaction.isoformat() if first_interaction else None
-        })
-        
-        # ลบการแจ้งเตือนเก่า
-        cutoff_time = datetime.now().timestamp() - (24 * 60 * 60)
-        new_user_notifications[page_id] = [
-            notif for notif in new_user_notifications[page_id]
-            if datetime.fromisoformat(notif['timestamp']).timestamp() > cutoff_time
-        ]
         
         return customer
         

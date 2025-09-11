@@ -83,11 +83,15 @@ def create_or_update_customer(db: Session, page_id: int, customer_psid: str, cus
     existing_customer = get_customer_by_psid(db, page_id, customer_psid)
     
     if existing_customer:
-        # อัพเดทข้อมูล - ไม่เปลี่ยน first_interaction_at และ created_at
+        # อัพเดทข้อมูล
         if customer_data.get('name'):
             existing_customer.name = customer_data['name']
         
-        # อัพเดท last_interaction_at เฉพาะเมื่อมีค่าใหม่ที่ใหม่กว่า
+        # อัพเดท profile_pic ถ้ามี
+        if customer_data.get('profile_pic'):
+            existing_customer.profile_pic = customer_data['profile_pic']
+        
+        # อัพเดท last_interaction_at
         if customer_data.get('last_interaction_at'):
             new_interaction = customer_data['last_interaction_at']
             if isinstance(new_interaction, str):
@@ -96,13 +100,10 @@ def create_or_update_customer(db: Session, page_id: int, customer_psid: str, cus
             if not existing_customer.last_interaction_at or new_interaction > existing_customer.last_interaction_at:
                 existing_customer.last_interaction_at = new_interaction
         
-        # อัพเดท customer type ถ้ามี
-        if 'customer_type_custom_id' in customer_data:
-            existing_customer.customer_type_custom_id = customer_data['customer_type_custom_id']
-        if 'customer_type_knowledge_id' in customer_data:
-            existing_customer.customer_type_knowledge_id = customer_data['customer_type_knowledge_id']
+        # อัพเดท current_category_id ถ้ามี (ไม่ใช่ customer_type_custom_id แล้ว)
+        if 'current_category_id' in customer_data:
+            existing_customer.current_category_id = customer_data['current_category_id']
         
-        # updated_at จะอัพเดทอัตโนมัติเมื่อมีการเปลี่ยนแปลง
         existing_customer.updated_at = datetime.now()
         
         db.commit()
@@ -124,17 +125,28 @@ def create_or_update_customer(db: Session, page_id: int, customer_psid: str, cus
             page_id=page_id,
             customer_psid=customer_psid,
             name=customer_data.get('name', ''),
-            customer_type_custom_id=customer_data.get('customer_type_custom_id'),
-            customer_type_knowledge_id=customer_data.get('customer_type_knowledge_id'),
+            profile_pic=customer_data.get('profile_pic', ''),
+            current_category_id=customer_data.get('current_category_id'),  # ใช้ current_category_id แทน
             first_interaction_at=first_interaction,
             last_interaction_at=last_interaction,
             source_type=source_type
-            # created_at, updated_at handled by DB
         )
         db.add(db_customer)
         db.commit()
         db.refresh(db_customer)
         return db_customer
+
+# แก้ไขฟังก์ชัน get_customer_by_psid ให้ใช้ ID ที่ถูกต้อง
+def get_customer_by_psid(db: Session, page_id: int, customer_psid: str):
+    """ดึงข้อมูลลูกค้าจาก PSID และ Page ID พร้อม eager loading"""
+    return db.query(models.FbCustomer).options(
+        joinedload(models.FbCustomer.custom_classifications),
+        joinedload(models.FbCustomer.classifications),
+        joinedload(models.FbCustomer.current_category)
+    ).filter(
+        models.FbCustomer.page_id == page_id,
+        models.FbCustomer.customer_psid == customer_psid
+    ).first()
 
 def update_customer_interaction(db: Session, page_id: int, customer_psid: str):
     """อัพเดทเวลาล่าสุดที่มีการติดต่อ - ใช้เมื่อมี message ใหม่"""
@@ -272,36 +284,48 @@ def bulk_create_or_update_customers(db: Session, page_id: int, customers_data: L
     
     return results
 
-def get_customer_statistics(db: Session, page_id: int):
+def get_customer_statistics(db: Session, page_id):
     """ดึงสถิติของลูกค้าในเพจ"""
+    # แปลง page_id ให้เป็น database ID ที่ถูกต้อง
+    db_page_id = get_page_db_id(db, page_id) if isinstance(page_id, str) else page_id
+    
+    if not db_page_id:
+        return {
+            "total_customers": 0,
+            "active_7days": 0,
+            "active_30days": 0,
+            "new_7days": 0,
+            "inactive_customers": 0
+        }
+    
     total_customers = db.query(func.count(models.FbCustomer.id)).filter(
-        models.FbCustomer.page_id == page_id
+        models.FbCustomer.page_id == db_page_id
     ).scalar()
     
     # ลูกค้าที่ active ใน 7 วันที่ผ่านมา
     active_7days = db.query(func.count(models.FbCustomer.id)).filter(
-        models.FbCustomer.page_id == page_id,
+        models.FbCustomer.page_id == db_page_id,
         models.FbCustomer.last_interaction_at >= datetime.now() - timedelta(days=7)
     ).scalar()
     
     # ลูกค้าที่ active ใน 30 วันที่ผ่านมา
     active_30days = db.query(func.count(models.FbCustomer.id)).filter(
-        models.FbCustomer.page_id == page_id,
+        models.FbCustomer.page_id == db_page_id,
         models.FbCustomer.last_interaction_at >= datetime.now() - timedelta(days=30)
     ).scalar()
     
     # ลูกค้าใหม่ใน 7 วันที่ผ่านมา
     new_7days = db.query(func.count(models.FbCustomer.id)).filter(
-        models.FbCustomer.page_id == page_id,
+        models.FbCustomer.page_id == db_page_id,
         models.FbCustomer.created_at >= datetime.now() - timedelta(days=7)
     ).scalar()
     
     return {
-        "total_customers": total_customers,
-        "active_7days": active_7days,
-        "active_30days": active_30days,
-        "new_7days": new_7days,
-        "inactive_customers": total_customers - active_30days
+        "total_customers": total_customers or 0,
+        "active_7days": active_7days or 0,
+        "active_30days": active_30days or 0,
+        "new_7days": new_7days or 0,
+        "inactive_customers": (total_customers or 0) - (active_30days or 0)
     }
     
 # ========== CustomerTypeCustom CRUD Operations ==========
@@ -464,13 +488,12 @@ def get_customer_type_statistics(db: Session, page_id: int):
     return statistics
 
 def get_customers_updated_after(db: Session, page_id: int, after_time: datetime):
-    """Get customers updated after specific time with both custom and knowledge types"""
+    """Get customers updated after specific time with current category"""
     try:
         customers = db.query(models.FbCustomer).options(
-            joinedload(models.FbCustomer.custom_classifications).joinedload(
-                models.FBCustomerCustomClassification.new_category
-            ),
-            joinedload(models.FbCustomer.current_category)
+            joinedload(models.FbCustomer.current_category),  # ใช้ current_category
+            joinedload(models.FbCustomer.classifications),
+            joinedload(models.FbCustomer.custom_classifications)
         ).filter(
             models.FbCustomer.page_id == page_id,
             models.FbCustomer.updated_at > after_time
@@ -706,3 +729,21 @@ def sync_missing_retarget_tiers(db: Session):
     except Exception as e:
         logger.error(f"Error in sync_missing_retarget_tiers: {e}")
         return {"error": str(e)}
+    
+def get_page_db_id(db: Session, page_identifier):
+    """
+    Helper function to get the correct page ID
+    page_identifier อาจเป็น:
+    - int: database ID (ใช้ตรงๆ)
+    - str: facebook page_id (ต้อง query หา)
+    """
+    if isinstance(page_identifier, int):
+        # ถ้าเป็น int แล้ว คือ database ID
+        return page_identifier
+    elif isinstance(page_identifier, str):
+        # ถ้าเป็น string คือ facebook page_id ต้อง query หา
+        page = db.query(models.FacebookPage).filter(
+            models.FacebookPage.page_id == page_identifier
+        ).first()
+        return page.ID if page else None
+    return None
