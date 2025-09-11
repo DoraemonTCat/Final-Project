@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 from sqlalchemy import or_, and_
-from app.database.models import FbCustomer, FacebookPage
+from app.database.models import FbCustomer, FacebookPage , FBCustomerCustomClassification
 from app.database.database import get_db
 from app.database.schemas import FbCustomerSchema
+
 
 router = APIRouter()
 
@@ -22,6 +23,7 @@ def get_customer_by_id(customer_id: int, db: Session = Depends(get_db)):
     return customer
 
 # API สำหรับดึงข้อมูลลูกค้าตาม Facebook page ID
+
 @router.get("/fb-customers/by-page/{page_id}")
 def get_customers_by_page(page_id: str, db: Session = Depends(get_db)):
     page = db.query(FacebookPage).filter(FacebookPage.page_id == page_id).first()
@@ -30,12 +32,14 @@ def get_customers_by_page(page_id: str, db: Session = Depends(get_db)):
 
     install_date = page.created_at
 
-    # ✅ แก้ไข: ใช้ page.ID แทน page.id
+    # ใช้ eager loading เพื่อโหลด relationships
     customers_query = db.query(FbCustomer).options(
+        joinedload(FbCustomer.current_category),  # โหลด current_category relationship
         joinedload(FbCustomer.classifications),
-        joinedload(FbCustomer.custom_classifications),
-        joinedload(FbCustomer.current_category)
-    ).filter(FbCustomer.page_id == page.ID)  # ✅ เปลี่ยนจาก page.id เป็น page.ID
+        joinedload(FbCustomer.custom_classifications).joinedload(
+            FBCustomerCustomClassification.new_category  # โหลด custom category ถ้ามี
+        )
+    ).filter(FbCustomer.page_id == page.ID)
 
     customers = customers_query.filter(
         and_(
@@ -53,18 +57,36 @@ def get_customers_by_page(page_id: str, db: Session = Depends(get_db)):
 
     result = []
     for customer in customers:
+        # ดึงข้อมูล custom category ล่าสุด (ถ้ามี)
+        latest_custom_classification = None
+        if customer.custom_classifications:
+            # เรียงตาม classified_at แล้วเอาอันล่าสุด
+            latest_custom_classification = sorted(
+                customer.custom_classifications, 
+                key=lambda x: x.classified_at, 
+                reverse=True
+            )[0] if customer.custom_classifications else None
+        
         customer_data = {
             "id": customer.id,
             "page_id": customer.page_id,
             "customer_psid": customer.customer_psid,
             "name": customer.name,
-            "first_interaction_at": customer.first_interaction_at,
-            "last_interaction_at": customer.last_interaction_at,
-            "created_at": customer.created_at,
-            "updated_at": customer.updated_at,
+            "first_interaction_at": customer.first_interaction_at.isoformat() if customer.first_interaction_at else None,
+            "last_interaction_at": customer.last_interaction_at.isoformat() if customer.last_interaction_at else None,
+            "created_at": customer.created_at.isoformat() if customer.created_at else None,
+            "updated_at": customer.updated_at.isoformat() if customer.updated_at else None,
             "source_type": customer.source_type,
-            # เพิ่มชื่อกลุ่มจาก relationship
-            "customer_type_knowledge_name": customer.current_category.type_name if customer.current_category else None,
+            
+            # ข้อมูล Knowledge Category (จาก current_category)
+            "current_category_id": customer.current_category_id,
+            "current_category_name": customer.current_category.type_name if customer.current_category else None,
+            
+            # ข้อมูล Custom Category (จาก classifications ล่าสุด)
+            "custom_category_id": latest_custom_classification.new_category_id if latest_custom_classification else None,
+            "custom_category_name": latest_custom_classification.new_category.type_name if (latest_custom_classification and latest_custom_classification.new_category) else None,
+            
+            # จำนวน classifications
             "classifications_count": len(customer.classifications),
             "custom_classifications_count": len(customer.custom_classifications)
         }

@@ -74,7 +74,20 @@ export const fetchConversations = async (pageId) => {
 
     console.log("✅ Raw customer data from backend:", res.data);
     
-    // Format ข้อมูลให้ตรงกับที่ frontend ต้องการ (ใช้ field ใหม่)
+    // Debug: ตรวจสอบข้อมูล category
+    res.data.forEach((customer, idx) => {
+      if (idx < 5) { // แสดง 5 คนแรก
+        console.log(`Customer ${idx + 1}:`, {
+          name: customer.name,
+          current_category_id: customer.current_category_id,
+          current_category_name: customer.current_category_name,
+          custom_category_id: customer.custom_category_id,
+          custom_category_name: customer.custom_category_name
+        });
+      }
+    });
+
+    // Format ข้อมูลให้ตรงกับที่ frontend ต้องการ
     const formattedConversations = res.data.map((conv, idx) => ({
       id: idx + 1,
       updated_time: conv.updated_at,
@@ -87,12 +100,18 @@ export const fetchConversations = async (pageId) => {
       user_name: conv.name,
       raw_psid: conv.customer_psid,
       source_type: conv.source_type,
-      // ใช้ current_category แทน customer_type_knowledge
-      current_category_id: conv.current_category_id,
-      current_category_name: conv.customer_type_knowledge_name, // มาจาก relationship
-      // classifications สำหรับ custom groups
-      custom_classifications: conv.custom_classifications_count,
-      classifications: conv.classifications_count
+      
+      // ข้อมูล Knowledge Category (กลุ่มพื้นฐานจาก AI)
+      customer_type_knowledge_id: conv.current_category_id,
+      customer_type_knowledge_name: conv.current_category_name,
+      
+      // ข้อมูล Custom Category (กลุ่มที่ user สร้างเอง)
+      customer_type_custom_id: conv.custom_category_id,
+      customer_type_name: conv.custom_category_name,
+      
+      // จำนวน classifications
+      classifications_count: conv.classifications_count,
+      custom_classifications_count: conv.custom_classifications_count
     }));
 
     return formattedConversations;

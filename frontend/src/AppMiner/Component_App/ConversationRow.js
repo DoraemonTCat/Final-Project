@@ -13,6 +13,7 @@ import React from 'react';
 import TimeAgoCell from './TimeAgoCell';
 import CustomerInfoBadge from './CustomerInfoBadge';
 
+
 const ConversationRow = React.memo(({ 
   conv, 
   idx, 
@@ -23,32 +24,34 @@ const ConversationRow = React.memo(({
 }) => {
   // ฟังก์ชันแสดงหมวดหมู่ลูกค้า - รองรับทั้ง 2 ประเภท
   const getCustomerTypeDisplay = () => {
-    // สร้าง array เก็บหมวดหมู่ทั้งหมด
     const types = [];
     
-    // ถ้ามี User Group (กลุ่มที่ user สร้าง)
+    // ถ้ามี Custom Category (กลุ่มที่ user สร้างเอง)
     if (conv.customer_type_name && conv.customer_type_custom_id) {
       types.push({
         name: conv.customer_type_name,
         color: "#667eea",
-        type: "user",
+        type: "custom",
         icon: "👤",
-        id: conv.customer_type_custom_id
+        id: conv.customer_type_custom_id,
+        priority: 1  // แสดงก่อน
       });
     }
     
-    // ถ้ามี Knowledge Group (กลุ่มพื้นฐาน)
+    // ถ้ามี Knowledge Category (กลุ่มพื้นฐานจาก AI)
     if (conv.customer_type_knowledge_name && conv.customer_type_knowledge_id) {
       types.push({
         name: conv.customer_type_knowledge_name,
         color: "#48bb78",
         type: "knowledge",
         icon: "👤",
-        id: conv.customer_type_knowledge_id
+        id: conv.customer_type_knowledge_id,
+        priority: 2  // แสดงทีหลัง
       });
     }
     
-    return types;
+    // เรียงตาม priority
+    return types.sort((a, b) => a.priority - b.priority);
   };
   
   const customerTypes = getCustomerTypeDisplay();
@@ -144,7 +147,7 @@ const ConversationRow = React.memo(({
         </div>
       </td>
       
-      <td className="table-cell" style={{paddingLeft:"47px"}}>  {/* หมวดหมู่ลูกค้า */}
+      <td className="table-cell" style={{paddingLeft:"47px"}}>
         {customerTypes.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             {customerTypes.map((type, index) => (
@@ -152,7 +155,9 @@ const ConversationRow = React.memo(({
                 key={`${type.type}-${type.id}-${index}`}
                 className={`customer-type-badge ${isRecentlyUpdated ? 'updating' : ''}`}
                 style={{
-                  background: type.color,
+                  background: type.type === 'custom' 
+                    ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' 
+                    : 'linear-gradient(135deg, #48bb78 0%, #38a169 100%)',
                   color: "#fff",
                   padding: "4px 10px",
                   borderRadius: "12px",
@@ -162,14 +167,17 @@ const ConversationRow = React.memo(({
                   alignItems: 'center',
                   gap: '4px',
                   width: 'fit-content',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                   transition: 'all 0.3s ease',
                   transform: isRecentlyUpdated ? 'scale(1.05)' : 'scale(1)'
                 }}
-                title={type.type === 'user' ? 'กลุ่มที่สร้างเอง' : 'กลุ่มพื้นฐาน (AI Classification)'}
+                title={type.type === 'custom' 
+                  ? 'กลุ่มที่กำหนดเอง' 
+                  : 'กลุ่มพื้นฐาน (AI Classification)'}
               >
                 <span style={{ fontSize: '10px' }}>{type.icon}</span>
                 {type.name}
+               
                 {isRecentlyUpdated && (
                   <span className="update-pulse" style={{
                     width: '6px',
@@ -190,7 +198,7 @@ const ConversationRow = React.memo(({
             borderRadius: "12px",
             fontSize: "13px",
             display: "inline-block",
-           
+            border: "1px dashed #cbd5e0"
           }}>
             ยังไม่จัดกลุ่ม
           </span>
