@@ -30,7 +30,7 @@ class GroupMessageCreate(BaseModel):
     page_customer_type_knowledge_id: Optional[int] = None
     message_type: str
     content: str
-    dir: Optional[str] = ""
+  
     display_order: int
 
 class GroupMessageUpdate(BaseModel):
@@ -47,7 +47,7 @@ class GroupMessageResponse(BaseModel):
     page_customer_type_knowledge_id: Optional[int]
     message_type: str
     content: str
-    dir: Optional[str]
+  
     display_order: int
     
     class Config:
@@ -97,7 +97,7 @@ async def create_group_message(
             customer_type_custom_id=message_data.customer_type_custom_id,
             message_type=message_data.message_type,
             content=message_data.content,
-            dir=message_data.dir or "",
+        
             display_order=message_data.display_order
         )
         
@@ -210,7 +210,7 @@ async def create_knowledge_group_message(
             customer_type_custom_id=None,  # ไม่ใส่ค่าสำหรับ knowledge groups
             message_type=message_data.message_type,
             content=message_data.content,
-            dir=message_data.dir or "",
+         
             display_order=message_data.display_order
         )
         
@@ -226,7 +226,7 @@ async def create_knowledge_group_message(
             "page_customer_type_knowledge_id": db_message.page_customer_type_knowledge_id,
             "message_type": db_message.message_type,
             "content": db_message.content,
-            "dir": db_message.dir,
+          
             "display_order": db_message.display_order
         }
         
@@ -282,7 +282,7 @@ async def get_knowledge_group_messages(
                 "page_customer_type_knowledge_id": msg.page_customer_type_knowledge_id,
                 "message_type": msg.message_type,
                 "content": msg.content,
-                "dir": msg.dir,
+          
                 "display_order": msg.display_order
             })
         
@@ -334,7 +334,7 @@ async def create_batch_group_messages(
                 customer_type_custom_id=msg_data.customer_type_custom_id,
                 message_type=msg_data.message_type,
                 content=msg_data.content,
-                dir=msg_data.dir or "",
+         
                 display_order=msg_data.display_order
             )
             db_messages.append(db_message)

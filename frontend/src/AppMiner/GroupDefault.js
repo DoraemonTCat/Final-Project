@@ -319,7 +319,7 @@ useEffect(() => {
         customer_type_custom_id: groupId,  // ส่ง "knowledge_xxx" format
         message_type: currentInput.type,
         content: currentInput.content || currentInput.file?.name || '',
-        dir: "",  // ตั้งเป็น empty string
+     
         display_order: messageSequence.length
       };
 
