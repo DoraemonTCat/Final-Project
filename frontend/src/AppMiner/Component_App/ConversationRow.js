@@ -147,7 +147,7 @@ const ConversationRow = React.memo(({
         </div>
       </td>
       
-      <td className="table-cell" style={{paddingLeft:"47px"}}>
+      <td className="table-cell" style={{paddingLeft:"47px"}}>     {/* หมวดหมู่ลูกค้า */}
         {customerTypes.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             {customerTypes.map((type, index) => (
