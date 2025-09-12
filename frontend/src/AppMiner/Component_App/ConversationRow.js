@@ -210,7 +210,7 @@ const ConversationRow = React.memo(({
         )}
       </td>
       
-      <td className="table-cell" style={{paddingLeft:"30px"}}> {/* สถานะขุด */}
+      <td className="table-cell" style={{paddingLeft:"35px"}}> {/* สถานะขุด */}
         <div 
           className="status-indicator" 
           style={{ 
