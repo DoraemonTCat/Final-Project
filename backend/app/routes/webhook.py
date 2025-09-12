@@ -8,6 +8,7 @@ import os
 from app.service.facebook_api import fb_get
 import logging
 import asyncio
+from app.database import models, crud
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -159,6 +160,37 @@ async def webhook_post(
                         # User เก่า - อัพเดทเวลาล่าสุดที่ทักเข้ามา
                         crud.update_customer_interaction(db, page.ID, sender_id)
                         logger.info(f"📝 อัพเดท last_interaction_at สำหรับ: {existing_customer.name}")
+                        
+                        # ตรวจสอบและอัพเดทสถานะการขุดเมื่อมีข้อความเข้ามา
+                        current_mining_status = db.query(models.FBCustomerMiningStatus).filter(
+                            models.FBCustomerMiningStatus.customer_id == existing_customer.id
+                        ).order_by(models.FBCustomerMiningStatus.created_at.desc()).first()
+                        
+                        # ถ้าสถานะปัจจุบันคือ "ขุดแล้ว" ให้เปลี่ยนเป็น "มีการตอบกลับ"
+                        if current_mining_status and current_mining_status.status == "ขุดแล้ว":
+                            new_status = models.FBCustomerMiningStatus(
+                                customer_id=existing_customer.id,
+                                status="มีการตอบกลับ",
+                                note=f"User replied at {datetime.now()}"
+                            )
+                            db.add(new_status)
+                            db.commit()
+                            logger.info(f"💬 Updated mining status to 'มีการตอบกลับ' for: {sender_id}")
+                            
+                            # ส่ง SSE update สำหรับสถานะการขุด (optional)
+                            from app.routes.facebook.sse import customer_type_update_queue
+                            try:
+                                update_data = {
+                                    'page_id': page_id,
+                                    'psid': sender_id,
+                                    'mining_status': 'มีการตอบกลับ',
+                                    'action': 'mining_status_update',
+                                    'timestamp': datetime.now().isoformat()
+                                }
+                                await customer_type_update_queue.put(update_data)
+                                logger.info(f"📡 Sent SSE mining status update for: {sender_id}")
+                            except Exception as e:
+                                logger.error(f"Error sending SSE mining status update: {e}")
                     
                 except Exception as e:
                     logger.error(f"❌ Error processing webhook: {e}")

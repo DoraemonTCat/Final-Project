@@ -82,23 +82,28 @@ const ConversationRow = React.memo(({
 
   // Mining status mapping
   const miningStatusMap = {
-    'not_mined': { 
-      label: "ยังไม่ขุด", 
-      color: "#e53e3e",
-      icon: "⭕"
-    },
-    'mined': { 
-      label: "ขุดแล้ว", 
-      color: "#48bb78",
-      icon: "✅"
-    },
-    'responded': { 
-      label: "มีการตอบกลับ", 
-      color: "#3182ce",
-      icon: "💬"
-    }
-  };
-  const miningStatusInfo = miningStatusMap[conv.miningStatus] || miningStatusMap['not_mined'];
+  'ยังไม่ขุด': { 
+    label: "ยังไม่ขุด", 
+    color: "#e53e3e",
+    icon: "⭕",
+    bgColor: "#fed7d7"
+  },
+  'ขุดแล้ว': { 
+    label: "ขุดแล้ว", 
+    color: "#48bb78",
+    icon: "✅",
+    bgColor: "#c6f6d5"
+  },
+  'มีการตอบกลับ': { 
+    label: "มีการตอบกลับ", 
+    color: "#3182ce",
+    icon: "💬",
+    bgColor: "#bee3f8"
+  }
+};
+
+  const currentStatus = conv.miningStatus || 'ยังไม่ขุด';
+  const miningStatusInfo = miningStatusMap[currentStatus] || miningStatusMap['ยังไม่ขุด'];
 
   return (
     <tr className={`table-row ${isSelected ? 'selected' : ''} ${isRecentlyUpdated ? 'recently-updated' : ''}`}>
@@ -205,10 +210,29 @@ const ConversationRow = React.memo(({
         )}
       </td>
       
-      <td className="table-cell">    {/* สถานะการขุด */}
-        <div className="status-indicator" style={{ '--status-color': miningStatusInfo.color }}>
-          <span className="status-icon">{miningStatusInfo.icon}</span>
-          <span className="customer-type new">{miningStatusInfo.label}</span>
+      <td className="table-cell" style={{paddingLeft:"30px"}}> {/* สถานะขุด */}
+        <div 
+          className="status-indicator" 
+          style={{ 
+            '--status-color': miningStatusInfo.color,
+            background: miningStatusInfo.bgColor,
+            padding: '6px 12px',
+            borderRadius: '20px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontWeight: '600',
+            fontSize: '13px',
+            border: `1px solid ${miningStatusInfo.color}`,
+            transition: 'all 0.3s ease'
+          }}
+        >
+          <span className="status-icon" style={{ fontSize: '16px' }}>
+            {miningStatusInfo.icon}
+          </span>
+          <span style={{ color: miningStatusInfo.color }}>
+            {miningStatusInfo.label}
+          </span>
         </div>
       </td>
       

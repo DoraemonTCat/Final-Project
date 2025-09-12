@@ -34,11 +34,12 @@ def get_customers_by_page(page_id: str, db: Session = Depends(get_db)):
 
     # ใช้ eager loading เพื่อโหลด relationships
     customers_query = db.query(FbCustomer).options(
-        joinedload(FbCustomer.current_category),  # โหลด current_category relationship
+        joinedload(FbCustomer.current_category),
         joinedload(FbCustomer.classifications),
         joinedload(FbCustomer.custom_classifications).joinedload(
-            FBCustomerCustomClassification.new_category  # โหลด custom category ถ้ามี
-        )
+            FBCustomerCustomClassification.new_category
+        ),
+        joinedload(FbCustomer.mining_statuses)  # เพิ่มบรรทัดนี้
     ).filter(FbCustomer.page_id == page.ID)
 
     customers = customers_query.filter(
@@ -60,12 +61,26 @@ def get_customers_by_page(page_id: str, db: Session = Depends(get_db)):
         # ดึงข้อมูล custom category ล่าสุด (ถ้ามี)
         latest_custom_classification = None
         if customer.custom_classifications:
-            # เรียงตาม classified_at แล้วเอาอันล่าสุด
             latest_custom_classification = sorted(
                 customer.custom_classifications, 
                 key=lambda x: x.classified_at, 
                 reverse=True
             )[0] if customer.custom_classifications else None
+        
+        # ========== เพิ่มการดึงสถานะการขุดล่าสุด ==========
+        latest_mining_status = None
+        mining_status_value = "ยังไม่ขุด"  # ค่า default
+        
+        if customer.mining_statuses:
+            # เรียงตาม created_at และเอาอันล่าสุด
+            sorted_statuses = sorted(
+                customer.mining_statuses,
+                key=lambda x: x.created_at,
+                reverse=True
+            )
+            if sorted_statuses:
+                latest_mining_status = sorted_statuses[0]
+                mining_status_value = latest_mining_status.status
         
         customer_data = {
             "id": customer.id,
@@ -88,7 +103,12 @@ def get_customers_by_page(page_id: str, db: Session = Depends(get_db)):
             
             # จำนวน classifications
             "classifications_count": len(customer.classifications),
-            "custom_classifications_count": len(customer.custom_classifications)
+            "custom_classifications_count": len(customer.custom_classifications),
+            
+            # ========== เพิ่มสถานะการขุด ==========
+            "mining_status": mining_status_value,
+            "mining_status_updated_at": latest_mining_status.created_at.isoformat() if latest_mining_status else None
+
         }
         result.append(customer_data)
 

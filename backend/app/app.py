@@ -14,6 +14,7 @@ import uvicorn
 from app.routes import pages, webhook, custom_messages, fb_customer, sync, group_messages
 from app.routes import facebook  # ถ้ายังใช้ facebook.py เดิม
 from app.routes import retarget_tiers
+from app.routes import mining_status
 
 # หรือถ้าใช้ refactored version
 # from app.routes.facebook import router as facebook_router
@@ -76,6 +77,7 @@ app.add_middleware(
 app.include_router(pages.router)
 app.include_router(webhook.router)
 app.include_router(facebook.router)  # ถ้ายังใช้ facebook.py เดิม
+app.include_router(mining_status.router)
 # app.include_router(facebook_router)  # ถ้าใช้ refactored version
 app.include_router(custom_messages.router)
 app.include_router(fb_customer.router)

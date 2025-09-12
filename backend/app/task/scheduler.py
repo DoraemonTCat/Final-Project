@@ -83,13 +83,13 @@ def start_scheduler():
     """เริ่มต้น scheduler สำหรับ background tasks"""
     scheduler = BackgroundScheduler()
     
-    # Sync ข้อมูลลูกค้าทุกนาที
-    scheduler.add_job(schedule_facebook_sync, 'interval', minutes=1)
+    # Sync ข้อมูลลูกค้าทุกๆ 2นาที
+    scheduler.add_job(schedule_facebook_sync, 'interval', minutes=2)
     
-    # Sync ข้อความทุกชั่วโมง
+    # Sync ข้อความทุกนาที
     scheduler.add_job(schedule_facebook_messages_sync, 'interval', minutes=1)
 
-    # clssi
+    # sync retarget tiers ทุก 1 นาที
     scheduler.add_job(scheduled_hybrid_classification, 'interval', minutes=1)
     
     # Sync retarget tiers เฉพาะตอนเริ่มระบบ (ครั้งเดียว)

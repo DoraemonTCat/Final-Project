@@ -74,7 +74,7 @@ export const fetchConversations = async (pageId) => {
 
     console.log("✅ Raw customer data from backend:", res.data);
     
-    // Debug: ตรวจสอบข้อมูล category
+    // Debug: ตรวจสอบข้อมูล category และ mining status
     res.data.forEach((customer, idx) => {
       if (idx < 5) { // แสดง 5 คนแรก
         console.log(`Customer ${idx + 1}:`, {
@@ -82,7 +82,10 @@ export const fetchConversations = async (pageId) => {
           current_category_id: customer.current_category_id,
           current_category_name: customer.current_category_name,
           custom_category_id: customer.custom_category_id,
-          custom_category_name: customer.custom_category_name
+          custom_category_name: customer.custom_category_name,
+
+          mining_status: customer.mining_status,
+          mining_status_updated_at: customer.mining_status_updated_at
         });
       }
     });
@@ -111,7 +114,12 @@ export const fetchConversations = async (pageId) => {
       
       // จำนวน classifications
       classifications_count: conv.classifications_count,
-      custom_classifications_count: conv.custom_classifications_count
+      custom_classifications_count: conv.custom_classifications_count,
+      
+      // ========== เพิ่มสถานะการขุด ==========
+      miningStatus: conv.mining_status || 'ยังไม่ขุด',
+      miningStatusUpdatedAt: conv.mining_status_updated_at
+      // ========================================
     }));
 
     return formattedConversations;
