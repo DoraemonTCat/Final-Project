@@ -2619,7 +2619,65 @@ body.no-animations * {
   opacity: 0.95;
 }
 
+/* เพิ่มใน App.css */
 
+/* Smooth transition สำหรับ row updates */
+.table-row {
+  transition: all 0.3s ease;
+}
+
+.table-row.recently-updated {
+  animation: highlightRow 2s ease;
+}
+
+@keyframes highlightRow {
+  0% {
+    background-color: rgba(102, 126, 234, 0.1);
+    transform: translateX(0);
+  }
+  50% {
+    background-color: rgba(102, 126, 234, 0.2);
+    transform: translateX(2px);
+  }
+  100% {
+    background-color: transparent;
+    transform: translateX(0);
+  }
+}
+
+/* Prevent layout shift */
+.conversation-table tbody {
+  position: relative;
+}
+
+.customer-type-badge.updating {
+  animation: badgeUpdate 0.5s ease;
+}
+
+@keyframes badgeUpdate {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Smooth transition สำหรับชื่อ */
+.user-name {
+  transition: all 0.3s ease;
+}
+
+/* Prevent text jumping */
+.user-details {
+  min-height: 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
 /* =====================================================
    END OF STYLESHEET
    ===================================================== */

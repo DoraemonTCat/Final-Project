@@ -855,10 +855,12 @@ const loadMiningStatuses = async (pageId) => {
    * handleRealtimeUpdate - จัดการ real-time updates จาก SSE
    * @param {Array} updates - array ของการอัพเดท
    */
+// frontend/src/AppMiner/App.js
+// แก้ไขฟังก์ชัน handleRealtimeUpdate
+
 const handleRealtimeUpdate = useCallback((updates) => {
   console.log('📊 Received updates:', updates);
 
-  // จัดการ customer type updates
   if (Array.isArray(updates) && updates.length > 0) {
     const firstUpdate = updates[0];
 
@@ -870,16 +872,15 @@ const handleRealtimeUpdate = useCallback((updates) => {
       
       console.log('🏷️ Processing customer type updates');
 
-      // อัพเดท conversations
-      setConversations(prevConvs => {
-        return prevConvs.map(conv => {
+      // Batch update เพื่อลด re-render
+      const updateConversations = (prevConvs) => {
+        const updatedConvs = prevConvs.map(conv => {
           const update = updates.find(u => u.psid === conv.raw_psid);
           if (update) {
             // เพิ่ม visual feedback
             setRecentlyUpdatedUsers(prev => {
               const newSet = new Set(prev);
               newSet.add(conv.raw_psid);
-
               setTimeout(() => {
                 setRecentlyUpdatedUsers(current => {
                   const updated = new Set(current);
@@ -887,93 +888,46 @@ const handleRealtimeUpdate = useCallback((updates) => {
                   return updated;
                 });
               }, 3000);
-
               return newSet;
             });
 
-            // อัพเดทข้อมูลทั้ง custom และ knowledge types
+            // คงข้อมูลเดิมที่จำเป็นไว้
             return {
               ...conv,
-              // Custom type (User Groups)
-              customer_type_custom_id: update.customer_type_custom_id !== undefined 
-                ? update.customer_type_custom_id 
-                : conv.customer_type_custom_id,
-              customer_type_name: update.customer_type_name !== undefined 
-                ? update.customer_type_name 
-                : conv.customer_type_name,
-              // Knowledge type (กลุ่มพื้นฐาน)
-              customer_type_knowledge_id: update.customer_type_knowledge_id !== undefined 
-                ? update.customer_type_knowledge_id 
-                : conv.customer_type_knowledge_id,
-              customer_type_knowledge_name: update.customer_type_knowledge_name !== undefined 
-                ? update.customer_type_knowledge_name 
-                : conv.customer_type_knowledge_name,
-              // Update times
+              // อัพเดทเฉพาะข้อมูลที่เปลี่ยน
+              customer_type_custom_id: update.customer_type_custom_id ?? conv.customer_type_custom_id,
+              customer_type_name: update.customer_type_name ?? conv.customer_type_name,
+              customer_type_knowledge_id: update.customer_type_knowledge_id ?? conv.customer_type_knowledge_id,
+              customer_type_knowledge_name: update.customer_type_knowledge_name ?? conv.customer_type_knowledge_name,
+              // คงข้อมูลสำคัญไว้
+              conversation_name: conv.conversation_name || conv.user_name,
+              user_name: conv.user_name,
+              conversation_id: conv.conversation_id,
+              raw_psid: conv.raw_psid,
+              // อัพเดทเวลาเฉพาะถ้ามีข้อมูลใหม่
               last_user_message_time: update.last_interaction || conv.last_user_message_time,
               updated_time: new Date().toISOString()
             };
           }
           return conv;
         });
-      });
 
-      // อัพเดท allConversations
-      setAllConversations(prevAll => {
-        return prevAll.map(conv => {
-          const update = updates.find(u => u.psid === conv.raw_psid);
-          if (update) {
-            return {
-              ...conv,
-              // Custom type (User Groups)
-              customer_type_custom_id: update.customer_type_custom_id !== undefined 
-                ? update.customer_type_custom_id 
-                : conv.customer_type_custom_id,
-              customer_type_name: update.customer_type_name !== undefined 
-                ? update.customer_type_name 
-                : conv.customer_type_name,
-              // Knowledge type (กลุ่มพื้นฐาน)
-              customer_type_knowledge_id: update.customer_type_knowledge_id !== undefined 
-                ? update.customer_type_knowledge_id 
-                : conv.customer_type_knowledge_id,
-              customer_type_knowledge_name: update.customer_type_knowledge_name !== undefined 
-                ? update.customer_type_knowledge_name 
-                : conv.customer_type_knowledge_name,
-              last_user_message_time: update.last_interaction || conv.last_user_message_time,
-              updated_time: new Date().toISOString()
-            };
-          }
-          return conv;
+        // เรียงลำดับตามเวลาล่าสุด (คงลำดับเดิมไว้)
+        return updatedConvs.sort((a, b) => {
+          const timeA = new Date(a.last_user_message_time || a.updated_time || 0);
+          const timeB = new Date(b.last_user_message_time || b.updated_time || 0);
+          return timeB - timeA;
         });
-      });
+      };
 
+      // ใช้ batch update
+      setConversations(updateConversations);
+      setAllConversations(updateConversations);
+      
       // อัพเดท filteredConversations ถ้ามี
       setFilteredConversations(prevFiltered => {
         if (prevFiltered.length > 0) {
-          return prevFiltered.map(conv => {
-            const update = updates.find(u => u.psid === conv.raw_psid);
-            if (update) {
-              return {
-                ...conv,
-                // Custom type (User Groups)
-                customer_type_custom_id: update.customer_type_custom_id !== undefined 
-                  ? update.customer_type_custom_id 
-                  : conv.customer_type_custom_id,
-                customer_type_name: update.customer_type_name !== undefined 
-                  ? update.customer_type_name 
-                  : conv.customer_type_name,
-                // Knowledge type (กลุ่มพื้นฐาน)
-                customer_type_knowledge_id: update.customer_type_knowledge_id !== undefined 
-                  ? update.customer_type_knowledge_id 
-                  : conv.customer_type_knowledge_id,
-                customer_type_knowledge_name: update.customer_type_knowledge_name !== undefined 
-                  ? update.customer_type_knowledge_name 
-                  : conv.customer_type_knowledge_name,
-                last_user_message_time: update.last_interaction || conv.last_user_message_time,
-                updated_time: new Date().toISOString()
-              };
-            }
-            return conv;
-          });
+          return updateConversations(prevFiltered);
         }
         return prevFiltered;
       });
@@ -985,177 +939,150 @@ const handleRealtimeUpdate = useCallback((updates) => {
       
       if (totalUpdates > 0) {
         let message = `อัพเดทหมวดหมู่ลูกค้า ${totalUpdates} คน`;
-        if (customUpdateCount > 0 && knowledgeUpdateCount > 0) {
-          message += ` (กลุ่มผู้ใช้: ${customUpdateCount}, กลุ่มพื้นฐาน: ${knowledgeUpdateCount})`;
-        } else if (customUpdateCount > 0) {
-          message += ` (กลุ่มผู้ใช้)`;
-        } else if (knowledgeUpdateCount > 0) {
-          message += ` (กลุ่มพื้นฐาน)`;
-        }
         showNotification('info', message);
       }
 
-      return; // จบการประมวลผล customer type updates
+      return;
     }
 
-    // ========== เพิ่มการจัดการ mining status updates ==========
+    // จัดการ mining status updates
     if (firstUpdate.action === 'mining_status_update' && firstUpdate.mining_status) {
       console.log('⛏️ Processing mining status update');
       
-      updates.forEach(statusUpdate => {
-        if (statusUpdate.action === 'mining_status_update') {
-          // อัพเดท miningStatuses state
-          setMiningStatuses(prev => ({
-            ...prev,
-            [statusUpdate.psid]: {
+      const updateMiningStatus = (prevConvs) => {
+        return prevConvs.map(conv => {
+          const statusUpdate = updates.find(u => u.psid === conv.raw_psid && u.action === 'mining_status_update');
+          if (statusUpdate) {
+            return {
+              ...conv,
+              miningStatus: statusUpdate.mining_status
+            };
+          }
+          return conv;
+        });
+      };
+
+      // Batch update สำหรับ mining status
+      setMiningStatuses(prev => {
+        const updated = { ...prev };
+        updates.forEach(statusUpdate => {
+          if (statusUpdate.action === 'mining_status_update') {
+            updated[statusUpdate.psid] = {
               status: statusUpdate.mining_status,
               note: statusUpdate.note || '',
               created_at: statusUpdate.timestamp || new Date().toISOString()
-            }
-          }));
-          
-          // อัพเดท conversations
-          setConversations(prevConvs =>
-            prevConvs.map(conv => ({
-              ...conv,
-              miningStatus: conv.raw_psid === statusUpdate.psid 
-                ? statusUpdate.mining_status 
-                : conv.miningStatus
-            }))
-          );
-          
-          // อัพเดท allConversations
-          setAllConversations(prevAll =>
-            prevAll.map(conv => ({
-              ...conv,
-              miningStatus: conv.raw_psid === statusUpdate.psid 
-                ? statusUpdate.mining_status 
-                : conv.miningStatus
-            }))
-          );
-          
-          // อัพเดท filteredConversations ถ้ามี
-          setFilteredConversations(prevFiltered => {
-            if (prevFiltered.length > 0) {
-              return prevFiltered.map(conv => ({
-                ...conv,
-                miningStatus: conv.raw_psid === statusUpdate.psid 
-                  ? statusUpdate.mining_status 
-                  : conv.miningStatus
-              }));
-            }
-            return prevFiltered;
-          });
-          
-          // เพิ่ม visual feedback
-          setRecentlyUpdatedUsers(prev => {
-            const newSet = new Set(prev);
-            newSet.add(statusUpdate.psid);
-            
-            setTimeout(() => {
-              setRecentlyUpdatedUsers(current => {
-                const updated = new Set(current);
-                updated.delete(statusUpdate.psid);
-                return updated;
-              });
-            }, 3000);
-            
-            return newSet;
-          });
-        }
+            };
+          }
+        });
+        return updated;
       });
-      
-      // แสดง notification
-      const miningUpdates = updates.filter(u => u.action === 'mining_status_update');
-      if (miningUpdates.length > 0) {
-        const replied = miningUpdates.filter(u => u.mining_status === 'มีการตอบกลับ').length;
-        const mined = miningUpdates.filter(u => u.mining_status === 'ขุดแล้ว').length;
-        
-        let message = '';
-        if (replied > 0) {
-          message = `มีลูกค้าตอบกลับ ${replied} คน`;
-        } else if (mined > 0) {
-          message = `อัพเดทสถานะขุดแล้ว ${mined} คน`;
+
+      setConversations(updateMiningStatus);
+      setAllConversations(updateMiningStatus);
+      setFilteredConversations(prevFiltered => {
+        if (prevFiltered.length > 0) {
+          return updateMiningStatus(prevFiltered);
         }
+        return prevFiltered;
+      });
+
+      return;
+    }
+
+    // จัดการ normal customer updates (user ใหม่)
+    if (updates.some(u => u.action === 'new')) {
+      setPendingUpdates(prev => [...prev, ...updates]);
+
+      setConversations(prevConvs => {
+        const conversationMap = new Map(prevConvs.map(c => [c.raw_psid, c]));
         
-        if (message) {
-          showNotification('info', '⛏️ อัพเดทสถานะการขุด', message);
-        }
+        updates.forEach(update => {
+          if (update.action === 'new') {
+            // เพิ่ม user ใหม่
+            const newConv = {
+              id: conversationMap.size + 1,
+              conversation_id: update.psid,
+              raw_psid: update.psid,
+              user_name: update.name || `User...${update.psid.slice(-8)}`,
+              conversation_name: update.name || `User...${update.psid.slice(-8)}`,
+              last_user_message_time: update.last_interaction,
+              first_interaction_at: update.first_interaction,
+              source_type: update.source_type || 'new',
+              created_time: update.first_interaction,
+              updated_time: new Date().toISOString(),
+              miningStatus: 'ยังไม่ขุด',
+              customer_type_knowledge_id: update.current_category_id,
+              customer_type_knowledge_name: update.current_category_name
+            };
+            conversationMap.set(update.psid, newConv);
+          } else {
+            // อัพเดท user ที่มีอยู่
+            const existing = conversationMap.get(update.psid);
+            if (existing) {
+              conversationMap.set(update.psid, {
+                ...existing,
+                user_name: update.name || existing.user_name,
+                conversation_name: update.name || existing.conversation_name,
+                last_user_message_time: update.last_interaction || existing.last_user_message_time,
+                updated_time: new Date().toISOString()
+              });
+            }
+          }
+        });
+        
+        // เรียงลำดับตามเวลาล่าสุด
+        const updatedConvs = Array.from(conversationMap.values()).sort((a, b) => {
+          const timeA = new Date(a.last_user_message_time || a.updated_time || 0);
+          const timeB = new Date(b.last_user_message_time || b.updated_time || 0);
+          return timeB - timeA;
+        });
+        
+        return updatedConvs;
+      });
+
+      // อัพเดท allConversations ด้วย
+      setAllConversations(prevAll => {
+        const allMap = new Map(prevAll.map(c => [c.raw_psid, c]));
+        updates.forEach(update => {
+          if (update.action === 'new') {
+            const newConv = {
+              id: allMap.size + 1,
+              conversation_id: update.psid,
+              raw_psid: update.psid,
+              user_name: update.name || `User...${update.psid.slice(-8)}`,
+              conversation_name: update.name || `User...${update.psid.slice(-8)}`,
+              last_user_message_time: update.last_interaction,
+              first_interaction_at: update.first_interaction,
+              source_type: update.source_type || 'new',
+              created_time: update.first_interaction,
+              updated_time: new Date().toISOString(),
+              miningStatus: 'ยังไม่ขุด',
+              customer_type_knowledge_id: update.current_category_id,
+              customer_type_knowledge_name: update.current_category_name
+            };
+            allMap.set(update.psid, newConv);
+          } else {
+            const existing = allMap.get(update.psid);
+            if (existing) {
+              allMap.set(update.psid, {
+                ...existing,
+                user_name: update.name || existing.user_name,
+                conversation_name: update.name || existing.conversation_name,
+                last_user_message_time: update.last_interaction || existing.last_user_message_time
+              });
+            }
+          }
+        });
+        return Array.from(allMap.values());
+      });
+
+      const newCustomers = updates.filter(u => u.action === 'new');
+      if (newCustomers.length > 0) {
+        showNotification('info', `มีลูกค้าใหม่ ${newCustomers.length} คน`);
       }
-      
-      return; // จบการประมวลผล mining status updates
     }
   }
-
-  // จัดการ normal customer updates 
-  setPendingUpdates(prev => [...prev, ...updates]);
-
-  setConversations(prevConvs => {
-    const conversationMap = new Map(prevConvs.map(c => [c.raw_psid, c]));
-    updates.forEach(update => {
-      const existing = conversationMap.get(update.psid);
-      if (existing) {
-        conversationMap.set(update.psid, {
-          ...existing,
-          user_name: update.name,
-          conversation_name: update.name,
-          last_user_message_time: update.last_interaction,
-          first_interaction_at: update.first_interaction,
-          source_type: update.source_type,
-          updated_time: new Date().toISOString()
-        });
-      } else {
-        const newConv = {
-          id: conversationMap.size + 1,
-          conversation_id: update.psid,
-          raw_psid: update.psid,
-          user_name: update.name,
-          conversation_name: update.name,
-          last_user_message_time: update.last_interaction,
-          first_interaction_at: update.first_interaction,
-          source_type: update.source_type,
-          created_time: update.first_interaction,
-          updated_time: new Date().toISOString(),
-          miningStatus: 'ยังไม่ขุด' // เพิ่ม default mining status
-        };
-        conversationMap.set(update.psid, newConv);
-      }
-    });
-    
-    const updatedConvs = Array.from(conversationMap.values()).sort((a, b) => {
-      const timeA = new Date(a.last_user_message_time || 0);
-      const timeB = new Date(b.last_user_message_time || 0);
-      return timeB - timeA;
-    });
-    return updatedConvs;
-  });
-
-  setAllConversations(prevAll => {
-    const allMap = new Map(prevAll.map(c => [c.raw_psid, c]));
-    updates.forEach(update => {
-      const existing = allMap.get(update.psid);
-      if (existing) {
-        allMap.set(update.psid, {
-          ...existing,
-          user_name: update.name,
-          conversation_name: update.name,
-          last_user_message_time: update.last_interaction,
-          first_interaction_at: update.first_interaction,
-          source_type: update.source_type
-        });
-      }
-    });
-    return Array.from(allMap.values());
-  });
-
-  setLastUpdateId(prev => prev + 1);
-  setLastUpdateTime(new Date());
-
-  const newCustomers = updates.filter(u => u.action === 'new');
-  if (newCustomers.length > 0) {
-    showNotification('info', `มีลูกค้าใหม่ ${newCustomers.length} คน`);
-  }
-}, [showNotification, setMiningStatuses, setRecentlyUpdatedUsers]); // เพิ่ม dependencies
+}, [showNotification, setMiningStatuses, setRecentlyUpdatedUsers]);
 
   /**
    * handleAddUsersFromFile - เพิ่ม users จากไฟล์ที่อัพโหลด

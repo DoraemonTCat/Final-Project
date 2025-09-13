@@ -13,7 +13,6 @@ import React from 'react';
 import TimeAgoCell from './TimeAgoCell';
 import CustomerInfoBadge from './CustomerInfoBadge';
 
-
 const ConversationRow = React.memo(({ 
   conv, 
   idx, 
@@ -22,11 +21,13 @@ const ConversationRow = React.memo(({
   onInactivityChange,
   isRecentlyUpdated
 }) => {
-  // ฟังก์ชันแสดงหมวดหมู่ลูกค้า - รองรับทั้ง 2 ประเภท
+  // ตรวจสอบและแสดงชื่อที่ถูกต้อง
+  const displayName = conv.conversation_name || conv.user_name || `User...${(conv.raw_psid || '').slice(-8)}` || `บทสนทนาที่ ${idx + 1}`;
+  
+  // ฟังก์ชันแสดงหมวดหมู่ลูกค้า
   const getCustomerTypeDisplay = () => {
     const types = [];
     
-    // ถ้ามี Custom Category (กลุ่มที่ user สร้างเอง)
     if (conv.customer_type_name && conv.customer_type_custom_id) {
       types.push({
         name: conv.customer_type_name,
@@ -34,11 +35,10 @@ const ConversationRow = React.memo(({
         type: "custom",
         icon: "👤",
         id: conv.customer_type_custom_id,
-        priority: 1  // แสดงก่อน
+        priority: 1
       });
     }
     
-    // ถ้ามี Knowledge Category (กลุ่มพื้นฐานจาก AI)
     if (conv.customer_type_knowledge_name && conv.customer_type_knowledge_id) {
       types.push({
         name: conv.customer_type_knowledge_name,
@@ -46,17 +46,15 @@ const ConversationRow = React.memo(({
         type: "knowledge",
         icon: "👤",
         id: conv.customer_type_knowledge_id,
-        priority: 2  // แสดงทีหลัง
+        priority: 2
       });
     }
     
-    // เรียงตาม priority
     return types.sort((a, b) => a.priority - b.priority);
   };
   
   const customerTypes = getCustomerTypeDisplay();
 
-  // Platform mapping
   const platformMap = {
     FB: {
       label: "Facebook",
@@ -69,38 +67,33 @@ const ConversationRow = React.memo(({
     },
     Line: {
       label: "Line",
-      icon: (
-        <svg width="12" height="12" viewBox="0 0 48 48" fill="currentColor">
-          <ellipse cx="24" cy="24" rx="20" ry="18" fill="#00c300"/>
-          <text x="24" y="30" textAnchor="middle" fontSize="18" fill="#fff" fontFamily="Arial">LINE</text>
-        </svg>
-      ),
+      icon: "📱",
       className: "line"
     }
   };
+  
   const platformInfo = platformMap[conv.platform] || platformMap.FB;
 
-  // Mining status mapping
   const miningStatusMap = {
-  'ยังไม่ขุด': { 
-    label: "ยังไม่ขุด", 
-    color: "#e53e3e",
-    icon: "⭕",
-    bgColor: "#fed7d7"
-  },
-  'ขุดแล้ว': { 
-    label: "ขุดแล้ว", 
-    color: "#48bb78",
-    icon: "✅",
-    bgColor: "#c6f6d5"
-  },
-  'มีการตอบกลับ': { 
-    label: "มีการตอบกลับ", 
-    color: "#3182ce",
-    icon: "💬",
-    bgColor: "#bee3f8"
-  }
-};
+    'ยังไม่ขุด': { 
+      label: "ยังไม่ขุด", 
+      color: "#e53e3e",
+      icon: "⭕",
+      bgColor: "#fed7d7"
+    },
+    'ขุดแล้ว': { 
+      label: "ขุดแล้ว", 
+      color: "#48bb78",
+      icon: "✅",
+      bgColor: "#c6f6d5"
+    },
+    'มีการตอบกลับ': { 
+      label: "มีการตอบกลับ", 
+      color: "#3182ce",
+      icon: "💬",
+      bgColor: "#bee3f8"
+    }
+  };
 
   const currentStatus = conv.miningStatus || 'ยังไม่ขุด';
   const miningStatusInfo = miningStatusMap[currentStatus] || miningStatusMap['ยังไม่ขุด'];
@@ -108,16 +101,16 @@ const ConversationRow = React.memo(({
   return (
     <tr className={`table-row ${isSelected ? 'selected' : ''} ${isRecentlyUpdated ? 'recently-updated' : ''}`}>
       <td className="table-cell text-center">
-        <div className="row-number">{idx + 1}</div> {/* แสดงหมายเลขแถว */}
+        <div className="row-number">{idx + 1}</div>
       </td>
       
       <td className="table-cell">
         <div className="user-info">
           <div className="user-avatar">
-            {conv.user_name?.charAt(0) || 'U'}
+            {displayName.charAt(0).toUpperCase()}
           </div>
           <div className="user-details">
-            <div className="user-name" >{conv.conversation_name || `บทสนทนาที่ ${idx + 1}`}</div>  {/* แสดงชื่อชื่อ */}
+            <div className="user-name">{displayName}</div>
             {conv.source_type && <CustomerInfoBadge customer={conv} />}
           </div>
         </div>
@@ -126,11 +119,11 @@ const ConversationRow = React.memo(({
       <td className="table-cell">
         <div className="date-display">
           {conv.first_interaction_at
-            ? new Date(conv.first_interaction_at).toLocaleDateString("th-TH", {  // แสดงวันที่ในรูปแบบไทย
+            ? new Date(conv.first_interaction_at).toLocaleDateString("th-TH", {
                 year: 'numeric', month: 'short', day: 'numeric'
               })
             : conv.created_time
-              ? new Date(conv.created_time).toLocaleDateString("th-TH", {  // ใช้ created_time ถ้าไม่มี first_interaction_at
+              ? new Date(conv.created_time).toLocaleDateString("th-TH", {
                   year: 'numeric', month: 'short', day: 'numeric'
                 })
               : "-"
@@ -139,20 +132,20 @@ const ConversationRow = React.memo(({
       </td>
       
       <TimeAgoCell   
-        lastMessageTime={conv.last_user_message_time}  // ไว่้บอกระยะเวลาที่หายไป
+        lastMessageTime={conv.last_user_message_time}
         updatedTime={conv.updated_time}
         userId={conv.raw_psid}
         onInactivityChange={onInactivityChange}
       />
       
-      <td className="table-cell"style={{paddingLeft:"17px"}}>      {/* Platform	 */}
-        <div className={`platform-badge ${platformInfo.className}`}>  
+      <td className="table-cell" style={{paddingLeft:"17px"}}>
+        <div className={`platform-badge ${platformInfo.className}`}>
           {platformInfo.icon}
           {platformInfo.label}
         </div>
       </td>
       
-      <td className="table-cell" style={{paddingLeft:"47px"}}>     {/* หมวดหมู่ลูกค้า */}
+      <td className="table-cell" style={{paddingLeft:"47px"}}>
         {customerTypes.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             {customerTypes.map((type, index) => (
@@ -182,7 +175,6 @@ const ConversationRow = React.memo(({
               >
                 <span style={{ fontSize: '10px' }}>{type.icon}</span>
                 {type.name}
-               
                 {isRecentlyUpdated && (
                   <span className="update-pulse" style={{
                     width: '6px',
@@ -210,7 +202,7 @@ const ConversationRow = React.memo(({
         )}
       </td>
       
-      <td className="table-cell" style={{paddingLeft:"35px"}}> {/* สถานะขุด */}
+      <td className="table-cell" style={{paddingLeft:"35px"}}>
         <div 
           className="status-indicator" 
           style={{ 
@@ -236,7 +228,7 @@ const ConversationRow = React.memo(({
         </div>
       </td>
       
-      <td className="table-cell text-center">    {/* Checkbox */}
+      <td className="table-cell text-center">
         <label className="custom-checkbox">
           <input
             type="checkbox"
@@ -247,6 +239,19 @@ const ConversationRow = React.memo(({
         </label>
       </td>
     </tr>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparison สำหรับ optimization
+  return (
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.isRecentlyUpdated === nextProps.isRecentlyUpdated &&
+    prevProps.conv.conversation_id === nextProps.conv.conversation_id &&
+    prevProps.conv.customer_type_name === nextProps.conv.customer_type_name &&
+    prevProps.conv.customer_type_knowledge_name === nextProps.conv.customer_type_knowledge_name &&
+    prevProps.conv.miningStatus === nextProps.conv.miningStatus &&
+    prevProps.conv.conversation_name === nextProps.conv.conversation_name &&
+    prevProps.conv.user_name === nextProps.conv.user_name &&
+    prevProps.idx === nextProps.idx
   );
 });
 
