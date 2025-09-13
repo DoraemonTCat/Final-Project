@@ -101,7 +101,7 @@ const ConversationRow = React.memo(({
   return (
     <tr className={`table-row ${isSelected ? 'selected' : ''} ${isRecentlyUpdated ? 'recently-updated' : ''}`}>
       <td className="table-cell text-center">
-        <div className="row-number">{idx + 1}</div>
+        <div className="row-number">{idx + 1}</div> {/* แสดงหมายเลขแถว */}
       </td>
       
       <td className="table-cell">
@@ -119,11 +119,11 @@ const ConversationRow = React.memo(({
       <td className="table-cell">
         <div className="date-display">
           {conv.first_interaction_at
-            ? new Date(conv.first_interaction_at).toLocaleDateString("th-TH", {
+            ? new Date(conv.first_interaction_at).toLocaleDateString("th-TH", {   // แสดงวันที่ในรูปแบบไทย
                 year: 'numeric', month: 'short', day: 'numeric'
               })
             : conv.created_time
-              ? new Date(conv.created_time).toLocaleDateString("th-TH", {
+              ? new Date(conv.created_time).toLocaleDateString("th-TH", { 
                   year: 'numeric', month: 'short', day: 'numeric'
                 })
               : "-"
@@ -131,21 +131,21 @@ const ConversationRow = React.memo(({
         </div>
       </td>
       
-      <TimeAgoCell   
+      <TimeAgoCell                                                            // ไว่้บอกระยะเวลาที่หายไป
         lastMessageTime={conv.last_user_message_time}
         updatedTime={conv.updated_time}
         userId={conv.raw_psid}
         onInactivityChange={onInactivityChange}
       />
       
-      <td className="table-cell" style={{paddingLeft:"17px"}}>
+      <td className="table-cell" style={{paddingLeft:"17px"}}>               {/* Platform	 */}
         <div className={`platform-badge ${platformInfo.className}`}>
           {platformInfo.icon}
           {platformInfo.label}
         </div>
       </td>
       
-      <td className="table-cell" style={{paddingLeft:"47px"}}>
+      <td className="table-cell" style={{paddingLeft:"47px"}}>            {/* หมวดหมู่ลูกค้า */}
         {customerTypes.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             {customerTypes.map((type, index) => (
@@ -202,7 +202,7 @@ const ConversationRow = React.memo(({
         )}
       </td>
       
-      <td className="table-cell" style={{paddingLeft:"35px"}}>
+      <td className="table-cell" style={{paddingLeft:"35px"}}>           {/* สถานะขุด */}
         <div 
           className="status-indicator" 
           style={{ 
@@ -228,7 +228,7 @@ const ConversationRow = React.memo(({
         </div>
       </td>
       
-      <td className="table-cell text-center">
+      <td className="table-cell text-center">                     {/* Checkbox */}
         <label className="custom-checkbox">
           <input
             type="checkbox"
