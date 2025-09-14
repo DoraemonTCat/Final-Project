@@ -223,64 +223,102 @@ const Dashboard = () => {
    * โหลดข้อมูลประเภทลูกค้า
    * @param {string} pageId - ID ของเพจ
    */
-  const fetchCustomerTypes = async (pageId) => {
-    if (!pageId) return;
+  // แก้ไขฟังก์ชัน fetchCustomerTypes ประมาณบรรทัด 192-250
+const fetchCustomerTypes = async (pageId) => {
+  if (!pageId) return;
+  
+  try {
+    const { startDate, endDate } = getDateRange(selectedDateRange);
+    const response = await fetch(`http://localhost:8000/fb-customers/by-page/${pageId}`);
+    const customers = await response.json();
     
-    try {
-      const { startDate, endDate } = getDateRange(selectedDateRange);
-      const response = await fetch(`http://localhost:8000/fb-customers/by-page/${pageId}`);
-      const customers = await response.json();
+    // กรองข้อมูลตามช่วงเวลา
+    const filteredCustomers = customers.filter(c => {
+      const customerDate = new Date(c.created_at);
+      return customerDate >= startDate && customerDate <= endDate;
+    });
+    
+    // ✅ แก้ไข: เปลี่ยนจาก customer_type_knowledge_name เป็น current_category_name
+    // นับจำนวนลูกค้าตาม Knowledge Type (กลุ่มจาก AI)
+    const knowledgeTypeCount = {};
+    const customTypeCount = {};
+    
+    filteredCustomers.forEach(customer => {
+      // นับกลุ่มจาก AI (Knowledge Group)
+      const knowledgeTypeName = customer.current_category_name || 'ยังไม่จัดกลุ่ม';
+      knowledgeTypeCount[knowledgeTypeName] = (knowledgeTypeCount[knowledgeTypeName] || 0) + 1;
       
-      // กรองข้อมูลตามช่วงเวลา
-      const filteredCustomers = customers.filter(c => {
-        const customerDate = new Date(c.created_at);
-        return customerDate >= startDate && customerDate <= endDate;
-      });
-      
-      // นับจำนวนลูกค้าตาม Knowledge Type
-      const typeCount = {};
-      filteredCustomers.forEach(customer => {
-        const typeName = customer.customer_type_knowledge_name || 'ยังไม่จัดกลุ่ม';
-        typeCount[typeName] = (typeCount[typeName] || 0) + 1;
-      });
-      
-      const pieData = Object.entries(typeCount).map(([name, value]) => ({
-        name,
-        value,
-        percentage: ((value / filteredCustomers.length) * 100).toFixed(1)
-      }));
-      
-      setCustomersByType(pieData);
-      
-      // คำนวณข้อมูล Inactivity
-      const inactivityRanges = [
-        { name: '< 1 วัน', min: 0, max: 1, count: 0 },
-        { name: '1-3 วัน', min: 1, max: 3, count: 0 },
-        { name: '3-7 วัน', min: 3, max: 7, count: 0 },
-        { name: '7-30 วัน', min: 7, max: 30, count: 0 },
-        { name: '> 30 วัน', min: 30, max: Infinity, count: 0 }
-      ];
-      
-      filteredCustomers.forEach(customer => {
-        if (customer.last_interaction_at) {
-          const lastInteraction = new Date(customer.last_interaction_at);
-          const now = new Date();
-          const diffDays = Math.floor((now - lastInteraction) / (1000 * 60 * 60 * 24));
-          
-          const range = inactivityRanges.find(r => diffDays >= r.min && diffDays < r.max);
-          if (range) range.count++;
-        }
-      });
-      
-      setInactivityData(inactivityRanges.map(r => ({
-        name: r.name,
-        value: r.count
-      })));
-      
-    } catch (error) {
-      console.error('Error fetching customer types:', error);
-    }
-  };
+      // นับกลุ่มที่ user สร้างเอง (Custom Group) - ถ้ามี
+      if (customer.custom_category_name) {
+        customTypeCount[customer.custom_category_name] = (customTypeCount[customer.custom_category_name] || 0) + 1;
+      }
+    });
+    
+    // สร้างข้อมูลสำหรับ Pie Chart - แสดงกลุ่มจาก AI
+    const pieData = Object.entries(knowledgeTypeCount).map(([name, value]) => ({
+      name,
+      value,
+      percentage: ((value / filteredCustomers.length) * 100).toFixed(1),
+      type: 'knowledge' // ระบุประเภท
+    }));
+    
+    // ถ้าต้องการแสดงกลุ่ม custom ด้วย (optional)
+    const customPieData = Object.entries(customTypeCount).map(([name, value]) => ({
+      name,
+      value,
+      percentage: ((value / filteredCustomers.length) * 100).toFixed(1),
+      type: 'custom' // ระบุประเภท
+    }));
+    
+    setCustomersByType(pieData); // แสดงเฉพาะ knowledge groups
+    // หรือถ้าต้องการแสดงทั้งสองแบบ:
+    // setCustomersByType([...pieData, ...customPieData]);
+    
+    // คำนวณข้อมูล Inactivity
+    const inactivityRanges = [
+      { name: '< 1 วัน', min: 0, max: 1, count: 0 },
+      { name: '1-3 วัน', min: 1, max: 3, count: 0 },
+      { name: '3-7 วัน', min: 3, max: 7, count: 0 },
+      { name: '7-30 วัน', min: 7, max: 30, count: 0 },
+      { name: '> 30 วัน', min: 30, max: Infinity, count: 0 }
+    ];
+    
+    filteredCustomers.forEach(customer => {
+      if (customer.last_interaction_at) {
+        const lastInteraction = new Date(customer.last_interaction_at);
+        const now = new Date();
+        const diffDays = Math.floor((now - lastInteraction) / (1000 * 60 * 60 * 24));
+        
+        const range = inactivityRanges.find(r => diffDays >= r.min && diffDays < r.max);
+        if (range) range.count++;
+      }
+    });
+    
+    setInactivityData(inactivityRanges.map(r => ({
+      name: r.name,
+      value: r.count
+    })));
+    
+    // ✅ เพิ่ม: บันทึกข้อมูลสถิติเพิ่มเติมสำหรับการแสดงผล
+    // สร้าง state เพิ่มเติมสำหรับแสดงสถิติแยกประเภท
+    setGroupStatistics({
+      knowledgeGroups: knowledgeTypeCount,
+      customGroups: customTypeCount,
+      totalKnowledgeGrouped: Object.values(knowledgeTypeCount).reduce((a, b) => a + b, 0) - (knowledgeTypeCount['ยังไม่จัดกลุ่ม'] || 0),
+      totalCustomGrouped: Object.values(customTypeCount).reduce((a, b) => a + b, 0)
+    });
+    
+  } catch (error) {
+    console.error('Error fetching customer types:', error);
+  }
+};
+
+const [groupStatistics, setGroupStatistics] = useState({
+  knowledgeGroups: {},
+  customGroups: {},
+  totalKnowledgeGrouped: 0,
+  totalCustomGrouped: 0
+});
 
   /**
    * โหลดข้อมูล Message Schedules
@@ -351,52 +389,57 @@ const Dashboard = () => {
    * @param {string} pageId - ID ของเพจ
    */
   const fetchRecentActivities = async (pageId) => {
-    if (!pageId) return;
+  if (!pageId) return;
+  
+  try {
+    const { startDate, endDate } = getDateRange(selectedDateRange);
+    const response = await fetch(`http://localhost:8000/fb-customers/by-page/${pageId}`);
+    const customers = await response.json();
     
-    try {
-      const { startDate, endDate } = getDateRange(selectedDateRange);
-      const response = await fetch(`http://localhost:8000/fb-customers/by-page/${pageId}`);
-      const customers = await response.json();
+    // กรองและเรียงตามเวลาล่าสุด
+    const sortedCustomers = customers
+      .filter(c => {
+        if (!c.last_interaction_at) return false;
+        const interactionDate = new Date(c.last_interaction_at);
+        return interactionDate >= startDate && interactionDate <= endDate;
+      })
+      .sort((a, b) => new Date(b.last_interaction_at) - new Date(a.last_interaction_at))
+      .slice(0, 10);
+    
+    const activities = sortedCustomers.map(customer => {
+      const time = new Date(customer.last_interaction_at);
+      const now = new Date();
+      const diffMs = now - time;
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
       
-      // กรองและเรียงตามเวลาล่าสุด
-      const sortedCustomers = customers
-        .filter(c => {
-          if (!c.last_interaction_at) return false;
-          const interactionDate = new Date(c.last_interaction_at);
-          return interactionDate >= startDate && interactionDate <= endDate;
-        })
-        .sort((a, b) => new Date(b.last_interaction_at) - new Date(a.last_interaction_at))
-        .slice(0, 10);
+      let timeAgo = '';
+      if (diffDays > 0) timeAgo = `${diffDays} วันที่แล้ว`;
+      else if (diffHours > 0) timeAgo = `${diffHours} ชั่วโมงที่แล้ว`;
+      else if (diffMins > 0) timeAgo = `${diffMins} นาทีที่แล้ว`;
+      else timeAgo = 'เมื่อสักครู่';
       
-      const activities = sortedCustomers.map(customer => {
-        const time = new Date(customer.last_interaction_at);
-        const now = new Date();
-        const diffMs = now - time;
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMins / 60);
-        const diffDays = Math.floor(diffHours / 24);
-        
-        let timeAgo = '';
-        if (diffDays > 0) timeAgo = `${diffDays} วันที่แล้ว`;
-        else if (diffHours > 0) timeAgo = `${diffHours} ชั่วโมงที่แล้ว`;
-        else if (diffMins > 0) timeAgo = `${diffMins} นาทีที่แล้ว`;
-        else timeAgo = 'เมื่อสักครู่';
-        
-        return {
-          id: customer.customer_psid,
-          name: customer.name || 'ไม่ระบุชื่อ',
-          action: customer.source_type === 'new' ? 'ลูกค้าใหม่' : 'ส่งข้อความ',
-          time: timeAgo,
-          type: customer.customer_type_knowledge_name || 'ยังไม่จัดกลุ่ม'
-        };
-      });
+      // ✅ แก้ไข: ใช้ current_category_name แทน customer_type_knowledge_name
+      const groupInfo = customer.current_category_name || 
+                       (customer.custom_category_name ? `Manual: ${customer.custom_category_name}` : 'ยังไม่จัดกลุ่ม');
       
-      setRecentActivities(activities);
-      
-    } catch (error) {
-      console.error('Error fetching activities:', error);
-    }
-  };
+      return {
+        id: customer.customer_psid,
+        name: customer.name || 'ไม่ระบุชื่อ',
+        action: customer.source_type === 'new' ? 'ลูกค้าใหม่' : 'ส่งข้อความ',
+        time: timeAgo,
+        type: groupInfo,
+        miningStatus: customer.mining_status || 'ยังไม่ขุด' // เพิ่มสถานะการขุด
+      };
+    });
+    
+    setRecentActivities(activities);
+    
+  } catch (error) {
+    console.error('Error fetching activities:', error);
+  }
+};
 
   /**
    * จัดการการเลือกช่วงเวลา
@@ -542,6 +585,8 @@ const Dashboard = () => {
 
       {/* Main Content */}
       <div className="main-dashboard-content" style={{ paddingBottom: '80px' }}>
+
+      
         
         {/* Stats Cards */}
         <div className="main-stats-grid">
@@ -804,6 +849,72 @@ const Dashboard = () => {
             )}
           </div>
         </div>
+
+          {/* Group Statistics Card - เพิ่มใหม่ */}
+          <div className="main-stats-grid" style={{ marginTop: '20px' }}>
+            {/* ลูกค้าที่จัดกลุ่มโดย AI */}
+            <div className="main-stat-card">
+              <div className="main-stat-card-decoration" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}></div>
+              <div className="main-stat-content">
+                <div className="main-stat-header">
+                  <div>
+                    <p className="main-stat-label">จัดกลุ่มโดย AI</p>
+                    <h2 className="main-stat-value">
+                      {groupStatistics.totalKnowledgeGrouped || 0}
+                    </h2>
+                    <p style={{ fontSize: '12px', color: '#718096', marginTop: '4px' }}>
+                      จาก {stats.totalCustomers} คน ({((groupStatistics.totalKnowledgeGrouped / stats.totalCustomers) * 100 || 0).toFixed(1)}%)
+                    </p>
+                  </div>
+                  <div className="main-stat-icon-box" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+                    🤖
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ลูกค้าที่จัดกลุ่มแบบ Manual */}
+            <div className="main-stat-card">
+              <div className="main-stat-card-decoration" style={{ background: 'linear-gradient(135deg, #48bb78 0%, #38a169 100%)' }}></div>
+              <div className="main-stat-content">
+                <div className="main-stat-header">
+                  <div>
+                    <p className="main-stat-label">จัดกลุ่มแบบ Manual</p>
+                    <h2 className="main-stat-value">
+                      {groupStatistics.totalCustomGrouped || 0}
+                    </h2>
+                    <p style={{ fontSize: '12px', color: '#718096', marginTop: '4px' }}>
+                      กลุ่มที่สร้างเอง
+                    </p>
+                  </div>
+                  <div className="main-stat-icon-box" style={{ background: 'linear-gradient(135deg, #48bb78 0%, #38a169 100%)' }}>
+                    ✋
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ลูกค้าที่ยังไม่จัดกลุ่ม */}
+            <div className="main-stat-card">
+              <div className="main-stat-card-decoration" style={{ background: 'linear-gradient(135deg, #f6ad55 0%, #ed8936 100%)' }}></div>
+              <div className="main-stat-content">
+                <div className="main-stat-header">
+                  <div>
+                    <p className="main-stat-label">ยังไม่จัดกลุ่ม</p>
+                    <h2 className="main-stat-value">
+                      {(groupStatistics.knowledgeGroups['ยังไม่จัดกลุ่ม'] || 0)}
+                    </h2>
+                    <p style={{ fontSize: '12px', color: '#718096', marginTop: '4px' }}>
+                      รอการจัดกลุ่ม
+                    </p>
+                  </div>
+                  <div className="main-stat-icon-box" style={{ background: 'linear-gradient(135deg, #f6ad55 0%, #ed8936 100%)' }}>
+                    ❓
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
 
         {/* Recent Activities Table */}
         <div className="main-chart-card">
