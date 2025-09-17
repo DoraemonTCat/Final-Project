@@ -18,7 +18,7 @@ _cache_image = {}
 def classify_and_assign_tier_hybrid(db: Session, page_id: int):
     # 1️⃣ โหลด knowledge config ที่ enabled
     enabled_knowledge_ids = [
-        pk.customer_type_knowledge_id  # ✅ แก้ไข field name
+        pk.customer_type_knowledge_id
         for pk in db.query(models.PageCustomerTypeKnowledge)
         .filter(
             models.PageCustomerTypeKnowledge.page_id == page_id,
@@ -52,14 +52,42 @@ def classify_and_assign_tier_hybrid(db: Session, page_id: int):
     pending_updates = []
 
     for cust in customers:
-        # ดึงข้อความล่าสุด
-        last_message = (
-            db.query(models.CustomerMessage.message_text,
-                     models.CustomerMessage.message_type)
-            .filter(models.CustomerMessage.customer_id == cust.id)
-            .order_by(models.CustomerMessage.created_at.desc())
+
+        last_classification = (
+            db.query(models.FBCustomerClassification)
+            .filter(models.FBCustomerClassification.customer_id == cust.id)
+            .order_by(models.FBCustomerClassification.classified_at.desc())
             .first()
         )
+        
+        last_message = None
+        if last_classification:
+            if last_classification.classified_at > cust.last_interaction_at:
+                # ✅ เคยจัดกลุ่มใหม่กว่าการคุยล่าสุด → ไม่ต้องจัดซ้ำ
+                print(f"⏭ Skip {cust.id}: already classified at {last_classification.classified_at}")
+                continue
+            else:
+                # 🔄 จัดใหม่จากข้อความหลัง classified_at
+                last_message = (
+                    db.query(models.CustomerMessage.message_text,
+                             models.CustomerMessage.message_type)
+                    .filter(
+                        models.CustomerMessage.customer_id == cust.id,
+                        models.CustomerMessage.created_at > last_classification.classified_at
+                    )
+                    .order_by(models.CustomerMessage.created_at.desc())
+                    .first()
+                )
+        else:
+            # ถ้ายังไม่เคยมี classification → ใช้ข้อความล่าสุดทั้งหมด
+            last_message = (
+                db.query(models.CustomerMessage.message_text,
+                        models.CustomerMessage.message_type)
+                .filter(models.CustomerMessage.customer_id == cust.id)
+                .order_by(models.CustomerMessage.created_at.desc())
+                .first()
+            )
+
         if not last_message:
             continue
 
@@ -67,7 +95,7 @@ def classify_and_assign_tier_hybrid(db: Session, page_id: int):
         if not message_text:
             continue
 
-        # 3️⃣ Classification
+        # 3️⃣ Classification (text → keyword → Gemini, attachment → image classifier)
         category_id = None
 
         if message_type == "text":
@@ -76,41 +104,38 @@ def classify_and_assign_tier_hybrid(db: Session, page_id: int):
                 category_id = classify_with_gemini(message_text, knowledge_map)
 
         elif message_type == "attachment":
+            # ตรวจว่าเป็นไฟล์รูปจริงหรือไม่ (รองรับ query string ต่อท้าย)
             if re.search(r'\.(png|jpe?g)(\?.*)?$', message_text, re.IGNORECASE):
                 category_id = classify_with_gemini_image(message_text, knowledge_map)
 
-        # 4️⃣ Update category ถ้ามีการเปลี่ยน
+        if cust.last_interaction_at:
+            diff_hours = (now - cust.last_interaction_at).total_seconds() / 3600
+            if diff_hours < 1:
+                print(f"⏳ Skip {cust.id}: last_interaction_at {diff_hours:.2f}h < 1h")
+                continue
+
+        # 4️⃣ Update knowledge id ถ้ามีการเปลี่ยน
         if category_id and category_id != cust.current_category_id:
-            # บันทึกประวัติการเปลี่ยนแปลง
-            old_category_id = cust.current_category_id
-            
-            # อัพเดท current_category_id
-            cust.current_category_id = category_id
-            
-            # บันทึกประวัติใน FBCustomerClassification
-            classification = models.FBCustomerClassification(
+            new_classification = models.FBCustomerClassification(
                 customer_id=cust.id,
-                old_category_id=old_category_id,
+                old_category_id=cust.current_category_id,  # ✅ แก้ไข: ใช้ current_category_id
                 new_category_id=category_id,
-                classified_by='hybrid_system',
+                classified_at=datetime.now(timezone.utc),
+                classified_by="Gemini-2.5-flash-lite",
                 page_id=page_id
             )
-            db.add(classification)
+            db.add(new_classification)
 
-            knowledge_type = db.query(models.CustomerTypeKnowledge).filter(
-                models.CustomerTypeKnowledge.id == category_id
-            ).first()
-            
-            page_record = db.query(models.FacebookPage).filter(
-                models.FacebookPage.ID == page_id  # ✅ ใช้ ID (uppercase)
-            ).first()
+            # update ค่า latest category ใน customer
+            cust.current_category_id = category_id  # ✅ แก้ไข: อัพเดท current_category_id
 
-            if knowledge_type and page_record:
+            knowledge_type = knowledge_map.get(category_id)
+            if knowledge_type:
                 update_data = {
-                    'page_id': page_record.page_id,  # facebook page_id string
+                    'page_id': page_id,
                     'psid': cust.customer_psid,
-                    'current_category_id': category_id,
-                    'current_category_name': knowledge_type.type_name,
+                    'current_category_id': category_id,  # ✅ แก้ไข: ใช้ current_category_id
+                    'current_category_name': knowledge_type.type_name,  # ✅ แก้ไข: ใช้ current_category_name
                     'timestamp': datetime.now(timezone.utc).isoformat()
                 }
                 pending_updates.append(update_data)
@@ -179,7 +204,7 @@ def classify_with_gemini(
     message_text: str,
     knowledge_map: dict,
     max_retries: int = 3,
-    model_name: str = "gemini-2.5-flash-lite"  # 👈 default คือ flash-lite
+    model_name: str = "gemini-2.5-flash-lite"
 ):
     if message_text in _cache_text:
         return _cache_text[message_text]
