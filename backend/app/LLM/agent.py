@@ -60,9 +60,35 @@ def classify_and_assign_tier_hybrid(db: Session, page_id: int):
             .first()
         )
         
+        # 🔥 แก้ไข: ดึงข้อความล่าสุดของ customer เพื่อเช็คเวลาจริง
+        last_customer_message_time = None
+        last_customer_message = (
+            db.query(models.CustomerMessage)
+            .filter(
+                models.CustomerMessage.customer_id == cust.id,
+                models.CustomerMessage.sender_id == cust.customer_psid  # ข้อความจาก customer เท่านั้น
+            )
+            .order_by(models.CustomerMessage.created_at.desc())
+            .first()
+        )
+        
+        if last_customer_message:
+            last_customer_message_time = last_customer_message.created_at
+        
+        # 🔥 ตรวจสอบว่า customer ส่งข้อความมาภายใน 1 ชั่วโมงหรือไม่
+        if last_customer_message_time:
+            # แปลงให้เป็น timezone aware ถ้าจำเป็น
+            if last_customer_message_time.tzinfo is None:
+                last_customer_message_time = last_customer_message_time.replace(tzinfo=timezone.utc)
+            
+            diff_hours = (now - last_customer_message_time).total_seconds() / 3600
+            if diff_hours < 1:
+                print(f"⏳ Skip {cust.id}: customer sent message {diff_hours:.2f}h ago (< 1h)")
+                continue
+        
         last_message = None
         if last_classification:
-            if last_classification.classified_at > cust.last_interaction_at:
+            if last_classification.classified_at > (last_customer_message_time or cust.last_interaction_at or datetime.min.replace(tzinfo=timezone.utc)):
                 # ✅ เคยจัดกลุ่มใหม่กว่าการคุยล่าสุด → ไม่ต้องจัดซ้ำ
                 print(f"⏭ Skip {cust.id}: already classified at {last_classification.classified_at}")
                 continue
@@ -108,17 +134,11 @@ def classify_and_assign_tier_hybrid(db: Session, page_id: int):
             if re.search(r'\.(png|jpe?g)(\?.*)?$', message_text, re.IGNORECASE):
                 category_id = classify_with_gemini_image(message_text, knowledge_map)
 
-        if cust.last_interaction_at:
-            diff_hours = (now - cust.last_interaction_at).total_seconds() / 3600
-            if diff_hours < 1:
-                print(f"⏳ Skip {cust.id}: last_interaction_at {diff_hours:.2f}h < 1h")
-                continue
-
         # 4️⃣ Update knowledge id ถ้ามีการเปลี่ยน
         if category_id and category_id != cust.current_category_id:
             new_classification = models.FBCustomerClassification(
                 customer_id=cust.id,
-                old_category_id=cust.current_category_id,  # ✅ แก้ไข: ใช้ current_category_id
+                old_category_id=cust.current_category_id,
                 new_category_id=category_id,
                 classified_at=datetime.now(timezone.utc),
                 classified_by="Gemini-2.5-flash-lite",
@@ -127,20 +147,20 @@ def classify_and_assign_tier_hybrid(db: Session, page_id: int):
             db.add(new_classification)
 
             # update ค่า latest category ใน customer
-            cust.current_category_id = category_id  # ✅ แก้ไข: อัพเดท current_category_id
+            cust.current_category_id = category_id
 
             knowledge_type = knowledge_map.get(category_id)
             if knowledge_type:
                 update_data = {
                     'page_id': page_id,
                     'psid': cust.customer_psid,
-                    'current_category_id': category_id,  # ✅ แก้ไข: ใช้ current_category_id
-                    'current_category_name': knowledge_type.type_name,  # ✅ แก้ไข: ใช้ current_category_name
+                    'current_category_id': category_id,
+                    'current_category_name': knowledge_type.type_name,
                     'timestamp': datetime.now(timezone.utc).isoformat()
                 }
                 pending_updates.append(update_data)
 
-        # 5️⃣ หา tier จากวัน
+        # 5️⃣ หา tier จากวัน - ใช้ last_interaction_at ตามเดิม (ไม่แก้ไข)
         if cust.last_interaction_at:
             days_since_last = (now - cust.last_interaction_at).days
             selected_tier = None
