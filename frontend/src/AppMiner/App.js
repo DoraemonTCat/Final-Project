@@ -27,7 +27,6 @@ import Popup from "./Component_App/MinerPopup";
 import SyncCustomersButton from './Component_App/SyncCustomersButton';
 import DateFilterBadge from './Component_App/DateFilterBadge';
 import DateEntryFilter from './Component_App/DateEntryFilter';
-import DraggableConversationTable from './Component_App/DraggableConversationTable';
 
 // Import component ย่อยที่แยกออกมา
 import TimeAgoCell from './Component_App/TimeAgoCell';
@@ -255,26 +254,6 @@ function App() {
   const getRemainingMines = () => {
     return Math.max(0, dailyMiningLimit - todayMiningCount);
   };
-
-  // ใน App component เพิ่ม callback function
-const handleDataReorder = useCallback((newOrderedData) => {
-  // อัพเดทข้อมูลตามลำดับใหม่
-  setConversations(newOrderedData);
-  setFilteredConversations(prevFiltered => {
-    if (prevFiltered.length > 0) {
-      return newOrderedData;
-    }
-    return prevFiltered;
-  });
-  
-  // บันทึกลำดับใหม่ลง localStorage (optional)
-  if (selectedPage) {
-    localStorage.setItem(
-      `conversationOrder_${selectedPage}`, 
-      JSON.stringify(newOrderedData.map(c => c.conversation_id))
-    );
-  }
-}, [selectedPage]);
 
   // =====================================================
   // SECTION 6: DATA LOADING FUNCTIONS
@@ -1396,28 +1375,36 @@ useEffect(() => {
         />
 
         <div className="content-area">
-         {loading ? (
-  <LoadingState />
-) : displayData.length === 0 ? (
-  <EmptyState selectedPage={selectedPage} />
-) : (
-  <DraggableConversationTable
-    displayData={displayData}
-    selectedConversationIds={selectedConversationIds}
-    onToggleCheckbox={toggleCheckbox}
-    onToggleAll={(checked) => {
-      if (checked) {
-        setSelectedConversationIds(displayData.map(conv => conv.conversation_id));
-      } else {
-        setSelectedConversationIds([]);
-      }
-    }}
-    onInactivityChange={handleInactivityChange}
-    onDataReorder={handleDataReorder}
-    recentlyUpdatedUsers={recentlyUpdatedUsers}
-  />
-)}
-          
+          {loading ? (
+            <LoadingState />
+          ) : displayData.length === 0 ? (
+            <EmptyState selectedPage={selectedPage} />
+          ) : (
+            <ConversationTable
+              displayData={displayData}
+              selectedConversationIds={selectedConversationIds}
+              onToggleCheckbox={toggleCheckbox}
+              onToggleAll={(checked) => {
+                if (checked) {
+                  setSelectedConversationIds(displayData.map(conv => conv.conversation_id));
+                } else {
+                  setSelectedConversationIds([]);
+                }
+              }}
+              onInactivityChange={handleInactivityChange}
+              renderRow={(conv, idx, isSelected, onToggleCheckbox, onInactivityChange) => (
+                <ConversationRow
+                  key={conv.conversation_id}
+                  conv={conv}
+                  idx={idx}
+                  isSelected={isSelected}
+                  onToggleCheckbox={onToggleCheckbox}
+                  onInactivityChange={onInactivityChange}
+                  isRecentlyUpdated={recentlyUpdatedUsers.has(conv.raw_psid)}
+                />
+              )}
+            />
+          )}
         </div>
 
         <ActionBar
