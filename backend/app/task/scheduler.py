@@ -84,13 +84,13 @@ def start_scheduler():
     scheduler = BackgroundScheduler()
     
     # Sync ข้อมูลลูกค้าทุกๆ 1 นาที (เดิม)
-    scheduler.add_job(schedule_facebook_sync, 'interval', minutes=2)
+    scheduler.add_job(schedule_facebook_sync, 'interval', minutes=1)
     
     # Sync ข้อความทุกนาที (เดิม)
-    scheduler.add_job(schedule_facebook_messages_sync, 'interval', seconds=30) 
+    scheduler.add_job(schedule_facebook_messages_sync, 'interval', minutes=2) 
     
     # 🆕 แก้ไข: เปลี่ยนจาก 1 นาที เป็น 30 วินาที
-    scheduler.add_job(scheduled_hybrid_classification, 'interval', seconds=30)
+    scheduler.add_job(scheduled_hybrid_classification, 'interval', minutes=5)
     
     # Sync retarget tiers เฉพาะตอนเริ่มระบบ
     sync_missing_tiers_on_startup()
