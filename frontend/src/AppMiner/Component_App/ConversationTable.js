@@ -9,15 +9,26 @@
 // =====================================================
 
 import React from 'react';
-import ConversationRow from './ConversationRow';
 
-const ConversationTable = ({ 
+const ConversationTable = React.memo(({ 
   displayData, 
   selectedConversationIds, 
   onToggleCheckbox, 
   onToggleAll,
-  onInactivityChange 
+  onInactivityChange,
+  renderRow 
 }) => {
+  // Memoize checkbox state
+  const isAllSelected = React.useMemo(() => 
+    selectedConversationIds.length === displayData.length && displayData.length > 0,
+    [selectedConversationIds.length, displayData.length]
+  );
+
+  // Memoize toggle all handler
+  const handleToggleAll = React.useCallback((e) => {
+    onToggleAll(e.target.checked);
+  }, [onToggleAll]);
+
   return (
     <div className="table-container">
       <table className="modern-table">
@@ -34,8 +45,8 @@ const ConversationTable = ({
               <label className="select-all-checkbox">
                 <input
                   type="checkbox"
-                  checked={selectedConversationIds.length === displayData.length && displayData.length > 0}
-                  onChange={(e) => onToggleAll(e.target.checked)}
+                  checked={isAllSelected}
+                  onChange={handleToggleAll}
                 />
                 <span className="checkbox-mark"></span>
               </label>
@@ -43,20 +54,29 @@ const ConversationTable = ({
           </tr>
         </thead>
         <tbody>
-          {displayData.map((conv, idx) => (
-            <ConversationRow
-              key={conv.conversation_id || idx}
-              conv={conv}
-              idx={idx}
-              isSelected={selectedConversationIds.includes(conv.conversation_id)}
-              onToggleCheckbox={onToggleCheckbox}
-              onInactivityChange={onInactivityChange}
-            />
-          ))}
+          {displayData.map((conv, idx) => 
+            renderRow(
+              conv, 
+              idx, 
+              selectedConversationIds.includes(conv.conversation_id),
+              onToggleCheckbox,
+              onInactivityChange
+            )
+          )}
         </tbody>
       </table>
     </div>
   );
-};
+}, (prevProps, nextProps) => {
+  // Custom comparison
+  return (
+    prevProps.displayData.length === nextProps.displayData.length &&
+    prevProps.selectedConversationIds.length === nextProps.selectedConversationIds.length &&
+    JSON.stringify(prevProps.displayData) === JSON.stringify(nextProps.displayData) &&
+    JSON.stringify(prevProps.selectedConversationIds) === JSON.stringify(nextProps.selectedConversationIds)
+  );
+});
+
+ConversationTable.displayName = 'ConversationTable';
 
 export default ConversationTable;

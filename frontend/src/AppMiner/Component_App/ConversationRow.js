@@ -21,11 +21,14 @@ const ConversationRow = React.memo(({
   onInactivityChange,
   isRecentlyUpdated
 }) => {
-  // ตรวจสอบและแสดงชื่อที่ถูกต้อง
-  const displayName = conv.conversation_name || conv.user_name || `User...${(conv.raw_psid || '').slice(-8)}` || `บทสนทนาที่ ${idx + 1}`;
+  // Memoize display name
+  const displayName = React.useMemo(() => 
+    conv.conversation_name || conv.user_name || `User...${(conv.raw_psid || '').slice(-8)}` || `บทสนทนาที่ ${idx + 1}`,
+    [conv.conversation_name, conv.user_name, conv.raw_psid, idx]
+  );
   
-  // ฟังก์ชันแสดงหมวดหมู่ลูกค้า
-  const getCustomerTypeDisplay = () => {
+  // Memoize customer types
+  const customerTypes = React.useMemo(() => {
     const types = [];
     
     if (conv.customer_type_name && conv.customer_type_custom_id) {
@@ -51,57 +54,77 @@ const ConversationRow = React.memo(({
     }
     
     return types.sort((a, b) => a.priority - b.priority);
-  };
-  
-  const customerTypes = getCustomerTypeDisplay();
+  }, [conv.customer_type_name, conv.customer_type_custom_id, 
+      conv.customer_type_knowledge_name, conv.customer_type_knowledge_id]);
 
-  const platformMap = {
-    FB: {
-      label: "Facebook",
-      icon: (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-        </svg>
-      ),
-      className: "facebook"
-    },
-    Line: {
-      label: "Line",
-      icon: "📱",
-      className: "line"
-    }
-  };
-  
-  const platformInfo = platformMap[conv.platform] || platformMap.FB;
+  // Memoize platform info
+  const platformInfo = React.useMemo(() => {
+    const platformMap = {
+      FB: {
+        label: "Facebook",
+        icon: (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+          </svg>
+        ),
+        className: "facebook"
+      },
+      Line: {
+        label: "Line",
+        icon: "📱",
+        className: "line"
+      }
+    };
+    
+    return platformMap[conv.platform] || platformMap.FB;
+  }, [conv.platform]);
 
-  const miningStatusMap = {
-    'ยังไม่ขุด': { 
-      label: "ยังไม่ขุด", 
-      color: "#e53e3e",
-      icon: "⭕",
-      bgColor: "#fed7d7"
-    },
-    'ขุดแล้ว': { 
-      label: "ขุดแล้ว", 
-      color: "#48bb78",
-      icon: "✅",
-      bgColor: "#c6f6d5"
-    },
-    'มีการตอบกลับ': { 
-      label: "มีการตอบกลับ", 
-      color: "#3182ce",
-      icon: "💬",
-      bgColor: "#bee3f8"
-    }
-  };
+  // Memoize mining status info
+  const miningStatusInfo = React.useMemo(() => {
+    const miningStatusMap = {
+      'ยังไม่ขุด': { 
+        label: "ยังไม่ขุด", 
+        color: "#e53e3e",
+        icon: "⭕",
+        bgColor: "#fed7d7"
+      },
+      'ขุดแล้ว': { 
+        label: "ขุดแล้ว", 
+        color: "#48bb78",
+        icon: "✅",
+        bgColor: "#c6f6d5"
+      },
+      'มีการตอบกลับ': { 
+        label: "มีการตอบกลับ", 
+        color: "#3182ce",
+        icon: "💬",
+        bgColor: "#bee3f8"
+      }
+    };
 
-  const currentStatus = conv.miningStatus || 'ยังไม่ขุด';
-  const miningStatusInfo = miningStatusMap[currentStatus] || miningStatusMap['ยังไม่ขุด'];
+    const currentStatus = conv.miningStatus || 'ยังไม่ขุด';
+    return miningStatusMap[currentStatus] || miningStatusMap['ยังไม่ขุด'];
+  }, [conv.miningStatus]);
+
+  // Memoize date display
+  const dateDisplay = React.useMemo(() => {
+    const dateStr = conv.first_interaction_at || conv.created_time;
+    if (!dateStr) return "-";
+    
+    return new Date(dateStr).toLocaleDateString("th-TH", {
+      year: 'numeric', month: 'short', day: 'numeric'
+    });
+  }, [conv.first_interaction_at, conv.created_time]);
+
+  // Memoize checkbox handler
+  const handleCheckboxChange = React.useCallback(() => {
+    onToggleCheckbox(conv.conversation_id);
+  }, [onToggleCheckbox, conv.conversation_id]);
 
   return (
     <tr className={`table-row ${isSelected ? 'selected' : ''} ${isRecentlyUpdated ? 'recently-updated' : ''}`}>
       <td className="table-cell text-center">
-        <div className="row-number">{idx + 1}</div> {/* แสดงหมายเลขแถว */}
+        <div className="row-number">{idx + 1}</div>
       </td>
       
       <td className="table-cell">
@@ -116,36 +139,25 @@ const ConversationRow = React.memo(({
         </div>
       </td>
       
-      <td className="table-cell">
-        <div className="date-display">
-          {conv.first_interaction_at
-            ? new Date(conv.first_interaction_at).toLocaleDateString("th-TH", {   // แสดงวันที่ในรูปแบบไทย
-                year: 'numeric', month: 'short', day: 'numeric'
-              })
-            : conv.created_time
-              ? new Date(conv.created_time).toLocaleDateString("th-TH", { 
-                  year: 'numeric', month: 'short', day: 'numeric'
-                })
-              : "-"
-          }
-        </div>
+      <td className="table-cell"> {/* แสดงวันที่ในรูปแบบไทย */} 
+        <div className="date-display">{dateDisplay}</div>  
       </td>
       
-      <TimeAgoCell                                                            // ไว่้บอกระยะเวลาที่หายไป
+      <TimeAgoCell
         lastMessageTime={conv.last_user_message_time}
         updatedTime={conv.updated_time}
         userId={conv.raw_psid}
         onInactivityChange={onInactivityChange}
       />
       
-      <td className="table-cell" style={{paddingLeft:"17px"}}>               {/* Platform	 */}
+      <td className="table-cell" style={{paddingLeft:"17px"}}>
         <div className={`platform-badge ${platformInfo.className}`}>
           {platformInfo.icon}
           {platformInfo.label}
         </div>
       </td>
       
-      <td className="table-cell" style={{paddingLeft:"47px"}}>            {/* หมวดหมู่ลูกค้า */}
+      <td className="table-cell" style={{paddingLeft:"47px"}}>
         {customerTypes.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             {customerTypes.map((type, index) => (
@@ -202,7 +214,7 @@ const ConversationRow = React.memo(({
         )}
       </td>
       
-      <td className="table-cell" style={{paddingLeft:"35px"}}>           {/* สถานะขุด */}
+      <td className="table-cell" style={{paddingLeft:"35px"}}>
         <div 
           className="status-indicator" 
           style={{ 
@@ -228,12 +240,12 @@ const ConversationRow = React.memo(({
         </div>
       </td>
       
-      <td className="table-cell text-center">                     {/* Checkbox */}
+      <td className="table-cell text-center">
         <label className="custom-checkbox">
           <input
             type="checkbox"
             checked={isSelected}
-            onChange={() => onToggleCheckbox(conv.conversation_id)}
+            onChange={handleCheckboxChange}
           />
           <span className="checkbox-mark"></span>
         </label>
@@ -241,7 +253,7 @@ const ConversationRow = React.memo(({
     </tr>
   );
 }, (prevProps, nextProps) => {
-  // Custom comparison สำหรับ optimization
+  // Enhanced comparison for better optimization
   return (
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.isRecentlyUpdated === nextProps.isRecentlyUpdated &&
@@ -251,8 +263,12 @@ const ConversationRow = React.memo(({
     prevProps.conv.miningStatus === nextProps.conv.miningStatus &&
     prevProps.conv.conversation_name === nextProps.conv.conversation_name &&
     prevProps.conv.user_name === nextProps.conv.user_name &&
+    prevProps.conv.last_user_message_time === nextProps.conv.last_user_message_time &&
+    prevProps.conv.updated_time === nextProps.conv.updated_time &&
     prevProps.idx === nextProps.idx
   );
 });
+
+ConversationRow.displayName = 'ConversationRow';
 
 export default ConversationRow;
