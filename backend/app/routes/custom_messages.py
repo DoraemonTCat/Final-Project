@@ -3,8 +3,7 @@ from sqlalchemy.orm import Session
 from app.database.database import get_db
 from pydantic import BaseModel, Field
 from typing import List
-from app.database.models import CustomerMessage, MessageSets , CustomMessage
-
+from app.database.models import FBCustomMessage, MessageSets  # เปลี่ยนจาก CustomMessage เป็น FBCustomMessage
 
 router = APIRouter()
 
@@ -12,7 +11,7 @@ router = APIRouter()
 class MessageCreate(BaseModel):
     message_set_id: int
     page_id: str
-    message_type: str = Field(..., pattern="^(text|image|video)$")# จำกัดชนิด
+    message_type: str = Field(..., pattern="^(text|image|video)$")
     content: str
     display_order: int
 
@@ -56,22 +55,21 @@ def update_message_set(set_id: int, data: MessageSetUpdate, db: Session = Depend
     db.refresh(message_set)
     return message_set
 
-# ✅ ลบชุดข้อความ (จะลบข้อความทั้งหมดในชุดด้วย cascade)
+# ✅ ลบชุดข้อความ
 @router.delete("/message_set/{set_id}")
 def delete_message_set(set_id: int, db: Session = Depends(get_db)):
     message_set = db.query(MessageSets).filter(MessageSets.id == set_id).first()
     if not message_set:
         raise HTTPException(status_code=404, detail="Message set not found")
     
-    # ลบชุดข้อความ (cascade จะลบ messages ที่เกี่ยวข้องอัตโนมัติ)
     db.delete(message_set)
     db.commit()
     return {"status": "deleted", "id": set_id}
 
-# ✅ เพิ่มข้อความใหม่ (เดี่ยว)
+# ✅ เพิ่มข้อความใหม่ (เดี่ยว) - เปลี่ยนเป็น FBCustomMessage
 @router.post("/custom_message")
 def create_custom_message(data: MessageCreate, db: Session = Depends(get_db)):
-    msg = CustomMessage(
+    msg = FBCustomMessage(  # เปลี่ยนจาก CustomMessage เป็น FBCustomMessage
         message_set_id=data.message_set_id,
         page_id=data.page_id,
         message_type=data.message_type,
@@ -83,11 +81,11 @@ def create_custom_message(data: MessageCreate, db: Session = Depends(get_db)):
     db.refresh(msg)
     return msg
 
-# ✅ เพิ่มข้อความหลายรายการในชุดเดียว
+# ✅ เพิ่มข้อความหลายรายการในชุดเดียว - เปลี่ยนเป็น FBCustomMessage
 @router.post("/custom_message/batch")
 def create_batch_custom_messages(data: MessageBatchCreate, db: Session = Depends(get_db)):
     new_messages = [
-        CustomMessage(
+        FBCustomMessage(  # เปลี่ยนจาก CustomMessage เป็น FBCustomMessage
             message_set_id=m.message_set_id,
             page_id=m.page_id,
             message_type=m.message_type,
@@ -99,19 +97,19 @@ def create_batch_custom_messages(data: MessageBatchCreate, db: Session = Depends
     db.commit()
     return {"status": "created", "count": len(new_messages)}
 
-# ✅ ดึงข้อความในชุดข้อความตาม message_set_id
+# ✅ ดึงข้อความในชุดข้อความตาม message_set_id - เปลี่ยนเป็น FBCustomMessage
 @router.get("/custom_messages/{message_set_id}")
 def get_custom_messages(message_set_id: int, db: Session = Depends(get_db)):
-    messages = db.query(CustomMessage)\
-        .filter(CustomMessage.message_set_id == message_set_id)\
-        .order_by(CustomMessage.display_order)\
+    messages = db.query(FBCustomMessage)\
+        .filter(FBCustomMessage.message_set_id == message_set_id)\
+        .order_by(FBCustomMessage.display_order)\
         .all()
     return messages
 
-# ✅ ลบข้อความตาม id
+# ✅ ลบข้อความตาม id - เปลี่ยนเป็น FBCustomMessage
 @router.delete("/custom_message/{id}")
 def delete_custom_message(id: int, db: Session = Depends(get_db)):
-    msg = db.query(CustomMessage).get(id)
+    msg = db.query(FBCustomMessage).filter(FBCustomMessage.id == id).first()
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
     db.delete(msg)

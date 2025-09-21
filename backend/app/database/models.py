@@ -21,7 +21,6 @@ class FacebookPage(Base):
     fb_customer_classifications = relationship("FBCustomerClassification", back_populates="page", foreign_keys="FBCustomerClassification.page_id")
     fb_customer_custom_classifications = relationship("FBCustomerCustomClassification", back_populates="page", foreign_keys="FBCustomerCustomClassification.page_id")
     page_customer_type_knowledge = relationship("PageCustomerTypeKnowledge", back_populates="page", foreign_keys="PageCustomerTypeKnowledge.page_id")
-    custom_messages = relationship("CustomMessage", back_populates="page", foreign_keys="CustomMessage.page_id")
 
 class FbCustomer(Base):
     __tablename__ = "fb_customers"
@@ -175,7 +174,6 @@ class MessageSets(Base):
 
     messages = relationship("FBCustomMessage", back_populates="message_set", cascade="all, delete-orphan", foreign_keys="FBCustomMessage.message_set_id")
     page = relationship("FacebookPage", back_populates="message_sets", foreign_keys=[page_id])
-    custom_messages = relationship("CustomMessage", back_populates="message_set", cascade="all, delete-orphan", foreign_keys="CustomMessage.message_set_id")
 
 class FBCustomMessage(Base):
     __tablename__ = "fb_custom_messages"
