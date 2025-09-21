@@ -475,6 +475,7 @@ function App() {
   // SECTION 8: OPTIMIZED MESSAGE FUNCTIONS
   // =====================================================
   
+  // ใช้ useCallback เพื่อลดการสร้างฟังก์ชันซ้ำๆ
   const sendMessagesBySelectedSets = useCallback(async (messageSetIds) => {
     if (!Array.isArray(messageSetIds) || selectedConversationIds.length === 0) {
       return;

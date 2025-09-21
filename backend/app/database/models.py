@@ -3,7 +3,6 @@ from sqlalchemy import (Column, String, Integer, TIMESTAMP, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from app.database.database import Base
 
-
 class FacebookPage(Base):
     __tablename__ = "facebook_pages"
 
@@ -23,7 +22,6 @@ class FacebookPage(Base):
     fb_customer_custom_classifications = relationship("FBCustomerCustomClassification", back_populates="page", foreign_keys="FBCustomerCustomClassification.page_id")
     page_customer_type_knowledge = relationship("PageCustomerTypeKnowledge", back_populates="page", foreign_keys="PageCustomerTypeKnowledge.page_id")
     custom_messages = relationship("CustomMessage", back_populates="page", foreign_keys="CustomMessage.page_id")
-
 
 class FbCustomer(Base):
     __tablename__ = "fb_customers"
@@ -83,7 +81,6 @@ class CustomerTypeCustom(Base):
     )
     customer_type_messages = relationship("CustomerTypeMessage", back_populates="customer_type_custom")
 
-
 class CustomerTypeKnowledge(Base):
     __tablename__ = "customer_type_knowledge"
 
@@ -109,7 +106,6 @@ class CustomerTypeKnowledge(Base):
     )
     page_knowledge = relationship("PageCustomerTypeKnowledge", back_populates="knowledge")
 
-
 class PageCustomerTypeKnowledge(Base):
     __tablename__ = "page_customer_type_knowledge"
 
@@ -124,7 +120,6 @@ class PageCustomerTypeKnowledge(Base):
     page = relationship("FacebookPage", back_populates="page_customer_type_knowledge", foreign_keys=[page_id])
     knowledge = relationship("CustomerTypeKnowledge", back_populates="page_knowledge", foreign_keys=[customer_type_knowledge_id])
     messages = relationship("CustomerTypeMessage", back_populates="page_customer_type_knowledge", foreign_keys="CustomerTypeMessage.page_customer_type_knowledge_id")
-
 
 class CustomerTypeMessage(Base):
     __tablename__ = "customer_type_messages"
@@ -144,7 +139,6 @@ class CustomerTypeMessage(Base):
     customer_type_custom = relationship("CustomerTypeCustom", back_populates="customer_type_messages")
     page_customer_type_knowledge = relationship("PageCustomerTypeKnowledge", back_populates="messages")
     schedules = relationship("MessageSchedule", back_populates="customer_type_message")
-
 
 class MessageSchedule(Base):
     __tablename__ = "message_schedules"
@@ -171,7 +165,6 @@ class MessageSchedule(Base):
 
     customer_type_message = relationship("CustomerTypeMessage", back_populates="schedules")
 
-
 class MessageSets(Base):
     __tablename__ = "message_sets"
 
@@ -183,7 +176,6 @@ class MessageSets(Base):
     messages = relationship("FBCustomMessage", back_populates="message_set", cascade="all, delete-orphan", foreign_keys="FBCustomMessage.message_set_id")
     page = relationship("FacebookPage", back_populates="message_sets", foreign_keys=[page_id])
     custom_messages = relationship("CustomMessage", back_populates="message_set", cascade="all, delete-orphan", foreign_keys="CustomMessage.message_set_id")
-
 
 class FBCustomMessage(Base):
     __tablename__ = "fb_custom_messages"
@@ -221,7 +213,6 @@ class FBCustomerClassification(Base):
     def __repr__(self):
         return f"<FbCustomerClassification(id={self.id}, customer_id={self.customer_id}, new_category_id={self.new_category_id}, page_id={self.page_id})>"
 
-
 class FBCustomerCustomClassification(Base):
     __tablename__ = "fb_customer_custom_classifications"
 
@@ -237,7 +228,6 @@ class FBCustomerCustomClassification(Base):
     old_category = relationship("CustomerTypeCustom", foreign_keys=[old_category_id], back_populates="old_custom_classifications")
     new_category = relationship("CustomerTypeCustom", foreign_keys=[new_category_id], back_populates="custom_classifications")
     page = relationship("FacebookPage", back_populates="fb_customer_custom_classifications", foreign_keys=[page_id])
-
 
 class FBCustomerMiningStatus(Base):
     __tablename__ = "fb_customer_mining_status"
@@ -256,7 +246,6 @@ class FBCustomerMiningStatus(Base):
     )
 
     customer = relationship("FbCustomer", back_populates="mining_statuses", foreign_keys=[customer_id])
-
 
 class RetargetTiersConfig(Base):
     __tablename__ = "retarget_tiers_config"
@@ -281,7 +270,6 @@ class RetargetTiersConfig(Base):
         ),
     )
 
-
 class CustomerMessage(Base):
     __tablename__ = "customer_messages"
 
@@ -295,18 +283,3 @@ class CustomerMessage(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     customer = relationship("FbCustomer", back_populates="customermessage", foreign_keys=[customer_id])
-    
-class CustomMessage(Base):
-    __tablename__ = "custom_messages"
-
-    id = Column(Integer, primary_key=True, index=True)
-    message_set_id = Column(Integer, ForeignKey("message_sets.id", ondelete="CASCADE"), nullable=False)
-    page_id = Column(String, ForeignKey("facebook_pages.page_id", ondelete="CASCADE"), nullable=False)
-    message_type = Column(String(20), nullable=False)
-    content = Column(Text, nullable=False)
-    display_order = Column(Integer, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    # 🔗 Relationships
-    message_set = relationship("MessageSets", back_populates="custom_messages", foreign_keys=[message_set_id])
-    page = relationship("FacebookPage", back_populates="custom_messages", foreign_keys=[page_id])
