@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useSearchParams ,useNavigate} from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import '../CSS/Default.css';
 import {
-  saveMessageToDB, saveMessagesBatch, getMessagesBySetId, 
+  saveMessageToDB, saveMessagesBatch, getMessagesBySetId,
   deleteMessageFromDB, createMessageSet, getMessageSetsByPage, updateMessageSet
 } from "../Features/Tool";
 import Sidebar from './Sidebar';
-
 
 function SetDefault() {
   const [selectedPage, setSelectedPage] = useState("");
@@ -21,7 +20,8 @@ function SetDefault() {
     type: 'text',
     content: '',
     file: null,
-    preview: null
+    preview: null,
+    imageFile: null  // เพิ่ม field สำหรับเก็บ File object
   });
 
   // Listen for page changes from Sidebar
@@ -32,7 +32,7 @@ function SetDefault() {
     };
 
     window.addEventListener('pageChanged', handlePageChange);
-    
+
     const savedPage = localStorage.getItem("selectedPage");
     if (savedPage) {
       setSelectedPage(savedPage);
@@ -71,7 +71,9 @@ function SetDefault() {
         type: msg.message_type || 'text',
         content: msg.content || msg.message,
         order: msg.display_order || index,
-        originalData: msg
+        originalData: msg,
+        hasImage: msg.has_image || false,
+        imageBase64: msg.image_base64 || null  // รับ base64 จาก backend
       }));
       setMessageSequence(sequenceData);
     } catch (err) {
@@ -82,36 +84,7 @@ function SetDefault() {
     }
   };
 
-  useEffect(() => {
-    const loadMessages = async () => {
-      if (selectedPage && !isEditMode) {
-        setLoading(true);
-        try {
-          console.log(`🔄 กำลังโหลดข้อความสำหรับ page_id: ${selectedPage}`);
-          const data = await getMessagesBySetId(selectedPage);
-          console.log(`✅ โหลดข้อความสำเร็จ:`, data);
-
-          const sequenceData = Array.isArray(data) ? data.map((msg, index) => ({
-            id: msg.id || Date.now() + index,
-            type: 'text',
-            content: msg.message,
-            order: index,
-            originalData: msg
-          })) : [];
-          setMessageSequence(sequenceData);
-        } catch (err) {
-          console.error("โหลดข้อความล้มเหลว:", err);
-          setMessageSequence([]);
-        } finally {
-          setLoading(false);
-        }
-      }
-    };
-
-    if (!isEditMode) {
-      loadMessages();
-    }
-  }, [selectedPage, isEditMode]);
+  
 
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
@@ -122,7 +95,8 @@ function SetDefault() {
       ...prev,
       file,
       preview,
-      content: file.name
+      content: file.name,
+      imageFile: file  // เก็บ File object
     }));
   };
 
@@ -148,6 +122,7 @@ function SetDefault() {
       content: currentInput.content || currentInput.file?.name || '',
       file: currentInput.file,
       preview: currentInput.preview,
+      imageFile: currentInput.imageFile,  // เก็บ File object
       order: messageSequence.length
     };
 
@@ -160,7 +135,8 @@ function SetDefault() {
       type: 'text',
       content: '',
       file: null,
-      preview: null
+      preview: null,
+      imageFile: null
     });
   };
 
@@ -211,15 +187,6 @@ function SetDefault() {
     setMessageSequence(newSequence);
   };
 
-  const convertFileToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = error => reject(error);
-    });
-  };
-
   const saveMessageSequence = async () => {
     if (!messageSetName.trim()) {
       alert("กรุณากรอกชื่อชุดข้อความ");
@@ -231,12 +198,13 @@ function SetDefault() {
     }
 
     try {
+      setLoading(true);
       let setId = selectedMessageSetId;
 
       // ถ้าเป็นโหมดแก้ไข อัพเดทชื่อชุดข้อความ
       if (isEditMode && setId) {
         await updateMessageSet(setId, messageSetName.trim());
-        
+
         // ลบข้อความเดิมทั้งหมดก่อน
         const oldMessages = messageSequence.filter(item => item.originalData);
         for (const msg of oldMessages) {
@@ -254,41 +222,30 @@ function SetDefault() {
         setSelectedMessageSetId(setId);
       }
 
-      // บันทึกข้อความทั้งหมดใหม่
-      const payloads = await Promise.all(messageSequence.map(async (item, index) => {
-        let mediaData = null;
-
-        if (item.file) {
-          const base64 = await convertFileToBase64(item.file);
-          if (item.type === 'image') {
-            mediaData = {
-              images1: [{ name: item.file.name, type: item.file.type, size: item.file.size, data: base64 }],
-              videos: [],
-              images2: []
-            };
-          } else if (item.type === 'video') {
-            mediaData = {
-              videos: [{ name: item.file.name, type: item.file.type, size: item.file.size, data: base64 }],
-              images1: [],
-              images2: []
-            };
-          }
-        }
-
-        const content = item.type === 'text' ? item.content : `[${item.type.toUpperCase()}] ${item.content}`;
-
-        return {
+      // เตรียม payloads สำหรับบันทึก
+      const payloads = messageSequence.map((item, index) => {
+        const payload = {
           message_set_id: setId,
           page_id: selectedPage,
           message_type: item.type,
-          content,
+          content: item.type === 'text' ? item.content : `[${item.type.toUpperCase()}] ${item.content}`,
           display_order: index,
+          imageFile: null  // จะใส่ file object ถ้ามี
         };
-      }));
 
+        // ถ้าเป็นรูปภาพและมี file ให้ใส่ file object
+        if (item.type === 'image' && item.imageFile) {
+          payload.imageFile = item.imageFile;
+        }
+
+        return payload;
+      });
+
+      // บันทึกทั้งหมด
       await saveMessagesBatch(payloads);
-     
+
       console.log("✅ บันทึกข้อความสำเร็จ");
+      alert("บันทึกข้อความสำเร็จ!");
 
       // โหลดข้อความใหม่
       const data = await getMessagesBySetId(setId);
@@ -297,14 +254,19 @@ function SetDefault() {
         type: msg.message_type || 'text',
         content: msg.content || msg.message,
         order: msg.display_order || index,
-        originalData: msg
+        originalData: msg,
+        hasImage: msg.has_image || false,
+        imageBase64: msg.image_base64 || null
       }));
 
       setMessageSequence(sequenceData);
       setIsEditMode(true);
+
     } catch (error) {
       console.error("เกิดข้อผิดพลาดในการบันทึก:", error);
       alert("เกิดข้อผิดพลาดในการบันทึก: " + error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -335,18 +297,57 @@ function SetDefault() {
     }
   };
 
+  // Component สำหรับแสดง preview รูปภาพ
+  const ImagePreview = ({ item }) => {
+    if (item.preview) {
+      // รูปภาพที่เพิ่งเลือก
+      return (
+        <img 
+          src={item.preview} 
+          alt="Preview" 
+          style={{ 
+            maxWidth: '100px', 
+            maxHeight: '100px', 
+            marginTop: '5px',
+            borderRadius: '4px',
+            border: '1px solid #ddd'
+          }} 
+        />
+      );
+    } else if (item.imageBase64) {
+      // รูปภาพที่โหลดมาจาก database
+      return (
+        <img 
+          src={item.imageBase64} 
+          alt="Saved" 
+          style={{ 
+            maxWidth: '100px', 
+            maxHeight: '100px', 
+            marginTop: '5px',
+            borderRadius: '4px',
+            border: '1px solid #ddd'
+          }} 
+        />
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="app-container">
       <Sidebar />
 
       <div className="message-settings-container">
-        
-       
-        <h3 className="header" style={{background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" , width:"380px" , marginLeft:"30%" , borderRadius:"20px" , color:"white" , boxShadow: "0 4px 15px rgba(0, 0, 0, 0.3)" }} >
+        <h3 className="header" style={{
+          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+          width: "380px",
+          marginLeft: "30%",
+          borderRadius: "20px",
+          color: "white",
+          boxShadow: "0 4px 15px rgba(0, 0, 0, 0.3)"
+        }}>
           {isEditMode ? "แก้ไขชุดข้อความ" : "ตั้งค่าลำดับข้อความ Default"}
         </h3>
-       
-        
 
         <div className="sequence-container">
           <div className="sequence-card">
@@ -372,7 +373,8 @@ function SetDefault() {
                   type: e.target.value,
                   content: '',
                   file: null,
-                  preview: null
+                  preview: null,
+                  imageFile: null
                 }))}
                 className="input-select"
               >
@@ -423,7 +425,7 @@ function SetDefault() {
 
             <button
               onClick={addToSequence}
-              disabled={!selectedPage}
+              disabled={!selectedPage || loading}
               className="add-btn"
             >
               ➕ เพิ่มในลำดับ
@@ -433,22 +435,24 @@ function SetDefault() {
           <div className="sequence-card">
             <div className="sequence-header-container">
               <h3 className="sequence-header">📋 ลำดับการส่ง </h3>
-             <button
-              onClick={() => {
-                saveMessageSequence();       // เรียกฟังก์ชันบันทึกก่อน
-                navigate("/manage-message-sets");  // แล้วค่อยย้อนกลับ
-              }}
-              className="save-btn" style={{ width:"40%"}}
-            >
-              💾 {isEditMode ? "บันทึกการแก้ไข" : "บันทึกทั้งหมด" }
-            </button>
+              <button
+                onClick={() => {
+                  saveMessageSequence();
+                   navigate("/manage-message-sets");  // แล้วค่อยย้อนกลับ
+                }}
+                disabled={loading}
+                className="save-btn" 
+                style={{ width: "40%" }}
+              >
+                {loading ? '⏳ กำลังบันทึก...' : `💾 ${isEditMode ? "บันทึกการแก้ไข" : "บันทึกทั้งหมด"}`}
+              </button>
             </div>
 
             <div className="sequence-hint">
               💡 ลากและวางเพื่อจัดลำดับใหม่
             </div>
 
-            {loading ? (
+            {loading && !messageSequence.length ? (
               <div className="loading-state">
                 🔄 กำลังโหลด...
               </div>
@@ -487,6 +491,8 @@ function SetDefault() {
                       <div className="sequence-text">
                         {item.content}
                       </div>
+                      {/* แสดง preview รูปภาพ */}
+                      {item.type === 'image' && <ImagePreview item={item} />}
                     </div>
 
                     <button
@@ -506,8 +512,8 @@ function SetDefault() {
           </div>
         </div>
 
-        <Link to="/manage-message-sets" className="back-btn" >
-          ← 
+        <Link to="/manage-message-sets" className="back-btn">
+          ←
         </Link>
       </div>
     </div>

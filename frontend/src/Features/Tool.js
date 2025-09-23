@@ -43,7 +43,18 @@ export const connectFacebook = () => {
 };
 
 // 🔸 เพิ่มข้อความใหม่แบบเดี่ยว
-export async function saveMessageToDB({ pageId, messageSetId, messageType, content, displayOrder }) {
+export async function saveMessageToDB({ pageId, messageSetId, messageType, content, displayOrder, imageFile }) {
+  let imageBase64 = null;
+  
+  // ถ้ามีไฟล์รูปภาพ ให้แปลงเป็น base64
+  if (imageFile && messageType === 'image') {
+    try {
+      imageBase64 = await fileToBase64(imageFile);
+    } catch (error) {
+      console.error("Error converting image to base64:", error);
+    }
+  }
+  
   const res = await fetch("http://localhost:8000/custom_message", {
     method: "POST",
     headers: {
@@ -54,7 +65,8 @@ export async function saveMessageToDB({ pageId, messageSetId, messageType, conte
       message_set_id: messageSetId,
       message_type: messageType,
       content,
-      display_order: displayOrder
+      display_order: displayOrder,
+      image_data_base64: imageBase64
     })
   });
 
@@ -132,12 +144,32 @@ export const fetchConversations = async (pageId) => {
 
 // 🔸 เพิ่มข้อความหลายรายการในชุดเดียว
 export async function saveMessagesBatch(messagesArray) {
+  // แปลงรูปภาพเป็น base64 สำหรับแต่ละข้อความ
+  const processedMessages = await Promise.all(
+    messagesArray.map(async (msg) => {
+      let imageBase64 = null;
+      
+      if (msg.imageFile && msg.message_type === 'image') {
+        try {
+          imageBase64 = await fileToBase64(msg.imageFile);
+        } catch (error) {
+          console.error("Error converting image to base64:", error);
+        }
+      }
+      
+      return {
+        ...msg,
+        image_data_base64: imageBase64
+      };
+    })
+  );
+  
   const res = await fetch("http://localhost:8000/custom_message/batch", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ messages: messagesArray })
+    body: JSON.stringify({ messages: processedMessages })
   });
 
   if (!res.ok) throw new Error("บันทึกข้อความชุดไม่สำเร็จ");
@@ -148,7 +180,10 @@ export async function saveMessagesBatch(messagesArray) {
 export async function getMessagesBySetId(messageSetId) {
   const res = await fetch(`http://localhost:8000/custom_messages/${messageSetId}`);
   if (!res.ok) throw new Error("โหลดข้อความไม่สำเร็จ");
-  return res.json();
+  const messages = await res.json();
+  
+  // messages จะมี image_base64 มาให้แล้วถ้ามีรูปภาพ
+  return messages;
 }
 
 // 🔸 ลบข้อความรายตัว
@@ -158,6 +193,43 @@ export async function deleteMessageFromDB(messageId) {
   });
 
   if (!res.ok) throw new Error("ลบข้อความไม่สำเร็จ");
+  return res.json();
+}
+
+// 🔸 ดึงรูปภาพโดยตรง (optional - ถ้าต้องการดึงแยก)
+export async function getMessageImage(messageId) {
+  const res = await fetch(`http://localhost:8000/custom_message/${messageId}/image`);
+  if (!res.ok) throw new Error("โหลดรูปภาพไม่สำเร็จ");
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
+// 🔸 อัพเดทข้อความพร้อมรูปภาพ
+export async function updateMessageWithImage(messageId, { messageType, content, displayOrder, imageFile }) {
+  let imageBase64 = null;
+  
+  if (imageFile && messageType === 'image') {
+    try {
+      imageBase64 = await fileToBase64(imageFile);
+    } catch (error) {
+      console.error("Error converting image to base64:", error);
+    }
+  }
+  
+  const res = await fetch(`http://localhost:8000/custom_message/${messageId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      message_type: messageType,
+      content,
+      display_order: displayOrder,
+      image_data_base64: imageBase64
+    })
+  });
+
+  if (!res.ok) throw new Error("อัพเดทข้อความไม่สำเร็จ");
   return res.json();
 }
 
@@ -374,4 +446,14 @@ export async function updateCustomerTypeKnowledge(knowledgeId, updateData) {
   });
   if (!res.ok) throw new Error("ไม่สามารถแก้ไข knowledge type ได้");
   return res.json();
+}
+
+// 🔸 Helper function สำหรับแปลง File เป็น base64
+export async function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = error => reject(error);
+  });
 }
