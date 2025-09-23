@@ -14,30 +14,31 @@ from typing import List, Optional, Union
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 import logging
+import base64
 
 from app.database import models, crud
 from app.database.database import get_db
 
-# ==================== Configuration ====================
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # ==================== Pydantic Models - Messages ====================
 class GroupMessageCreate(BaseModel):
     """Model สำหรับสร้างข้อความใหม่"""
-    page_id: Union[int, str]  # รองรับทั้ง int และ string
-    customer_type_custom_id: Optional[Union[int, str]] = None  # รองรับ "knowledge_123" format
+    page_id: Union[int, str]
+    customer_type_custom_id: Optional[Union[int, str]] = None
     page_customer_type_knowledge_id: Optional[int] = None
     message_type: str
     content: str
-  
     display_order: int
+    image_data_base64: Optional[str] = None  # เพิ่ม field สำหรับ binary data
 
 class GroupMessageUpdate(BaseModel):
     """Model สำหรับอัพเดทข้อความ"""
     message_type: Optional[str] = None
     content: Optional[str] = None
     display_order: Optional[int] = None
+    image_data_base64: Optional[str] = None  # เพิ่ม field สำหรับ binary data
 
 class GroupMessageResponse(BaseModel):
     """Model สำหรับ response ของข้อความ"""
@@ -85,20 +86,32 @@ class MessageScheduleResponse(BaseModel):
 
 # ==================== User Groups Messages APIs ====================
 
-@router.post("/group-messages", response_model=GroupMessageResponse)
+@router.post("/group-messages", response_model=dict)
 async def create_group_message(
     message_data: GroupMessageCreate,
     db: Session = Depends(get_db)
 ):
-    """สร้างข้อความใหม่สำหรับ user group"""
+    """สร้างข้อความใหม่สำหรับ user group พร้อม binary data"""
     try:
+        # แปลง base64 เป็น binary ถ้ามี
+        image_binary = None
+        if message_data.image_data_base64 and message_data.message_type in ['image', 'video']:
+            try:
+                # ตัด prefix 'data:image/...;base64,' หรือ 'data:video/...;base64,' ออกถ้ามี
+                if ',' in message_data.image_data_base64:
+                    image_binary = base64.b64decode(message_data.image_data_base64.split(',')[1])
+                else:
+                    image_binary = base64.b64decode(message_data.image_data_base64)
+            except Exception as e:
+                logger.error(f"Error decoding base64: {e}")
+        
         db_message = models.CustomerTypeMessage(
             page_id=message_data.page_id,
             customer_type_custom_id=message_data.customer_type_custom_id,
             message_type=message_data.message_type,
             content=message_data.content,
-        
-            display_order=message_data.display_order
+            display_order=message_data.display_order,
+            image_data=image_binary  # เก็บ binary data
         )
         
         db.add(db_message)
@@ -106,34 +119,75 @@ async def create_group_message(
         db.refresh(db_message)
         
         logger.info(f"Created message for group {message_data.customer_type_custom_id}")
-        return db_message
+        
+        return {
+            "id": db_message.id,
+            "page_id": db_message.page_id,
+            "customer_type_custom_id": db_message.customer_type_custom_id,
+            "message_type": db_message.message_type,
+            "content": db_message.content,
+            "display_order": db_message.display_order,
+            "has_image": bool(db_message.image_data),
+            "created_at": db_message.created_at.isoformat() if db_message.created_at else None
+        }
         
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating group message: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.get("/group-messages/{page_id}/{group_id}", response_model=List[GroupMessageResponse])
+@router.get("/group-messages/{page_id}/{group_id}")
 async def get_group_messages(
     page_id: int,
     group_id: int,
     db: Session = Depends(get_db)
 ):
-    """ดึงข้อความทั้งหมดของ user group"""
+    """ดึงข้อความทั้งหมดของ user group พร้อม binary data"""
     messages = db.query(models.CustomerTypeMessage).filter(
         models.CustomerTypeMessage.page_id == page_id,
         models.CustomerTypeMessage.customer_type_custom_id == group_id
     ).order_by(models.CustomerTypeMessage.display_order).all()
     
-    return messages
+    result = []
+    for msg in messages:
+        msg_dict = {
+            "id": msg.id,
+            "page_id": msg.page_id,
+            "customer_type_custom_id": msg.customer_type_custom_id,
+            "message_type": msg.message_type,
+            "content": msg.content,
+            "display_order": msg.display_order,
+            "created_at": msg.created_at.isoformat() if msg.created_at else None,
+            "has_image": bool(msg.image_data),
+            "has_media": bool(msg.image_data),
+            "image_base64": None,
+            "media_base64": None
+        }
+        
+        # ถ้ามี binary data ให้แปลงเป็น base64
+        if msg.image_data:
+            try:
+                media_base64 = base64.b64encode(msg.image_data).decode('utf-8')
+                if msg.message_type == 'image':
+                    msg_dict["image_base64"] = f"data:image/jpeg;base64,{media_base64}"
+                    msg_dict["media_base64"] = msg_dict["image_base64"]
+                elif msg.message_type == 'video':
+                    msg_dict["image_base64"] = f"data:video/mp4;base64,{media_base64}"
+                    msg_dict["media_base64"] = msg_dict["image_base64"]
+            except Exception as e:
+                logger.error(f"Error encoding media to base64: {e}")
+        
+        result.append(msg_dict)
+    
+    return result
 
-@router.put("/group-messages/{message_id}", response_model=GroupMessageResponse)
+@router.put("/group-messages/{message_id}")
 async def update_group_message(
     message_id: int,
     update_data: GroupMessageUpdate,
     db: Session = Depends(get_db)
 ):
-    """อัพเดทข้อความของ user group"""
+    """อัพเดทข้อความของ user group พร้อม binary data"""
     message = db.query(models.CustomerTypeMessage).filter(
         models.CustomerTypeMessage.id == message_id
     ).first()
@@ -149,10 +203,29 @@ async def update_group_message(
     if update_data.display_order is not None:
         message.display_order = update_data.display_order
     
+    # อัพเดทรูปภาพ/วิดีโอถ้ามี
+    if update_data.image_data_base64:
+        try:
+            if ',' in update_data.image_data_base64:
+                message.image_data = base64.b64decode(update_data.image_data_base64.split(',')[1])
+            else:
+                message.image_data = base64.b64decode(update_data.image_data_base64)
+        except Exception as e:
+            logger.error(f"Error decoding base64: {e}")
+    elif update_data.message_type == 'text':
+        # ถ้าเปลี่ยนเป็น text ให้ลบ binary data
+        message.image_data = None
+    
     db.commit()
     db.refresh(message)
     
-    return message
+    return {
+        "id": message.id,
+        "message_type": message.message_type,
+        "content": message.content,
+        "display_order": message.display_order,
+        "has_image": bool(message.image_data)
+    }
 
 @router.delete("/group-messages/{message_id}")
 async def delete_group_message(
@@ -179,7 +252,7 @@ async def create_knowledge_group_message(
     message_data: GroupMessageCreate,
     db: Session = Depends(get_db)
 ):
-    """สร้างข้อความใหม่สำหรับ knowledge group"""
+    """สร้างข้อความใหม่สำหรับ knowledge group พร้อม binary data"""
     try:
         # ตรวจสอบและแปลง customer_type_custom_id
         group_id_str = str(message_data.customer_type_custom_id)
@@ -203,15 +276,26 @@ async def create_knowledge_group_message(
             db, page.ID, knowledge_id
         )
         
+        # แปลง base64 เป็น binary ถ้ามี
+        image_binary = None
+        if message_data.image_data_base64 and message_data.message_type in ['image', 'video']:
+            try:
+                if ',' in message_data.image_data_base64:
+                    image_binary = base64.b64decode(message_data.image_data_base64.split(',')[1])
+                else:
+                    image_binary = base64.b64decode(message_data.image_data_base64)
+            except Exception as e:
+                logger.error(f"Error decoding base64: {e}")
+        
         # สร้างข้อความใหม่
         db_message = models.CustomerTypeMessage(
             page_id=page.ID,
             page_customer_type_knowledge_id=page_knowledge.id,
-            customer_type_custom_id=None,  # ไม่ใส่ค่าสำหรับ knowledge groups
+            customer_type_custom_id=None,
             message_type=message_data.message_type,
             content=message_data.content,
-         
-            display_order=message_data.display_order
+            display_order=message_data.display_order,
+            image_data=image_binary  # เก็บ binary data
         )
         
         db.add(db_message)
@@ -226,8 +310,9 @@ async def create_knowledge_group_message(
             "page_customer_type_knowledge_id": db_message.page_customer_type_knowledge_id,
             "message_type": db_message.message_type,
             "content": db_message.content,
-          
-            "display_order": db_message.display_order
+            "display_order": db_message.display_order,
+            "has_image": bool(db_message.image_data),
+            "created_at": db_message.created_at.isoformat() if db_message.created_at else None
         }
         
     except ValueError as e:
@@ -244,7 +329,7 @@ async def get_knowledge_group_messages(
     knowledge_id: Union[int, str],
     db: Session = Depends(get_db)
 ):
-    """ดึงข้อความของ knowledge group"""
+    """ดึงข้อความของ knowledge group พร้อม binary data"""
     try:
         # แปลง knowledge_id เป็น int
         if isinstance(knowledge_id, str):
@@ -276,15 +361,34 @@ async def get_knowledge_group_messages(
         # Format response
         result = []
         for msg in messages:
-            result.append({
+            msg_dict = {
                 "id": msg.id,
                 "page_id": msg.page_id,
                 "page_customer_type_knowledge_id": msg.page_customer_type_knowledge_id,
                 "message_type": msg.message_type,
                 "content": msg.content,
-          
-                "display_order": msg.display_order
-            })
+                "display_order": msg.display_order,
+                "created_at": msg.created_at.isoformat() if msg.created_at else None,
+                "has_image": bool(msg.image_data),
+                "has_media": bool(msg.image_data),
+                "image_base64": None,
+                "media_base64": None
+            }
+            
+            # ถ้ามี binary data ให้แปลงเป็น base64
+            if msg.image_data:
+                try:
+                    media_base64 = base64.b64encode(msg.image_data).decode('utf-8')
+                    if msg.message_type == 'image':
+                        msg_dict["image_base64"] = f"data:image/jpeg;base64,{media_base64}"
+                        msg_dict["media_base64"] = msg_dict["image_base64"]
+                    elif msg.message_type == 'video':
+                        msg_dict["image_base64"] = f"data:video/mp4;base64,{media_base64}"
+                        msg_dict["media_base64"] = msg_dict["image_base64"]
+                except Exception as e:
+                    logger.error(f"Error encoding media to base64: {e}")
+            
+            result.append(msg_dict)
         
         return result
         
