@@ -129,25 +129,19 @@ async def webhook_post(
     body = await request.json()
     
     for entry in body.get("entry", []):
-        page_id = entry.get("id")  # Page ID
-        
-        # ดึง page จาก database
+        page_id = entry.get("id")
         page = crud.get_page_by_page_id(db, page_id) if page_id else None
         
         for msg_event in entry.get("messaging", []):
             sender_id = msg_event["sender"]["id"]
             
-            # ตรวจสอบว่าไม่ใช่ข้อความจาก page เอง
             if page and sender_id != page_id:
                 try:
-                    # ตรวจสอบว่ามี user ในระบบแล้วหรือไม่
                     existing_customer = crud.get_customer_by_psid(db, page.ID, sender_id)
                     
                     if not existing_customer:
-                        # เป็น user ใหม่! ทำการ sync อัตโนมัติทันที
+                        # User ใหม่
                         logger.info(f"🆕 พบ User ใหม่: {sender_id} ในเพจ {page.page_name}")
-                        
-                        # Sync ข้อมูลในพื้นหลัง
                         background_tasks.add_task(
                             sync_new_user_data_enhanced,
                             page_id,
@@ -155,13 +149,12 @@ async def webhook_post(
                             page.ID,
                             db
                         )
-                        
                     else:
-                        # User เก่า - อัพเดทเวลาล่าสุดที่ทักเข้ามา
+                        # User เก่า - อัพเดท interaction และตรวจสอบสถานะการขุด
                         crud.update_customer_interaction(db, page.ID, sender_id)
                         logger.info(f"📝 อัพเดท last_interaction_at สำหรับ: {existing_customer.name}")
                         
-                        # ตรวจสอบและอัพเดทสถานะการขุดเมื่อมีข้อความเข้ามา
+                        # ตรวจสอบและอัพเดทสถานะการขุด
                         current_mining_status = db.query(models.FBCustomerMiningStatus).filter(
                             models.FBCustomerMiningStatus.customer_id == existing_customer.id
                         ).order_by(models.FBCustomerMiningStatus.created_at.desc()).first()
@@ -177,7 +170,7 @@ async def webhook_post(
                             db.commit()
                             logger.info(f"💬 Updated mining status to 'มีการตอบกลับ' for: {sender_id}")
                             
-                            # ส่ง SSE update สำหรับสถานะการขุด (optional)
+                            # ส่ง SSE update สำหรับสถานะการขุด
                             from app.routes.facebook.sse import customer_type_update_queue
                             try:
                                 update_data = {

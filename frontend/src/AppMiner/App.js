@@ -343,35 +343,39 @@ function App() {
   }, [selectedPage, loadConversations, conversations.length]);
 
   const loadMiningStatuses = useCallback(async (pageId) => {
-    try {
-      const response = await fetch(`http://localhost:8000/mining-status/${pageId}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.statuses) {
-          setMiningStatuses(data.statuses);
+  try {
+    const response = await fetch(`http://localhost:8000/mining-status/${pageId}`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && data.statuses) {
+        setMiningStatuses(data.statuses);
+        
+        // Batch update conversations ด้วยสถานะใหม่
+        requestAnimationFrame(() => {
+          setConversations(prevConvs => 
+            prevConvs.map(conv => ({
+              ...conv,
+              miningStatus: data.statuses[conv.raw_psid]?.status || 'ยังไม่ขุด',
+              miningStatusUpdatedAt: data.statuses[conv.raw_psid]?.created_at
+            }))
+          );
           
-          // Batch update conversations
-          requestAnimationFrame(() => {
-            setConversations(prevConvs => 
-              prevConvs.map(conv => ({
-                ...conv,
-                miningStatus: data.statuses[conv.raw_psid]?.status || 'ยังไม่ขุด'
-              }))
-            );
-            
-            setAllConversations(prevAll =>
-              prevAll.map(conv => ({
-                ...conv,
-                miningStatus: data.statuses[conv.raw_psid]?.status || 'ยังไม่ขุด'
-              }))
-            );
-          });
-        }
+          setAllConversations(prevAll =>
+            prevAll.map(conv => ({
+              ...conv,
+              miningStatus: data.statuses[conv.raw_psid]?.status || 'ยังไม่ขุด',
+              miningStatusUpdatedAt: data.statuses[conv.raw_psid]?.created_at
+            }))
+          );
+        });
+        
+        console.log('✅ Loaded mining statuses:', data.statuses);
       }
-    } catch (error) {
-      console.error('Error loading mining statuses:', error);
     }
-  }, []);
+  } catch (error) {
+    console.error('Error loading mining statuses:', error);
+  }
+}, []);
 
   // =====================================================
   // SECTION 7: OPTIMIZED FILTER FUNCTIONS
@@ -841,14 +845,47 @@ const renderConversationRow = useCallback((conv, idx, isSelected, onToggleCheckb
 
   // Optimized realtime update handler
   const handleRealtimeUpdate = useCallback((updates) => {
-    if (!Array.isArray(updates) || updates.length === 0) return;
-    
-    // Queue updates
-    updateQueueRef.current.push(...updates);
-    
-    // Process batch after a short delay
-    setTimeout(processBatchUpdates, 100);
-  }, [processBatchUpdates]);
+  if (!Array.isArray(updates) || updates.length === 0) return;
+  
+  // Process all updates
+  requestAnimationFrame(() => {
+    updates.forEach(update => {
+      // ถ้ามี mining_status ให้อัพเดททันที
+      if (update.mining_status || update.action === 'mining_status_update') {
+        setMiningStatuses(prev => ({
+          ...prev,
+          [update.psid]: {
+            status: update.mining_status || 'ยังไม่ขุด',
+            updatedAt: update.timestamp || new Date().toISOString()
+          }
+        }));
+        
+        // อัพเดท conversations
+        setConversations(prevConvs =>
+          prevConvs.map(conv => 
+            conv.raw_psid === update.psid 
+              ? { ...conv, miningStatus: update.mining_status || conv.miningStatus }
+              : conv
+          )
+        );
+        
+        setAllConversations(prevAll =>
+          prevAll.map(conv => 
+            conv.raw_psid === update.psid 
+              ? { ...conv, miningStatus: update.mining_status || conv.miningStatus }
+              : conv
+          )
+        );
+        
+        // แสดง notification
+        if (update.mining_status === 'มีการตอบกลับ') {
+          showNotification('info', 'สถานะอัพเดท', 
+            `ลูกค้า ${update.name || update.psid?.slice(-8) || ''} มีการตอบกลับ`);
+        }
+      }
+    });
+  });
+}, [showNotification]);
 
   const handleAddUsersFromFile = useCallback((usersFromDatabase) => {
     requestAnimationFrame(() => {
@@ -889,22 +926,23 @@ const renderConversationRow = useCallback((conv, idx, isSelected, onToggleCheckb
   
   // Background refresh with debounce
   useEffect(() => {
-    if (!selectedPage) return;
+  if (!selectedPage) return;
 
-    let refreshTimeout;
-    const backgroundRefresh = async () => {
-      if (!loading && !isBackgroundLoading) {
-        await handleloadConversations(false, false, true);
-      }
-      refreshTimeout = setTimeout(backgroundRefresh, 30000);
-    };
-
+  let refreshTimeout;
+  const backgroundRefresh = async () => {
+    if (!loading && !isBackgroundLoading) {
+      await handleloadConversations(false, false, true);
+      await loadMiningStatuses(selectedPage);  // เพิ่มบรรทัดนี้
+    }
     refreshTimeout = setTimeout(backgroundRefresh, 30000);
+  };
 
-    return () => {
-      if (refreshTimeout) clearTimeout(refreshTimeout);
-    };
-  }, [selectedPage, loading, isBackgroundLoading, handleloadConversations]);
+  refreshTimeout = setTimeout(backgroundRefresh, 30000);
+
+  return () => {
+    if (refreshTimeout) clearTimeout(refreshTimeout);
+  };
+}, [selectedPage, loading, isBackgroundLoading, handleloadConversations, loadMiningStatuses]); // เพิ่ม loadMiningStatuses
 
   // Apply filters with debounce
   useEffect(() => {
@@ -959,30 +997,31 @@ const renderConversationRow = useCallback((conv, idx, isSelected, onToggleCheckb
 
   // Load data when page changes
   useEffect(() => {
-    if (selectedPage) {
-      // Clear states
-      setDateEntryFilter(null);
-      setFilteredConversations([]);
-      setSyncDateRange(null);
-      setSelectedConversationIds([]);
-      setSelectedMessageSetIds([]);
-      
-      // Load data with cache check
-      Promise.all([
-        loadMessages(selectedPage),
-        loadConversations(selectedPage)
-      ]).catch(err => console.error("Error loading data:", err));
-    } else {
-      setDefaultMessages([]);
-      setConversations([]);
-      setDateEntryFilter(null);
-      setFilteredConversations([]);
-      setSyncDateRange(null);
-      setSelectedConversationIds([]);
-      setSelectedMessageSetIds([]);
-      setMiningStatuses({});
-    }
-  }, [selectedPage, loadMessages, loadConversations]);
+  if (selectedPage) {
+    // Clear states
+    setDateEntryFilter(null);
+    setFilteredConversations([]);
+    setSyncDateRange(null);
+    setSelectedConversationIds([]);
+    setSelectedMessageSetIds([]);
+    
+    // Load data with cache check
+    Promise.all([
+      loadMessages(selectedPage),
+      loadConversations(selectedPage),
+      loadMiningStatuses(selectedPage)  // เพิ่มบรรทัดนี้
+    ]).catch(err => console.error("Error loading data:", err));
+  } else {
+    setDefaultMessages([]);
+    setConversations([]);
+    setDateEntryFilter(null);
+    setFilteredConversations([]);
+    setSyncDateRange(null);
+    setSelectedConversationIds([]);
+    setSelectedMessageSetIds([]);
+    setMiningStatuses({});
+  }
+}, [selectedPage, loadMessages, loadConversations, loadMiningStatuses]); 
 
   // Optimized clock update
   useEffect(() => {
