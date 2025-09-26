@@ -57,22 +57,21 @@ async def update_mining_status(
                     errors.append(f"Customer {psid} not found")
                     continue
                 
-                # สร้างหรืออัพเดท mining status
-                existing_status = db.query(models.FBCustomerMiningStatus).filter(
+                # ลบสถานะเก่าทั้งหมดของ customer นี้ก่อน
+                db.query(models.FBCustomerMiningStatus).filter(
                     models.FBCustomerMiningStatus.customer_id == customer.id
-                ).order_by(models.FBCustomerMiningStatus.created_at.desc()).first()
+                ).delete()
                 
-                # เพิ่มสถานะใหม่เฉพาะเมื่อสถานะเปลี่ยน
-                if not existing_status or existing_status.status != status_update.status:
-                    new_status = models.FBCustomerMiningStatus(
-                        customer_id=customer.id,
-                        status=status_update.status,
-                        note=status_update.note or f"Updated via mining action at {datetime.now()}"
-                    )
-                    db.add(new_status)
-                    updated_count += 1
-                    
-                    logger.info(f"✅ Updated mining status for {psid}: {status_update.status}")
+                # เพิ่มสถานะใหม่
+                new_status = models.FBCustomerMiningStatus(
+                    customer_id=customer.id,
+                    status=status_update.status,
+                    note=status_update.note or f"Updated via mining action at {datetime.now()}"
+                )
+                db.add(new_status)
+                updated_count += 1
+                
+                logger.info(f"✅ Updated mining status for {psid}: {status_update.status} (deleted old records)")
             
             except Exception as e:
                 logger.error(f"Error updating status for {psid}: {e}")
@@ -106,9 +105,9 @@ async def get_mining_statuses(
         if not page:
             raise HTTPException(status_code=404, detail="Page not found")
         
-        # Query สถานะล่าสุดของแต่ละลูกค้า
+        # Query สถานะล่าสุดของแต่ละลูกค้า (จะมีแค่ 1 record ต่อ customer เพราะเราลบเก่าออกแล้ว)
         query = """
-            SELECT DISTINCT ON (c.customer_psid) 
+            SELECT 
                 c.customer_psid,
                 ms.status,
                 ms.note,
@@ -116,7 +115,7 @@ async def get_mining_statuses(
             FROM fb_customers c
             LEFT JOIN fb_customer_mining_status ms ON c.id = ms.customer_id
             WHERE c.page_id = :page_id
-            ORDER BY c.customer_psid, ms.created_at DESC NULLS LAST
+            ORDER BY c.customer_psid
         """
         
         from sqlalchemy import text
@@ -154,24 +153,81 @@ async def reset_mining_status(
         if not page:
             raise HTTPException(status_code=404, detail="Page not found")
         
+        reset_count = 0
         for psid in customer_psids:
             customer = crud.get_customer_by_psid(db, page.ID, psid)
             if customer:
+                # ลบสถานะเก่าทั้งหมด
+                db.query(models.FBCustomerMiningStatus).filter(
+                    models.FBCustomerMiningStatus.customer_id == customer.id
+                ).delete()
+                
+                # เพิ่มสถานะใหม่เป็น "ยังไม่ขุด"
                 new_status = models.FBCustomerMiningStatus(
                     customer_id=customer.id,
                     status="ยังไม่ขุด",
                     note="Reset status"
                 )
                 db.add(new_status)
+                reset_count += 1
         
         db.commit()
         
         return {
             "success": True,
-            "message": f"Reset {len(customer_psids)} customers to 'ยังไม่ขุด'"
+            "reset_count": reset_count,
+            "message": f"Reset {reset_count} customers to 'ยังไม่ขุด'"
         }
         
     except Exception as e:
         db.rollback()
         logger.error(f"Error resetting mining status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# API สำหรับลบประวัติสถานะการขุดเก่าทั้งหมด (maintenance)
+@router.delete("/mining-status/clean-history/{page_id}")
+async def clean_mining_history(
+    page_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    ลบประวัติสถานะการขุดเก่าทั้งหมด เหลือแค่สถานะล่าสุดของแต่ละลูกค้า
+    """
+    try:
+        page = crud.get_page_by_page_id(db, page_id)
+        if not page:
+            raise HTTPException(status_code=404, detail="Page not found")
+        
+        # Query เพื่อหา customers ทั้งหมดของ page นี้
+        customers = db.query(models.FbCustomer).filter(
+            models.FbCustomer.page_id == page.ID
+        ).all()
+        
+        total_deleted = 0
+        
+        for customer in customers:
+            # หาสถานะล่าสุดของ customer นี้
+            latest_status = db.query(models.FBCustomerMiningStatus).filter(
+                models.FBCustomerMiningStatus.customer_id == customer.id
+            ).order_by(models.FBCustomerMiningStatus.created_at.desc()).first()
+            
+            if latest_status:
+                # ลบทุก record ที่ไม่ใช่ record ล่าสุด
+                deleted = db.query(models.FBCustomerMiningStatus).filter(
+                    models.FBCustomerMiningStatus.customer_id == customer.id,
+                    models.FBCustomerMiningStatus.id != latest_status.id
+                ).delete()
+                total_deleted += deleted
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "total_deleted": total_deleted,
+            "message": f"Cleaned {total_deleted} old mining status records"
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error cleaning mining history: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,8 +1,9 @@
+# backend/app/service/auto_sync_service.py
 import asyncio
 from datetime import datetime, timedelta
 import logging
 from typing import Dict, List, Set, Optional
-from app.database import crud, models  # เพิ่ม models
+from app.database import crud, models
 from app.database.database import SessionLocal
 from app.service.facebook_api import fb_get
 import pytz
@@ -18,9 +19,9 @@ class AutoSyncService:
         self.is_running = False
         self.sync_interval = 30  # sync ทุก 30 วินาที
         self.page_tokens = {}
-         # เก็บ track เวลาล่าสุดที่ sync แต่ละ conversation
+        # เก็บ track เวลาล่าสุดที่ sync แต่ละ conversation
         self.last_sync_times: Dict[str, datetime] = {}
-         # เก็บ message ID ล่าสุดที่เห็นของแต่ละ user
+        # เก็บ message ID ล่าสุดที่เห็นของแต่ละ user
         self.last_seen_messages: Dict[str, str] = {}  # {user_id: last_message_id}
         
     # API สำหรับอัพเดท page tokens  
@@ -29,7 +30,7 @@ class AutoSyncService:
         self.page_tokens = tokens
         logger.info(f"📌 Updated page tokens for {len(tokens)} pages")
      
-     # API สำหรับแปลง datetime ให้มี timezone 
+    # API สำหรับแปลง datetime ให้มี timezone 
     def make_datetime_aware(self, dt: Optional[datetime]) -> Optional[datetime]:
         """แปลง datetime ให้มี timezone"""
         if dt is None:
@@ -200,14 +201,19 @@ class AutoSyncService:
                             new_customer = crud.create_or_update_customer(db, page.ID, participant_id, customer_data)
                             new_count += 1
                             
-                            # สร้างสถานะการขุดเริ่มต้น
-                            initial_mining_status = models.FBCustomerMiningStatus(
-                                customer_id=new_customer.id,
-                                status="ยังไม่ขุด",
-                                note=f"New user added at {datetime.now()}"
-                            )
-                            db.add(initial_mining_status)
-                            db.commit()
+                            # ลบสถานะการขุดเก่า (ถ้ามี) และสร้างสถานะการขุดเริ่มต้น
+                            if new_customer:
+                                db.query(models.FBCustomerMiningStatus).filter(
+                                    models.FBCustomerMiningStatus.customer_id == new_customer.id
+                                ).delete()
+                                
+                                initial_mining_status = models.FBCustomerMiningStatus(
+                                    customer_id=new_customer.id,
+                                    status="ยังไม่ขุด",
+                                    note=f"New user added at {datetime.now()}"
+                                )
+                                db.add(initial_mining_status)
+                                db.commit()
                             
                             # ส่ง SSE notification สำหรับ user ใหม่
                             try:
@@ -219,7 +225,8 @@ class AutoSyncService:
                                     'name': user_name,
                                     'action': 'new',
                                     'timestamp': datetime.now().isoformat(),
-                                    'profile_pic': profile_pic
+                                    'profile_pic': profile_pic,
+                                    'mining_status': 'ยังไม่ขุด'
                                 }
                                 
                                 await customer_type_update_queue.put(update_data)
@@ -249,6 +256,12 @@ class AutoSyncService:
                                 
                                 # ถ้าสถานะปัจจุบันคือ "ขุดแล้ว" ให้เปลี่ยนเป็น "มีการตอบกลับ"
                                 if current_mining_status and current_mining_status.status == "ขุดแล้ว":
+                                    # ลบสถานะเก่าทั้งหมด
+                                    db.query(models.FBCustomerMiningStatus).filter(
+                                        models.FBCustomerMiningStatus.customer_id == existing_customer.id
+                                    ).delete()
+                                    
+                                    # เพิ่มสถานะใหม่
                                     new_status = models.FBCustomerMiningStatus(
                                         customer_id=existing_customer.id,
                                         status="มีการตอบกลับ",
@@ -257,7 +270,7 @@ class AutoSyncService:
                                     db.add(new_status)
                                     db.commit()
                                     status_updated_count += 1
-                                    logger.info(f"💬 ✅ Updated mining status to 'มีการตอบกลับ' for: {existing_customer.name}")
+                                    logger.info(f"💬 ✅ Updated mining status to 'มีการตอบกลับ' for: {existing_customer.name} (deleted old records)")
                                     
                                     # ส่ง SSE update สำหรับสถานะการขุด
                                     try:
