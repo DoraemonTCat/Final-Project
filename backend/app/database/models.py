@@ -137,7 +137,7 @@ class CustomerTypeMessage(Base):
     page = relationship("FacebookPage", back_populates="customer_type_messages")
     customer_type_custom = relationship("CustomerTypeCustom", back_populates="customer_type_messages")
     page_customer_type_knowledge = relationship("PageCustomerTypeKnowledge", back_populates="messages")
-    schedules = relationship("MessageSchedule", back_populates="customer_type_message")
+    schedules = relationship("MessageSchedule", back_populates="customer_type_message" , cascade="all, delete-orphan", passive_deletes=True  ) # เวลา db.delete(customer_type_message) → ORM จะลบ ทั้ง message + schedules ที่เกี่ยวข้อง ออกไป
 
 class MessageSchedule(Base):
     __tablename__ = "message_schedules"

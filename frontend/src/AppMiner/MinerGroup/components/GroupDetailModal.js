@@ -112,15 +112,15 @@ const GroupDetailModal = ({ show, group, onClose }) => {
             </h3>
             <div className="section-content info-grid">
               <div className="info-item">
-                <span className="info-label">สถานะ:</span>
-                <span className={`info-value ${group.is_active !== false ? 'active' : 'inactive'}`}>
+                <span className="info-label" style={{fontSize:"17px"}}>สถานะ:</span>
+                <span className={`info-value ${group.is_active !== false ? 'active' : 'inactive'}` } style={{fontSize:"17px" , marginRight:"80px"}}>
                   {group.is_active !== false ? '✅ ใช้งาน' : '⛔ ไม่ใช้งาน'}
                 </span>
               </div>
               
               <div className="info-item">
-                <span className="info-label">สร้างเมื่อ:</span>
-                <span className="info-value">
+                <span className="info-label" style={{fontSize:"17px"}}>สร้างเมื่อ:</span>
+                <span className="info-value" style={{fontSize:"17px" , marginRight:"80px"}}>
                   {group.created_at ? new Date(group.created_at).toLocaleDateString('th-TH') : 'ไม่ทราบ'}
                 </span>
               </div>
@@ -328,6 +328,7 @@ const modalStyles = `
 .info-label {
   font-weight: 600;
   color: #4a5568;
+  font-size: 500px;
 }
 
 .info-value {

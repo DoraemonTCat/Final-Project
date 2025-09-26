@@ -19,7 +19,7 @@
 
 // =====================================================
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo, useReducer } from "react";
 import { useRealtimeUpdates } from './Component_App/useRealtimeUpdates';
 import '../CSS/App.css';
 import { fetchPages, getMessagesBySetId, fetchConversations } from "../Features/Tool";
@@ -46,28 +46,120 @@ import EmptyState from './Component_App/EmptyState';
 import DailyMiningLimit from './Component_App/DailyMiningLimit';
 
 // =====================================================
-// MAIN APP COMPONENT WITH OPTIMIZATIONS
+// OPTIMIZED STATE REDUCER
+// =====================================================
+const initialState = {
+  conversations: [],
+  allConversations: [],
+  filteredConversations: [],
+  miningStatuses: {},
+  loading: false,
+  isBackgroundLoading: false,
+  selectedConversationIds: [],
+  recentlyUpdatedUsers: new Set()
+};
+
+function conversationReducer(state, action) {
+  switch (action.type) {
+    case 'SET_CONVERSATIONS':
+      return {
+        ...state,
+        conversations: action.payload,
+        allConversations: action.payload
+      };
+    
+    case 'SET_FILTERED':
+      return {
+        ...state,
+        filteredConversations: action.payload
+      };
+    
+    case 'UPDATE_MINING_STATUS':
+      const newStatuses = { ...state.miningStatuses, ...action.payload };
+      const updatedConvs = state.conversations.map(conv => ({
+        ...conv,
+        miningStatus: newStatuses[conv.raw_psid]?.status || conv.miningStatus
+      }));
+      
+      return {
+        ...state,
+        miningStatuses: newStatuses,
+        conversations: updatedConvs,
+        allConversations: updatedConvs
+      };
+    
+    case 'SET_LOADING':
+      return {
+        ...state,
+        loading: action.payload
+      };
+    
+    case 'SET_BACKGROUND_LOADING':
+      return {
+        ...state,
+        isBackgroundLoading: action.payload
+      };
+    
+    case 'TOGGLE_SELECTION':
+      const newSelection = state.selectedConversationIds.includes(action.payload)
+        ? state.selectedConversationIds.filter(id => id !== action.payload)
+        : [...state.selectedConversationIds, action.payload];
+      return {
+        ...state,
+        selectedConversationIds: newSelection
+      };
+    
+    case 'SELECT_ALL':
+      return {
+        ...state,
+        selectedConversationIds: action.payload
+      };
+    
+    case 'CLEAR_SELECTION':
+      return {
+        ...state,
+        selectedConversationIds: []
+      };
+    
+    case 'ADD_RECENTLY_UPDATED':
+      return {
+        ...state,
+        recentlyUpdatedUsers: new Set([...state.recentlyUpdatedUsers, action.payload])
+      };
+    
+    case 'BATCH_UPDATE':
+      return {
+        ...state,
+        ...action.payload
+      };
+    
+    default:
+      return state;
+  }
+}
+
+// =====================================================
+// OPTIMIZED MAIN APP COMPONENT
 // =====================================================
 function App() {
   // =====================================================
-  // SECTION 1: STATE MANAGEMENT - ใช้ useReducer สำหรับ state ที่ซับซ้อน
+  // SECTION 1: OPTIMIZED STATE MANAGEMENT
   // =====================================================
   
-  // Core States
+  // Use reducer for complex state
+  const [state, dispatch] = useReducer(conversationReducer, initialState);
+  
+  // Simple states
   const [pages, setPages] = useState([]);
   const [selectedPage, setSelectedPage] = useState("");
-  const [conversations, setConversations] = useState([]);
-  const [allConversations, setAllConversations] = useState([]);
-  const [filteredConversations, setFilteredConversations] = useState([]);
-  const [miningStatuses, setMiningStatuses] = useState({});
-
-  // Loading & UI States
-  const [loading, setLoading] = useState(false);
-  const [isBackgroundLoading, setIsBackgroundLoading] = useState(false);
-  const [showFilter, setShowFilter] = useState(false);
+  const [defaultMessages, setDefaultMessages] = useState([]);
   const [isPopupOpen, setIsPopupOpen] = useState(false);
+  const [showFilter, setShowFilter] = useState(false);
+  const [selectedMessageSetIds, setSelectedMessageSetIds] = useState([]);
+  const [syncDateRange, setSyncDateRange] = useState(null);
+  const [dateEntryFilter, setDateEntryFilter] = useState(null);
   
-  // Filter States - ใช้ useReducer เพื่อลด re-render
+  // Filter state - combined for fewer updates
   const [filters, setFilters] = useState({
     disappearTime: "",
     startDate: "",
@@ -76,25 +168,12 @@ function App() {
     platformType: "",
     miningStatus: ""
   });
-  const [dateEntryFilter, setDateEntryFilter] = useState(null);
-  const [syncDateRange, setSyncDateRange] = useState(null);
   
-  // Selection States
-  const [selectedConversationIds, setSelectedConversationIds] = useState([]);
-  const [selectedMessageSetIds, setSelectedMessageSetIds] = useState([]);
-  const [defaultMessages, setDefaultMessages] = useState([]);
-  
-  // Time & Update States - ใช้ ref สำหรับค่าที่ไม่ต้อง trigger render
+  // Time states - use ref when possible
   const [currentTime, setCurrentTime] = useState(new Date());
-  const lastUpdateTimeRef = useRef(new Date());
   const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
-  const pendingUpdatesRef = useRef([]);
-  const [recentlyUpdatedUsers, setRecentlyUpdatedUsers] = useState(new Set());
   
-  // Inactivity States
-  const userInactivityDataRef = useRef({});
-  
-  // Mining Limit States
+  // Mining limit states - persist in localStorage
   const [dailyMiningLimit, setDailyMiningLimit] = useState(() => {
     const saved = localStorage.getItem('dailyMiningLimit');
     return saved ? parseInt(saved) : 100;
@@ -113,68 +192,74 @@ function App() {
   });
 
   // =====================================================
-  // SECTION 2: REFS MANAGEMENT
+  // SECTION 2: OPTIMIZED REFS
   // =====================================================
   
-  const inactivityUpdateTimerRef = useRef(null);
-  const clockIntervalRef = useRef(null);
-  const messageCache = useRef({});
-  const conversationCache = useRef({});
+  const refs = useRef({
+    inactivityUpdateTimer: null,
+    clockInterval: null,
+    messageCache: {},
+    conversationCache: {},
+    userInactivityData: {},
+    updateQueue: [],
+    isProcessing: false,
+    lastEventId: null
+  }).current;
+  
   const cacheTimeout = 5 * 60 * 1000;
-  const updateQueueRef = useRef([]);
-  const isProcessingRef = useRef(false);
 
   // =====================================================
-  // SECTION 3: MEMOIZED VALUES - เพิ่ม memoization
+  // SECTION 3: HEAVILY MEMOIZED VALUES
   // =====================================================
   
-  // Memoize displayData เพื่อลด re-render
+  // Memoize displayData dengan dependency ที่ถูกต้อง
   const displayData = useMemo(() => {
-    const hasFilters = filteredConversations.length > 0 || dateEntryFilter;
-    return hasFilters ? filteredConversations : conversations;
-  }, [filteredConversations, conversations, dateEntryFilter]);
+    if (dateEntryFilter || state.filteredConversations.length > 0) {
+      return state.filteredConversations;
+    }
+    return state.conversations;
+  }, [state.filteredConversations, state.conversations, dateEntryFilter]);
 
-  // Memoize selectedPageInfo
   const selectedPageInfo = useMemo(() => 
     pages.find(p => p.id === selectedPage),
     [pages, selectedPage]
   );
 
-  // Memoize filter check
-  const hasActiveFilters = useMemo(() => {
-    return Object.values(filters).some(v => v !== "") || dateEntryFilter !== null;
-  }, [filters, dateEntryFilter]);
+  const hasActiveFilters = useMemo(() => 
+    Object.values(filters).some(v => v !== "") || dateEntryFilter !== null,
+    [filters, dateEntryFilter]
+  );
+
+  const canMineMore = useMemo(() => 
+    todayMiningCount < dailyMiningLimit,
+    [todayMiningCount, dailyMiningLimit]
+  );
+
+  const remainingMines = useMemo(() => 
+    Math.max(0, dailyMiningLimit - todayMiningCount),
+    [dailyMiningLimit, todayMiningCount]
+  );
 
   // =====================================================
   // SECTION 4: OPTIMIZED UTILITY FUNCTIONS
   // =====================================================
   
-  const getCachedData = useCallback((key, cache) => {
-    const cached = cache.current[key];
+  const getCachedData = useCallback((key, useCache = true) => {
+    if (!useCache) return null;
+    const cached = refs.messageCache[key] || refs.conversationCache[key];
     if (cached && Date.now() - cached.timestamp < cacheTimeout) {
       return cached.data;
     }
     return null;
-  }, [cacheTimeout]);
+  }, [cacheTimeout, refs]);
 
-  const setCachedData = useCallback((key, data, cache) => {
-    cache.current[key] = {
+  const setCachedData = useCallback((key, data, type = 'message') => {
+    const cache = type === 'message' ? refs.messageCache : refs.conversationCache;
+    cache[key] = {
       data,
       timestamp: Date.now()
     };
-  }, []);
-
-  const calculateInactivityMinutes = useCallback((lastMessageTime, updatedTime) => {
-    const referenceTime = lastMessageTime || updatedTime;
-    if (!referenceTime) return 0;
-    
-    const past = new Date(referenceTime);
-    const now = new Date();
-    const diffMs = now.getTime() - past.getTime();
-    const diffMinutes = Math.floor(diffMs / 60000);
-    
-    return diffMinutes > 0 ? diffMinutes : 0;
-  }, []);
+  }, [refs]);
 
   // =====================================================
   // SECTION 5: OPTIMIZED MINING FUNCTIONS
@@ -208,20 +293,12 @@ function App() {
     }
   }, []);
 
-  const canMineMore = useCallback(() => {
-    return todayMiningCount < dailyMiningLimit;
-  }, [todayMiningCount, dailyMiningLimit]);
-
-  const getRemainingMines = useCallback(() => {
-    return Math.max(0, dailyMiningLimit - todayMiningCount);
-  }, [dailyMiningLimit, todayMiningCount]);
-
   // =====================================================
   // SECTION 6: OPTIMIZED DATA LOADING
   // =====================================================
   
   const loadMessages = useCallback(async (pageId) => {
-    const cached = getCachedData(`messages_${pageId}`, messageCache);
+    const cached = getCachedData(`messages_${pageId}`);
     if (cached) {
       setDefaultMessages(cached);
       return cached;
@@ -231,7 +308,7 @@ function App() {
       const data = await getMessagesBySetId(pageId);
       const messages = Array.isArray(data) ? data : [];
       setDefaultMessages(messages);
-      setCachedData(`messages_${pageId}`, messages, messageCache);
+      setCachedData(`messages_${pageId}`, messages, 'message');
       return messages;
     } catch (err) {
       console.error("โหลดข้อความล้มเหลว:", err);
@@ -240,51 +317,46 @@ function App() {
     }
   }, [getCachedData, setCachedData]);
 
-  // ใช้ requestAnimationFrame และ batch updates
   const loadConversations = useCallback(async (pageId, forceRefresh = false, resetFilters = false, isBackground = false) => {
     if (!pageId) return;
 
-    // Check cache first
+    // Check cache
     if (!forceRefresh && !isBackground) {
-      const cached = getCachedData(`conversations_${pageId}`, conversationCache);
+      const cached = getCachedData(`conversations_${pageId}`, true);
       if (cached) {
-        setConversations(cached);
-        setAllConversations(cached);
+        dispatch({ type: 'SET_CONVERSATIONS', payload: cached });
         return;
       }
     }
 
-    if (!isBackground) {
-      setLoading(true);
-    } else {
-      setIsBackgroundLoading(true);
-    }
+    dispatch({ type: isBackground ? 'SET_BACKGROUND_LOADING' : 'SET_LOADING', payload: true });
 
     try {
       const conversations = await fetchConversations(pageId);
       
-      // Batch state updates
-      requestAnimationFrame(() => {
-        const newMiningStatuses = {};
-        conversations.forEach(conv => {
-          if (conv.raw_psid) {
-            newMiningStatuses[conv.raw_psid] = {
-              status: conv.miningStatus || 'ยังไม่ขุด',
-              updatedAt: conv.miningStatusUpdatedAt
-            };
-          }
-        });
-        
-        // Batch all state updates
-        setMiningStatuses(newMiningStatuses);
-        setConversations(conversations);
-        setAllConversations(conversations);
-        lastUpdateTimeRef.current = new Date();
-        setLastUpdateTime(new Date());
-        
-        // Update cache
-        setCachedData(`conversations_${pageId}`, conversations, conversationCache);
+      // Process mining statuses
+      const newMiningStatuses = {};
+      conversations.forEach(conv => {
+        if (conv.raw_psid) {
+          newMiningStatuses[conv.raw_psid] = {
+            status: conv.miningStatus || 'ยังไม่ขุด',
+            updatedAt: conv.miningStatusUpdatedAt
+          };
+        }
       });
+      
+      // Batch update using dispatch
+      dispatch({
+        type: 'BATCH_UPDATE',
+        payload: {
+          conversations,
+          allConversations: conversations,
+          miningStatuses: newMiningStatuses
+        }
+      });
+      
+      setLastUpdateTime(new Date());
+      setCachedData(`conversations_${pageId}`, conversations, 'conversation');
 
       if (resetFilters) {
         setFilters({
@@ -295,7 +367,7 @@ function App() {
           platformType: "",
           miningStatus: ""
         });
-        setFilteredConversations([]);
+        dispatch({ type: 'SET_FILTERED', payload: [] });
         setDateEntryFilter(null);
       }
     } catch (err) {
@@ -304,11 +376,7 @@ function App() {
         alert("กรุณาเชื่อมต่อ Facebook Page ก่อนใช้งาน");
       }
     } finally {
-      if (!isBackground) {
-        setLoading(false);
-      } else {
-        setIsBackgroundLoading(false);
-      }
+      dispatch({ type: isBackground ? 'SET_BACKGROUND_LOADING' : 'SET_LOADING', payload: false });
     }
   }, [getCachedData, setCachedData]);
 
@@ -332,7 +400,7 @@ function App() {
       }
 
       if (showSuccessNotification && !isBackground) {
-        showNotification('success', 'รีเฟรชข้อมูลสำเร็จ', `โหลดข้อมูล ${conversations.length} รายการ`);
+        showNotification('success', 'รีเฟรชข้อมูลสำเร็จ', `โหลดข้อมูล ${state.conversations.length} รายการ`);
       }
     } catch (error) {
       console.error("Error refreshing data:", error);
@@ -340,53 +408,33 @@ function App() {
         showNotification('error', 'รีเฟรชข้อมูลไม่สำเร็จ', error.message);
       }
     }
-  }, [selectedPage, loadConversations, conversations.length]);
+  }, [selectedPage, loadConversations, state.conversations.length]);
 
   const loadMiningStatuses = useCallback(async (pageId) => {
-  try {
-    const response = await fetch(`http://localhost:8000/mining-status/${pageId}`);
-    if (response.ok) {
-      const data = await response.json();
-      if (data.success && data.statuses) {
-        setMiningStatuses(data.statuses);
-        
-        // Batch update conversations ด้วยสถานะใหม่
-        requestAnimationFrame(() => {
-          setConversations(prevConvs => 
-            prevConvs.map(conv => ({
-              ...conv,
-              miningStatus: data.statuses[conv.raw_psid]?.status || 'ยังไม่ขุด',
-              miningStatusUpdatedAt: data.statuses[conv.raw_psid]?.created_at
-            }))
-          );
-          
-          setAllConversations(prevAll =>
-            prevAll.map(conv => ({
-              ...conv,
-              miningStatus: data.statuses[conv.raw_psid]?.status || 'ยังไม่ขุด',
-              miningStatusUpdatedAt: data.statuses[conv.raw_psid]?.created_at
-            }))
-          );
-        });
-        
-        console.log('✅ Loaded mining statuses:', data.statuses);
+    try {
+      const response = await fetch(`http://localhost:8000/mining-status/${pageId}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.statuses) {
+          dispatch({ type: 'UPDATE_MINING_STATUS', payload: data.statuses });
+        }
       }
+    } catch (error) {
+      console.error('Error loading mining statuses:', error);
     }
-  } catch (error) {
-    console.error('Error loading mining statuses:', error);
-  }
-}, []);
+  }, []);
 
   // =====================================================
   // SECTION 7: OPTIMIZED FILTER FUNCTIONS
   // =====================================================
   
   const applyFilters = useCallback(() => {
-    requestAnimationFrame(() => {
-      let filtered = [...allConversations];
+    // Use Web Worker or requestIdleCallback for heavy filtering
+    requestIdleCallback(() => {
+      let filtered = [...state.allConversations];
       const { disappearTime, customerType, platformType, miningStatus, startDate, endDate } = filters;
 
-      // Apply all filters
+      // Optimize filter logic with early returns
       if (dateEntryFilter) {
         filtered = filtered.filter(conv => {
           const dateStr = conv.first_interaction_at || conv.created_time;
@@ -397,25 +445,26 @@ function App() {
       }
 
       if (disappearTime) {
-        const now = new Date();
+        const now = Date.now();
+        const dayInMs = 24 * 60 * 60 * 1000;
+        const timeMap = {
+          '1d': dayInMs,
+          '3d': 3 * dayInMs,
+          '7d': 7 * dayInMs,
+          '1m': 30 * dayInMs,
+          '3m': 90 * dayInMs,
+          '6m': 180 * dayInMs,
+          '1y': 365 * dayInMs,
+          'over1y': -365 * dayInMs
+        };
+        
+        const threshold = timeMap[disappearTime];
+        
         filtered = filtered.filter(conv => {
           const referenceTime = conv.last_user_message_time || conv.updated_time;
           if (!referenceTime) return false;
-
-          const updated = new Date(referenceTime);
-          const diffDays = (now - updated) / (1000 * 60 * 60 * 24);
-
-          switch (disappearTime) {
-            case '1d': return diffDays <= 1;
-            case '3d': return diffDays <= 3;
-            case '7d': return diffDays <= 7;
-            case '1m': return diffDays <= 30;
-            case '3m': return diffDays <= 90;
-            case '6m': return diffDays <= 180;
-            case '1y': return diffDays <= 365;
-            case 'over1y': return diffDays > 365;
-            default: return true;
-          }
+          const diff = now - new Date(referenceTime).getTime();
+          return disappearTime === 'over1y' ? diff > -threshold : diff <= threshold;
         });
       }
 
@@ -426,10 +475,8 @@ function App() {
           dealDoneCM: "ทักแล้วถามราคา แต่ไม่ซื้อ",
           exCM: "ทักแล้วซื้อ"
         };
-
-        filtered = filtered.filter(
-          conv => conv.customer_type_knowledge_name === customerTypeMap[customerType]
-        );
+        const targetType = customerTypeMap[customerType];
+        filtered = filtered.filter(conv => conv.customer_type_knowledge_name === targetType);
       }
 
       if (platformType) {
@@ -440,61 +487,38 @@ function App() {
         filtered = filtered.filter(conv => conv.miningStatus === miningStatus);
       }
 
-      const toDateOnly = (dateStr) => {
-        if (!dateStr) return null;
-        return new Date(dateStr).toISOString().split("T")[0];
-      };
-
-      if (startDate) {
+      if (startDate || endDate) {
         filtered = filtered.filter(conv => {
-          const convDate = toDateOnly(conv.first_interaction_at);
-          return convDate && convDate >= startDate;
+          const convDate = conv.first_interaction_at?.split('T')[0];
+          if (!convDate) return false;
+          if (startDate && convDate < startDate) return false;
+          if (endDate && convDate > endDate) return false;
+          return true;
         });
       }
 
-      if (endDate) {
-        filtered = filtered.filter(conv => {
-          const convDate = toDateOnly(conv.first_interaction_at);
-          return convDate && convDate <= endDate;
-        });
-      }
-
-      setFilteredConversations(filtered);
+      dispatch({ type: 'SET_FILTERED', payload: filtered });
     });
-  }, [allConversations, filters, dateEntryFilter]);
-
-  const handleClearDateFilter = useCallback(() => {
-    setSyncDateRange(null);
-    loadConversations(selectedPage);
-  }, [selectedPage, loadConversations]);
-
-  const handleDateEntryFilterChange = useCallback((date) => {
-    setDateEntryFilter(date);
-    if (date === null) {
-      setFilteredConversations([]);
-    }
-  }, []);
+  }, [state.allConversations, filters, dateEntryFilter]);
 
   // =====================================================
   // SECTION 8: OPTIMIZED MESSAGE FUNCTIONS
   // =====================================================
   
-  // ใช้ useCallback เพื่อลดการสร้างฟังก์ชันซ้ำๆ
   const sendMessagesBySelectedSets = useCallback(async (messageSetIds) => {
-    if (!Array.isArray(messageSetIds) || selectedConversationIds.length === 0) {
+    if (!Array.isArray(messageSetIds) || state.selectedConversationIds.length === 0) {
       return;
     }
 
-    const selectedCount = selectedConversationIds.length;
-    const remaining = getRemainingMines();
+    const selectedCount = state.selectedConversationIds.length;
     
-    if (remaining === 0) {
+    if (remainingMines === 0) {
       showNotification('error', 'ถึงขีดจำกัดประจำวันแล้ว', `คุณได้ขุดครบ ${dailyMiningLimit} ครั้งแล้ววันนี้`);
       return;
     }
     
-    if (selectedCount > remaining) {
-      showNotification('warning', 'เกินขีดจำกัด', `คุณสามารถขุดได้อีก ${remaining} ครั้งเท่านั้นในวันนี้`);
+    if (selectedCount > remainingMines) {
+      showNotification('warning', 'เกินขีดจำกัด', `คุณสามารถขุดได้อีก ${remainingMines} ครั้งเท่านั้นในวันนี้`);
       return;
     }
 
@@ -503,56 +527,62 @@ function App() {
       let failCount = 0;
       const successfulPsids = [];
 
-      showNotification('send', 'กำลังส่งข้อความ...', `ส่งไปยัง ${selectedConversationIds.length} การสนทนา`);
+      showNotification('send', 'กำลังส่งข้อความ...', `ส่งไปยัง ${state.selectedConversationIds.length} การสนทนา`);
 
-      for (const conversationId of selectedConversationIds) {
-        const selectedConv = displayData.find(conv => conv.conversation_id === conversationId);
-        const psid = selectedConv?.raw_psid;
+      // Process in batches to avoid blocking
+      const batchSize = 5;
+      for (let i = 0; i < state.selectedConversationIds.length; i += batchSize) {
+        const batch = state.selectedConversationIds.slice(i, i + batchSize);
+        
+        await Promise.all(batch.map(async (conversationId) => {
+          const selectedConv = displayData.find(conv => conv.conversation_id === conversationId);
+          const psid = selectedConv?.raw_psid;
 
-        if (!psid) {
-          failCount++;
-          continue;
-        }
-
-        try {
-          for (const setId of messageSetIds) {
-            const response = await fetch(`http://localhost:8000/custom_messages/${setId}`);
-            if (!response.ok) continue;
-            
-            const messages = await response.json();
-            const sortedMessages = messages.sort((a, b) => a.display_order - b.display_order);
-
-            for (const messageObj of sortedMessages) {
-              let messageContent = messageObj.content;
-
-              if (messageObj.message_type === "image") {
-                messageContent = `http://localhost:8000/images/${messageContent.replace('[IMAGE] ', '')}`;
-              } else if (messageObj.message_type === "video") {
-                messageContent = `http://localhost:8000/videos/${messageContent.replace('[VIDEO] ', '')}`;
-              }
-
-              await fetch(`http://localhost:8000/send/${selectedPage}/${psid}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
-                  message: messageContent,
-                  type: messageObj.message_type,
-                  is_system_message: true
-                }),
-              });
-
-              await new Promise(resolve => setTimeout(resolve, 500));
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 1000));
+          if (!psid) {
+            failCount++;
+            return;
           }
-          
-          successCount++;
-          successfulPsids.push(psid);
-        } catch (err) {
-          console.error(`ส่งข้อความไม่สำเร็จสำหรับ ${conversationId}:`, err);
-          failCount++;
-        }
+
+          try {
+            for (const setId of messageSetIds) {
+              const response = await fetch(`http://localhost:8000/custom_messages/${setId}`);
+              if (!response.ok) continue;
+              
+              const messages = await response.json();
+              const sortedMessages = messages.sort((a, b) => a.display_order - b.display_order);
+
+              for (const messageObj of sortedMessages) {
+                let messageContent = messageObj.content;
+
+                if (messageObj.message_type === "image") {
+                  messageContent = `http://localhost:8000/images/${messageContent.replace('[IMAGE] ', '')}`;
+                } else if (messageObj.message_type === "video") {
+                  messageContent = `http://localhost:8000/videos/${messageContent.replace('[VIDEO] ', '')}`;
+                }
+
+                await fetch(`http://localhost:8000/send/${selectedPage}/${psid}`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ 
+                    message: messageContent,
+                    type: messageObj.message_type,
+                    is_system_message: true
+                  }),
+                });
+
+                await new Promise(resolve => setTimeout(resolve, 500));
+              }
+              
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            
+            successCount++;
+            successfulPsids.push(psid);
+          } catch (err) {
+            console.error(`ส่งข้อความไม่สำเร็จสำหรับ ${conversationId}:`, err);
+            failCount++;
+          }
+        }));
       }
 
       if (successfulPsids.length > 0) {
@@ -567,38 +597,16 @@ function App() {
         });
 
         if (updateResponse.ok) {
-          // Batch update
-          requestAnimationFrame(() => {
-            setConversations(prevConvs =>
-              prevConvs.map(conv => ({
-                ...conv,
-                miningStatus: successfulPsids.includes(conv.raw_psid) 
-                  ? 'ขุดแล้ว' 
-                  : conv.miningStatus
-              }))
-            );
-
-            setAllConversations(prevAll =>
-              prevAll.map(conv => ({
-                ...conv,
-                miningStatus: successfulPsids.includes(conv.raw_psid) 
-                  ? 'ขุดแล้ว' 
-                  : conv.miningStatus
-              }))
-            );
-
-            setMiningStatuses(prev => {
-              const updated = { ...prev };
-              successfulPsids.forEach(psid => {
-                updated[psid] = {
-                  status: 'ขุดแล้ว',
-                  note: `Mined at ${new Date().toISOString()}`,
-                  created_at: new Date().toISOString()
-                };
-              });
-              return updated;
-            });
+          const updatedStatuses = {};
+          successfulPsids.forEach(psid => {
+            updatedStatuses[psid] = {
+              status: 'ขุดแล้ว',
+              note: `Mined at ${new Date().toISOString()}`,
+              created_at: new Date().toISOString()
+            };
           });
+          
+          dispatch({ type: 'UPDATE_MINING_STATUS', payload: updatedStatuses });
         }
       }
 
@@ -608,7 +616,7 @@ function App() {
         updateMiningCount(successCount);
         showNotification('success', `ส่งข้อความและอัพเดทสถานะสำเร็จ ${successCount} การสนทนา`, 
           `ขุดไปแล้ว ${todayMiningCount + successCount}/${dailyMiningLimit} ครั้งวันนี้`);
-        setSelectedConversationIds([]);
+        dispatch({ type: 'CLEAR_SELECTION' });
       } else {
         showNotification('error', `ส่งข้อความไม่สำเร็จ ${failCount} การสนทนา`);
       }
@@ -617,11 +625,11 @@ function App() {
       console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
       alert("เกิดข้อผิดพลาดในการส่งข้อความ");
     }
-  }, [selectedConversationIds, selectedPage, displayData, getRemainingMines, dailyMiningLimit, 
+  }, [state.selectedConversationIds, selectedPage, displayData, remainingMines, dailyMiningLimit, 
       todayMiningCount, updateMiningCount]);
 
   // =====================================================
-  // SECTION 9: OPTIMIZED NOTIFICATION FUNCTIONS
+  // SECTION 9: NOTIFICATION FUNCTIONS
   // =====================================================
   
   const showNotification = useCallback((type, message, detail = '') => {
@@ -659,9 +667,60 @@ function App() {
   }, []);
 
   // =====================================================
-  // SECTION 10: OPTIMIZED POPUP HANDLERS
+  // SECTION 10: OPTIMIZED CALLBACK FUNCTIONS
   // =====================================================
-  
+
+  const handleSyncComplete = useCallback((dateRange) => {
+    setSyncDateRange(dateRange);
+    loadConversations(selectedPage);
+  }, [selectedPage, loadConversations]);
+
+  const handleSelectUsers = useCallback((conversationIds) => {
+    dispatch({ type: 'SELECT_ALL', payload: conversationIds });
+  }, []);
+
+  const handleClearSelection = useCallback(() => {
+    dispatch({ type: 'CLEAR_SELECTION' });
+  }, []);
+
+  const handleToggleFilter = useCallback(() => {
+    setShowFilter(prev => !prev);
+  }, []);
+
+  const handleFilterChange = useCallback((newFilters) => {
+    setFilters(newFilters);
+  }, []);
+
+  const handleClearFilters = useCallback(() => {
+    dispatch({ type: 'SET_FILTERED', payload: [] });
+    setFilters({
+      disappearTime: "",
+      startDate: "",
+      endDate: "",
+      customerType: "",
+      platformType: "",
+      miningStatus: ""
+    });
+    setDateEntryFilter(null);
+  }, []);
+
+  const handleToggleAll = useCallback((checked) => {
+    if (checked) {
+      dispatch({ type: 'SELECT_ALL', payload: displayData.map(conv => conv.conversation_id) });
+    } else {
+      dispatch({ type: 'CLEAR_SELECTION' });
+    }
+  }, [displayData]);
+
+  const handleRefresh = useCallback(() => {
+    handleloadConversations(true, true);
+  }, [handleloadConversations]);
+
+  const handleLimitChange = useCallback((newLimit) => {
+    setDailyMiningLimit(newLimit);
+    localStorage.setItem('dailyMiningLimit', newLimit.toString());
+  }, []);
+
   const handleOpenPopup = useCallback(() => {
     setIsPopupOpen(true);
   }, []);
@@ -676,8 +735,91 @@ function App() {
     sendMessagesBySelectedSets(checkedSetIds);
   }, [sendMessagesBySelectedSets]);
 
+  const handleClearDateFilter = useCallback(() => {
+    setSyncDateRange(null);
+    loadConversations(selectedPage);
+  }, [selectedPage, loadConversations]);
+
+  const handleDateEntryFilterChange = useCallback((date) => {
+    setDateEntryFilter(date);
+    if (date === null) {
+      dispatch({ type: 'SET_FILTERED', payload: [] });
+    }
+  }, []);
+
+  const toggleCheckbox = useCallback((conversationId) => {
+    dispatch({ type: 'TOGGLE_SELECTION', payload: conversationId });
+  }, []);
+
+  const handleInactivityChange = useCallback((userId, minutes) => {
+    refs.userInactivityData[userId] = {
+      minutes,
+      updatedAt: new Date()
+    };
+  }, [refs]);
+
+  const handleAddUsersFromFile = useCallback((usersFromDatabase) => {
+    requestIdleCallback(() => {
+      const existingIds = new Set(state.conversations.map(c => c.conversation_id));
+      const newUsers = usersFromDatabase.filter(u => !existingIds.has(u.conversation_id));
+      
+      if (newUsers.length > 0) {
+        const combined = [...state.conversations, ...newUsers];
+        combined.sort((a, b) => {
+          const timeA = new Date(a.last_user_message_time || 0);
+          const timeB = new Date(b.last_user_message_time || 0);
+          return timeB - timeA;
+        });
+        
+        dispatch({ type: 'SET_CONVERSATIONS', payload: combined });
+      }
+    });
+  }, [state.conversations]);
+
   // =====================================================
-  // SECTION 11: OPTIMIZED INACTIVITY FUNCTIONS
+  // SECTION 11: OPTIMIZED REALTIME UPDATE HANDLER
+  // =====================================================
+  
+  const handleRealtimeUpdate = useCallback((updates) => {
+    if (!Array.isArray(updates) || updates.length === 0) return;
+    
+    // Avoid duplicate updates
+    const eventId = updates[0]?.id || updates[0]?.timestamp;
+    if (eventId === refs.lastEventId) return;
+    refs.lastEventId = eventId;
+    
+    // Batch process updates
+    requestIdleCallback(() => {
+      const miningUpdates = {};
+      const updatedUsers = [];
+      
+      updates.forEach(update => {
+        if (update.mining_status || update.action === 'mining_status_update') {
+          miningUpdates[update.psid] = {
+            status: update.mining_status || 'ยังไม่ขุด',
+            updatedAt: update.timestamp || new Date().toISOString()
+          };
+          
+          if (update.mining_status === 'มีการตอบกลับ') {
+            updatedUsers.push(update.psid);
+            showNotification('info', 'สถานะอัพเดท', 
+              `ลูกค้า ${update.name || update.psid?.slice(-8) || ''} มีการตอบกลับ`);
+          }
+        }
+      });
+      
+      if (Object.keys(miningUpdates).length > 0) {
+        dispatch({ type: 'UPDATE_MINING_STATUS', payload: miningUpdates });
+      }
+      
+      updatedUsers.forEach(psid => {
+        dispatch({ type: 'ADD_RECENTLY_UPDATED', payload: psid });
+      });
+    });
+  }, [showNotification, refs]);
+
+  // =====================================================
+  // SECTION 12: INACTIVITY BATCH UPDATE
   // =====================================================
   
   const sendInactivityBatch = useCallback(async () => {
@@ -685,15 +827,12 @@ function App() {
     
     try {
       const userData = displayData.map(conv => {
-        const inactivityInfo = userInactivityDataRef.current[conv.raw_psid] || {};
+        const inactivityInfo = refs.userInactivityData[conv.raw_psid] || {};
         return {
           user_id: conv.raw_psid,
           conversation_id: conv.conversation_id,
           last_message_time: conv.last_user_message_time || conv.updated_time,
-          inactivity_minutes: inactivityInfo.minutes || calculateInactivityMinutes(
-            conv.last_user_message_time,
-            conv.updated_time
-          )
+          inactivity_minutes: inactivityInfo.minutes || 0
         };
       });
       
@@ -715,204 +854,26 @@ function App() {
     } catch (error) {
       console.error('❌ Error sending inactivity batch:', error);
     }
-  }, [selectedPage, displayData, calculateInactivityMinutes]);
+  }, [selectedPage, displayData, refs]);
 
   // =====================================================
-  // SECTION 12: OPTIMIZED CALLBACK FUNCTIONS
+  // SECTION 13: OPTIMIZED RENDER CALLBACK
   // =====================================================
-
-//  Callback functions ที่ใช้ useCallback เพื่อลดการสร้างฟังก์ชันซ้ำ
-const handleSyncComplete = useCallback((dateRange) => {
-  setSyncDateRange(dateRange);
-  loadConversations(selectedPage);
-}, [selectedPage, loadConversations]);
-
-const handleSelectUsers = useCallback((conversationIds) => {
-  setSelectedConversationIds(prev => {
-    const newIds = [...new Set([...prev, ...conversationIds])];
-    return newIds;
-  });
-}, []);
-
-const handleClearSelection = useCallback(() => {
-  setSelectedConversationIds([]);
-}, []);
-
-const handleToggleFilter = useCallback(() => {
-  setShowFilter(prev => !prev);
-}, []);
-
-const handleFilterChange = useCallback((newFilters) => {
-  setFilters(newFilters);
-}, []);
-
-const handleClearFilters = useCallback(() => {
-  setFilteredConversations([]);
-  setFilters({
-    disappearTime: "",
-    startDate: "",
-    endDate: "",
-    customerType: "",
-    platformType: "",
-    miningStatus: ""
-  });
-  setDateEntryFilter(null);
-}, []);
-
-const handleToggleAll = useCallback((checked) => {
-  if (checked) {
-    setSelectedConversationIds(displayData.map(conv => conv.conversation_id));
-  } else {
-    setSelectedConversationIds([]);
-  }
-}, [displayData]);
-
-const handleRefresh = useCallback(() => {
-  handleloadConversations(true, true);
-}, [handleloadConversations]);
-
-const handleLimitChange = useCallback((newLimit) => {
-  setDailyMiningLimit(newLimit);
-  localStorage.setItem('dailyMiningLimit', newLimit.toString());
-}, []);
-
-const renderConversationRow = useCallback((conv, idx, isSelected, onToggleCheckbox, onInactivityChange) => (
-  <ConversationRow
-    key={conv.conversation_id}
-    conv={conv}
-    idx={idx}
-    isSelected={isSelected}
-    onToggleCheckbox={onToggleCheckbox}
-    onInactivityChange={onInactivityChange}
-    isRecentlyUpdated={recentlyUpdatedUsers.has(conv.raw_psid)}
-  />
-), [recentlyUpdatedUsers]);
   
-  const handleInactivityChange = useCallback((userId, minutes) => {
-    userInactivityDataRef.current[userId] = {
-      minutes,
-      updatedAt: new Date()
-    };
-  }, []);
-
-  const toggleCheckbox = useCallback((conversationId) => {
-    setSelectedConversationIds((prev) =>
-      prev.includes(conversationId)
-        ? prev.filter((id) => id !== conversationId)
-        : [...prev, conversationId]
-    );
-  }, []);
-
-  // Optimized batch update function
-  const processBatchUpdates = useCallback(() => {
-    if (isProcessingRef.current || updateQueueRef.current.length === 0) return;
-    
-    isProcessingRef.current = true;
-    const updates = [...updateQueueRef.current];
-    updateQueueRef.current = [];
-    
-    requestAnimationFrame(() => {
-      // Process all updates in one batch
-      setConversations(prevConvs => {
-        const convMap = new Map(prevConvs.map(c => [c.raw_psid, c]));
-        
-        updates.forEach(update => {
-          const existing = convMap.get(update.psid);
-          if (existing) {
-            convMap.set(update.psid, { ...existing, ...update });
-          }
-        });
-        
-        return Array.from(convMap.values());
-      });
-      
-      setAllConversations(prevAll => {
-        const allMap = new Map(prevAll.map(c => [c.raw_psid, c]));
-        
-        updates.forEach(update => {
-          const existing = allMap.get(update.psid);
-          if (existing) {
-            allMap.set(update.psid, { ...existing, ...update });
-          }
-        });
-        
-        return Array.from(allMap.values());
-      });
-      
-      isProcessingRef.current = false;
-    });
-  }, []);
-
-  // Optimized realtime update handler
-  const handleRealtimeUpdate = useCallback((updates) => {
-  if (!Array.isArray(updates) || updates.length === 0) return;
-  
-  // Process all updates
-  requestAnimationFrame(() => {
-    updates.forEach(update => {
-      // ถ้ามี mining_status ให้อัพเดททันที
-      if (update.mining_status || update.action === 'mining_status_update') {
-        setMiningStatuses(prev => ({
-          ...prev,
-          [update.psid]: {
-            status: update.mining_status || 'ยังไม่ขุด',
-            updatedAt: update.timestamp || new Date().toISOString()
-          }
-        }));
-        
-        // อัพเดท conversations
-        setConversations(prevConvs =>
-          prevConvs.map(conv => 
-            conv.raw_psid === update.psid 
-              ? { ...conv, miningStatus: update.mining_status || conv.miningStatus }
-              : conv
-          )
-        );
-        
-        setAllConversations(prevAll =>
-          prevAll.map(conv => 
-            conv.raw_psid === update.psid 
-              ? { ...conv, miningStatus: update.mining_status || conv.miningStatus }
-              : conv
-          )
-        );
-        
-        // แสดง notification
-        if (update.mining_status === 'มีการตอบกลับ') {
-          showNotification('info', 'สถานะอัพเดท', 
-            `ลูกค้า ${update.name || update.psid?.slice(-8) || ''} มีการตอบกลับ`);
-        }
-      }
-    });
-  });
-}, [showNotification]);
-
-  const handleAddUsersFromFile = useCallback((usersFromDatabase) => {
-    requestAnimationFrame(() => {
-      setConversations(prevConvs => {
-        const existingIds = new Set(prevConvs.map(c => c.conversation_id));
-        const newUsers = usersFromDatabase.filter(u => !existingIds.has(u.conversation_id));
-        
-        const combined = [...prevConvs, ...newUsers];
-        combined.sort((a, b) => {
-          const timeA = new Date(a.last_user_message_time || 0);
-          const timeB = new Date(b.last_user_message_time || 0);
-          return timeB - timeA;
-        });
-        
-        return combined;
-      });
-      
-      setAllConversations(prevConvs => {
-        const existingIds = new Set(prevConvs.map(c => c.conversation_id));
-        const newUsers = usersFromDatabase.filter(u => !existingIds.has(u.conversation_id));
-        return [...prevConvs, ...newUsers];
-      });
-    });
-  }, []);
+  const renderConversationRow = useCallback((conv, idx, isSelected, onToggleCheckbox, onInactivityChange) => (
+    <ConversationRow
+      key={conv.conversation_id}
+      conv={conv}
+      idx={idx}
+      isSelected={isSelected}
+      onToggleCheckbox={onToggleCheckbox}
+      onInactivityChange={onInactivityChange}
+      isRecentlyUpdated={state.recentlyUpdatedUsers.has(conv.raw_psid)}
+    />
+  ), [state.recentlyUpdatedUsers]);
 
   // =====================================================
-  // SECTION 13: REALTIME UPDATES HOOK
+  // SECTION 14: REALTIME UPDATES HOOK
   // =====================================================
   
   const { disconnect, reconnect } = useRealtimeUpdates(
@@ -921,28 +882,29 @@ const renderConversationRow = useCallback((conv, idx, isSelected, onToggleCheckb
   );
 
   // =====================================================
-  // SECTION 14: OPTIMIZED EFFECTS
+  // SECTION 15: OPTIMIZED EFFECTS
   // =====================================================
   
-  // Background refresh with debounce
+  // Background refresh with longer interval
   useEffect(() => {
-  if (!selectedPage) return;
+    if (!selectedPage) return;
 
-  let refreshTimeout;
-  const backgroundRefresh = async () => {
-    if (!loading && !isBackgroundLoading) {
-      await handleloadConversations(false, false, true);
-      await loadMiningStatuses(selectedPage);  // เพิ่มบรรทัดนี้
-    }
-    refreshTimeout = setTimeout(backgroundRefresh, 30000);
-  };
+    let refreshTimeout;
+    const backgroundRefresh = async () => {
+      if (!state.loading && !state.isBackgroundLoading) {
+        await handleloadConversations(false, false, true);
+        await loadMiningStatuses(selectedPage);
+      }
+      // Increase interval to 60 seconds
+      refreshTimeout = setTimeout(backgroundRefresh, 60000);
+    };
 
-  refreshTimeout = setTimeout(backgroundRefresh, 30000);
+    refreshTimeout = setTimeout(backgroundRefresh, 60000);
 
-  return () => {
-    if (refreshTimeout) clearTimeout(refreshTimeout);
-  };
-}, [selectedPage, loading, isBackgroundLoading, handleloadConversations, loadMiningStatuses]); // เพิ่ม loadMiningStatuses
+    return () => {
+      if (refreshTimeout) clearTimeout(refreshTimeout);
+    };
+  }, [selectedPage, state.loading, state.isBackgroundLoading, handleloadConversations, loadMiningStatuses]);
 
   // Apply filters with debounce
   useEffect(() => {
@@ -950,18 +912,19 @@ const renderConversationRow = useCallback((conv, idx, isSelected, onToggleCheckb
       if (dateEntryFilter !== null || hasActiveFilters) {
         applyFilters();
       } else {
-        setFilteredConversations([]);
+        dispatch({ type: 'SET_FILTERED', payload: [] });
       }
     }, 300);
 
     return () => clearTimeout(timeoutId);
   }, [dateEntryFilter, hasActiveFilters, applyFilters]);
 
-  // Reset daily count
+  // Reset daily count - check less frequently
   useEffect(() => {
+    resetDailyCount();
     const checkMidnight = setInterval(() => {
       resetDailyCount();
-    }, 60000); // Check every minute instead of 5 seconds
+    }, 60000); // Check every minute
 
     return () => clearInterval(checkMidnight);
   }, [resetDailyCount]);
@@ -988,169 +951,166 @@ const renderConversationRow = useCallback((conv, idx, isSelected, onToggleCheckb
       Notification.requestPermission();
     }
 
-    resetDailyCount();
-
     return () => {
       window.removeEventListener('pageChanged', handlePageChange);
     };
-  }, [resetDailyCount]);
+  }, []);
 
   // Load data when page changes
   useEffect(() => {
-  if (selectedPage) {
-    // Clear states
-    setDateEntryFilter(null);
-    setFilteredConversations([]);
-    setSyncDateRange(null);
-    setSelectedConversationIds([]);
-    setSelectedMessageSetIds([]);
-    
-    // Load data with cache check
-    Promise.all([
-      loadMessages(selectedPage),
-      loadConversations(selectedPage),
-      loadMiningStatuses(selectedPage)  // เพิ่มบรรทัดนี้
-    ]).catch(err => console.error("Error loading data:", err));
-  } else {
-    setDefaultMessages([]);
-    setConversations([]);
-    setDateEntryFilter(null);
-    setFilteredConversations([]);
-    setSyncDateRange(null);
-    setSelectedConversationIds([]);
-    setSelectedMessageSetIds([]);
-    setMiningStatuses({});
-  }
-}, [selectedPage, loadMessages, loadConversations, loadMiningStatuses]); 
+    if (selectedPage) {
+      // Clear states
+      setDateEntryFilter(null);
+      dispatch({ type: 'SET_FILTERED', payload: [] });
+      setSyncDateRange(null);
+      dispatch({ type: 'CLEAR_SELECTION' });
+      setSelectedMessageSetIds([]);
+      
+      // Load data with cache check
+      Promise.all([
+        loadMessages(selectedPage),
+        loadConversations(selectedPage),
+        loadMiningStatuses(selectedPage)
+      ]).catch(err => console.error("Error loading data:", err));
+    } else {
+      setDefaultMessages([]);
+      dispatch({ type: 'SET_CONVERSATIONS', payload: [] });
+      setDateEntryFilter(null);
+      dispatch({ type: 'SET_FILTERED', payload: [] });
+      setSyncDateRange(null);
+      dispatch({ type: 'CLEAR_SELECTION' });
+      setSelectedMessageSetIds([]);
+      dispatch({ type: 'UPDATE_MINING_STATUS', payload: {} });
+    }
+  }, [selectedPage, loadMessages, loadConversations, loadMiningStatuses]);
 
-  // Optimized clock update
+  // Optimized clock update - update every 5 seconds instead of 1
   useEffect(() => {
-    clockIntervalRef.current = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
+    const updateClock = () => setCurrentTime(new Date());
+    updateClock();
+    refs.clockInterval = setInterval(updateClock, 5000);
 
     return () => {
-      if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
+      if (refs.clockInterval) clearInterval(refs.clockInterval);
     };
-  }, []);
+  }, [refs]);
 
-  // Inactivity batch update with throttle
+  // Inactivity batch update - less frequent
   useEffect(() => {
-    if (inactivityUpdateTimerRef.current) {
-      clearInterval(inactivityUpdateTimerRef.current);
+    if (refs.inactivityUpdateTimer) {
+      clearInterval(refs.inactivityUpdateTimer);
     }
     
     sendInactivityBatch();
     
-    inactivityUpdateTimerRef.current = setInterval(() => {
+    refs.inactivityUpdateTimer = setInterval(() => {
       sendInactivityBatch();
-    }, 60000); // Update every minute instead of 30 seconds
+    }, 120000); // Update every 2 minutes
     
     return () => {
-      if (inactivityUpdateTimerRef.current) {
-        clearInterval(inactivityUpdateTimerRef.current);
+      if (refs.inactivityUpdateTimer) {
+        clearInterval(refs.inactivityUpdateTimer);
       }
     };
-  }, [sendInactivityBatch]);
+  }, [sendInactivityBatch, refs]);
 
-  
   // =====================================================
-  // SECTION 15: OPTIMIZED RENDER
+  // SECTION 16: OPTIMIZED RENDER
   // =====================================================
   
   return (
-  <div className="app-container">
-    <Sidebar />
+    <div className="app-container">
+      <Sidebar />
 
-    <main className="main-dashboard">
-      <HeroSection />
-      
-      <CustomerStatistics selectedPage={selectedPage} />
-      
-      <ConnectionStatusBar
-        selectedPage={selectedPage}
-        selectedPageInfo={selectedPageInfo}
-        lastUpdateTime={lastUpdateTime}
-        currentTime={currentTime}
-        onSyncComplete={handleSyncComplete}
-        syncDateRange={syncDateRange}
-        onClearDateFilter={handleClearDateFilter}
-        conversations={allConversations}
-        onDateEntryFilterChange={handleDateEntryFilterChange}
-        currentDateEntryFilter={dateEntryFilter}
-        isBackgroundLoading={isBackgroundLoading}
-      />
-      
-      <FileUploadSection 
-        displayData={displayData}
-        selectedPage={selectedPage}
-        onSelectUsers={handleSelectUsers}
-        onClearSelection={handleClearSelection}
-        onAddUsersFromFile={handleAddUsersFromFile}
-      />
-      
-      <FilterSection
-        showFilter={showFilter}
-        onToggleFilter={handleToggleFilter}
-        filters={filters}
-        onFilterChange={handleFilterChange}
-        onApplyFilters={applyFilters}
-        onClearFilters={handleClearFilters}
-      />
-      
-      <AlertMessages
-        selectedPage={selectedPage}
-        conversationsLength={conversations.length}
-        loading={loading}
-        filteredLength={filteredConversations.length}
-        allLength={allConversations.length}
-      />
+      <main className="main-dashboard">
+        <HeroSection />
+        
+        <CustomerStatistics selectedPage={selectedPage} />
+        
+        <ConnectionStatusBar
+          selectedPage={selectedPage}
+          selectedPageInfo={selectedPageInfo}
+          lastUpdateTime={lastUpdateTime}
+          currentTime={currentTime}
+          onSyncComplete={handleSyncComplete}
+          syncDateRange={syncDateRange}
+          onClearDateFilter={handleClearDateFilter}
+          conversations={state.allConversations}
+          onDateEntryFilterChange={handleDateEntryFilterChange}
+          currentDateEntryFilter={dateEntryFilter}
+          isBackgroundLoading={state.isBackgroundLoading}
+        />
+        
+        <FileUploadSection 
+          displayData={displayData}
+          selectedPage={selectedPage}
+          onSelectUsers={handleSelectUsers}
+          onClearSelection={handleClearSelection}
+          onAddUsersFromFile={handleAddUsersFromFile}
+        />
+        
+        <FilterSection
+          showFilter={showFilter}
+          onToggleFilter={handleToggleFilter}
+          filters={filters}
+          onFilterChange={handleFilterChange}
+          onApplyFilters={applyFilters}
+          onClearFilters={handleClearFilters}
+        />
+        
+        <AlertMessages
+          selectedPage={selectedPage}
+          conversationsLength={state.conversations.length}
+          loading={state.loading}
+          filteredLength={state.filteredConversations.length}
+          allLength={state.allConversations.length}
+        />
 
-      <div className="content-area">
-        {loading ? (
-          <LoadingState />
-        ) : displayData.length === 0 ? (
-          <EmptyState selectedPage={selectedPage} />
-        ) : (
-          <ConversationTable
-            displayData={displayData}
-            selectedConversationIds={selectedConversationIds}
-            onToggleCheckbox={toggleCheckbox}
-            onToggleAll={handleToggleAll}
-            onInactivityChange={handleInactivityChange}
-            renderRow={renderConversationRow}
+        <div className="content-area">
+          {state.loading ? (
+            <LoadingState />
+          ) : displayData.length === 0 ? (
+            <EmptyState selectedPage={selectedPage} />
+          ) : (
+            <ConversationTable
+              displayData={displayData}
+              selectedConversationIds={state.selectedConversationIds}
+              onToggleCheckbox={toggleCheckbox}
+              onToggleAll={handleToggleAll}
+              onInactivityChange={handleInactivityChange}
+              renderRow={renderConversationRow}
+            />
+          )}
+        </div>
+
+        <ActionBar
+          selectedCount={state.selectedConversationIds.length}
+          totalCount={displayData.length}
+          loading={state.loading}
+          selectedPage={selectedPage}
+          onOpenPopup={handleOpenPopup}
+          onRefresh={handleRefresh}
+          canMineMore={canMineMore}
+          remainingMines={remainingMines}
+          forceShow={state.selectedConversationIds.length > 0}
+        />
+
+        {isPopupOpen && (
+          <Popup
+            selectedPage={selectedPage}
+            onClose={handleClosePopup}
+            defaultMessages={defaultMessages}
+            onConfirm={handleConfirmPopup}
+            count={state.selectedConversationIds.length}
+            remainingMines={remainingMines}
+            currentMiningCount={todayMiningCount}
+            dailyMiningLimit={dailyMiningLimit}
+            onLimitChange={handleLimitChange}
           />
         )}
-      </div>
-
-      <ActionBar
-        selectedCount={selectedConversationIds.length}
-        totalCount={displayData.length}
-        loading={loading}
-        selectedPage={selectedPage}
-        onOpenPopup={handleOpenPopup}
-        onRefresh={handleRefresh}
-        canMineMore={canMineMore()}
-        remainingMines={getRemainingMines()}
-        forceShow={selectedConversationIds.length > 0}
-      />
-
-      {isPopupOpen && (
-        <Popup
-          selectedPage={selectedPage}
-          onClose={handleClosePopup}
-          defaultMessages={defaultMessages}
-          onConfirm={handleConfirmPopup}
-          count={selectedConversationIds.length}
-          remainingMines={getRemainingMines()}
-          currentMiningCount={todayMiningCount}
-          dailyMiningLimit={dailyMiningLimit}
-          onLimitChange={handleLimitChange}
-        />
-      )}
-    </main>
-  </div>
-);
+      </main>
+    </div>
+  );
 }
 
 export default React.memo(App);
