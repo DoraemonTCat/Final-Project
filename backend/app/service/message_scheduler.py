@@ -503,7 +503,7 @@ class MessageScheduler:
                                         await send_customer_type_update(
                                             page_id=page_id,
                                             psid=psid,
-                                            current_category_id=knowledge_id,
+                                            customer_type_knowledge_id=knowledge_id,  
                                             customer_type_knowledge_name=knowledge_type.type_name
                                         )
                                         logger.info(f"[{group_type}] 📡 Sent SSE update for knowledge type: {knowledge_type.type_name}")

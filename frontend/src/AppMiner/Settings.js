@@ -429,17 +429,7 @@ const GeneralSettings = ({ settings, updateSetting }) => {
     <div className="settings-section" >
       <h2 className="section-title">การตั้งค่าทั่วไป</h2>
       
-      <div className="setting-group">
-        <label className="setting-label">ภาษา</label>
-        <select 
-          value={settings.language}
-          onChange={(e) => updateSetting('language', e.target.value)}
-          className="setting-select"
-        >
-          <option value="th">ไทย</option>
-          <option value="en">English</option>
-        </select>
-      </div>
+      
 
       <div className="setting-group">
         <label className="setting-label">ธีมสี</label>
