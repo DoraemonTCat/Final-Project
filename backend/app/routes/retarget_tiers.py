@@ -8,7 +8,7 @@ API สำหรับจัดการ retarget tiers ของ Facebook Pages
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from app.database import crud, models
 from app.database.database import get_db
 from datetime import datetime
@@ -17,15 +17,91 @@ import logging
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# ==================== Main APIs ====================
+# =============== Constants ===============
+VALID_TIER_NAMES = ['หาย', 'หายนาน', 'หายนานมากๆ']
+EXPECTED_TIERS_PER_PAGE = 3
 
-# API สำหรับดึงข้อมูล retarget tiers ของ page
+# =============== Helper Functions ===============
+def format_tier_response(tier) -> Dict[str, Any]:
+    """Format tier data for response"""
+    return {
+        "id": tier.id,
+        "tier_name": tier.tier_name,
+        "days_since_last_contact": tier.days_since_last_contact,
+        "created_at": tier.created_at.isoformat() if tier.created_at else None,
+        "updated_at": tier.updated_at.isoformat() if tier.updated_at else None
+    }
+
+def get_tier_statistics(db: Session) -> Dict[str, Any]:
+    """Get comprehensive tier statistics"""
+    # Import model locally if not available globally
+    try:
+        from app.database.models import RetargetTier
+        model = RetargetTier
+    except ImportError:
+        # Fallback to generic query if model not found
+        # This assumes the table exists even if model isn't imported
+        from sqlalchemy import Table, MetaData
+        metadata = MetaData()
+        model = Table('retarget_tier_config', metadata, autoload_with=db.bind)
+    
+    # Total tiers - use raw SQL if model not available
+    total_tiers = db.execute("SELECT COUNT(*) FROM retarget_tier_config").scalar() or 0
+    
+    # Pages with tiers
+    pages_with_tiers = db.execute(
+        "SELECT COUNT(DISTINCT page_id) FROM retarget_tier_config"
+    ).scalar() or 0
+    
+    # Pages with excessive tiers
+    excessive_query = db.execute("""
+        SELECT page_id, COUNT(*) as tier_count 
+        FROM retarget_tier_config 
+        GROUP BY page_id 
+        HAVING COUNT(*) > :expected
+    """, {"expected": EXPECTED_TIERS_PER_PAGE}).fetchall()
+    
+    # Pages with correct tiers
+    correct_tiers = db.execute("""
+        SELECT COUNT(*) FROM (
+            SELECT page_id 
+            FROM retarget_tier_config 
+            GROUP BY page_id 
+            HAVING COUNT(*) = :expected
+        ) as correct
+    """, {"expected": EXPECTED_TIERS_PER_PAGE}).scalar() or 0
+    
+    # All pages count
+    all_pages = db.query(models.FacebookPage).count()
+    pages_without_tiers = all_pages - pages_with_tiers
+    
+    # Tier type summary
+    tier_summary = db.execute("""
+        SELECT tier_name, 
+               COUNT(*) as count,
+               AVG(days_since_last_contact) as avg_days
+        FROM retarget_tier_config
+        GROUP BY tier_name
+    """).fetchall()
+    
+    return {
+        "total_tiers": total_tiers,
+        "total_pages": all_pages,
+        "pages_with_tiers": pages_with_tiers,
+        "pages_without_tiers": pages_without_tiers,
+        "pages_with_correct_tiers": correct_tiers,
+        "pages_need_cleanup": len(excessive_query),
+        "excessive_pages": excessive_query,
+        "tier_summary": tier_summary
+    }
+
+# =============== API Endpoints ===============
 @router.get("/retarget-tiers/{page_id}")
 async def get_retarget_tiers(
     page_id: str,
     db: Session = Depends(get_db)
 ):
-    """ดึง retarget tiers ของ page"""
+    """Get retarget tiers for a specific page"""
     page = crud.get_page_by_page_id(db, page_id)
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
@@ -35,38 +111,24 @@ async def get_retarget_tiers(
     return {
         "page_id": page_id,
         "page_name": page.page_name,
-        "tiers": [
-            {
-                "id": tier.id,
-                "tier_name": tier.tier_name,
-                "days_since_last_contact": tier.days_since_last_contact,
-                "created_at": tier.created_at.isoformat() if tier.created_at else None,
-                "updated_at": tier.updated_at.isoformat() if tier.updated_at else None
-            }
-            for tier in tiers
-        ],
-        "total": len(tiers)
+        "tiers": [format_tier_response(tier) for tier in tiers],
+        "total": len(tiers),
+        "status": "OK" if len(tiers) == EXPECTED_TIERS_PER_PAGE else "Needs adjustment"
     }
 
-# ==================== Create/Update APIs ====================
-
-# API สำหรับสร้าง retarget tier ใหม่
 @router.put("/retarget-tiers/{tier_id}")
 async def update_retarget_tier(
     tier_id: int,
     update_data: Dict[str, Any],
     db: Session = Depends(get_db)
 ):
-    """อัพเดท retarget tier - แก้ไขจำนวนวันของ tier"""
-    
-    # Validate tier_name ถ้ามีการเปลี่ยน
-    if 'tier_name' in update_data:
-        valid_names = ['หาย', 'หายนาน', 'หายนานมากๆ']
-        if update_data['tier_name'] not in valid_names:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Invalid tier_name. Must be one of: {valid_names}"
-            )
+    """Update retarget tier configuration"""
+    # Validate tier_name if provided
+    if 'tier_name' in update_data and update_data['tier_name'] not in VALID_TIER_NAMES:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid tier_name. Must be one of: {VALID_TIER_NAMES}"
+        )
     
     updated_tier = crud.update_retarget_tier(db, tier_id, update_data)
     
@@ -75,50 +137,37 @@ async def update_retarget_tier(
     
     return {
         "status": "success",
-        "tier": {
-            "id": updated_tier.id,
-            "tier_name": updated_tier.tier_name,
-            "days_since_last_contact": updated_tier.days_since_last_contact,
-            "updated_at": updated_tier.updated_at.isoformat() if updated_tier.updated_at else None
-        }
+        "tier": format_tier_response(updated_tier)
     }
 
-# ==================== Cleanup & Maintenance APIs ====================
-
-# API สำหรับลบข้อมูล retarget tiers ที่ซ้ำซ้อน เหลือแค่ 3 tiers ต่อ page
 @router.post("/retarget-tiers/cleanup")
-async def cleanup_duplicate_tiers(
-    db: Session = Depends(get_db)
-):
-    """ลบข้อมูล retarget tiers ที่ซ้ำซ้อน เหลือแค่ 3 tiers ต่อ page"""
+async def cleanup_duplicate_tiers(db: Session = Depends(get_db)):
+    """Clean up duplicate retarget tiers"""
     try:
         crud.cleanup_duplicate_retarget_tiers(db)
         
-        # นับสถิติหลัง cleanup
-        total_tiers = db.query(models.RetargetTierConfig).count()
-        pages_with_tiers = db.query(
-            models.RetargetTierConfig.page_id
-        ).distinct().count()
+        # Get statistics after cleanup
+        stats = get_tier_statistics(db)
         
         return {
             "status": "success",
             "message": "Cleanup completed successfully",
             "stats": {
-                "total_tiers_remaining": total_tiers,
-                "pages_with_tiers": pages_with_tiers,
-                "avg_tiers_per_page": round(total_tiers / pages_with_tiers, 2) if pages_with_tiers > 0 else 0
+                "total_tiers_remaining": stats["total_tiers"],
+                "pages_with_tiers": stats["pages_with_tiers"],
+                "avg_tiers_per_page": (
+                    round(stats["total_tiers"] / stats["pages_with_tiers"], 2) 
+                    if stats["pages_with_tiers"] > 0 else 0
+                )
             }
         }
     except Exception as e:
         logger.error(f"Error during cleanup: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# API สำหรับ sync เฉพาะ page ที่ยังไม่มีข้อมูล retarget tiers
 @router.post("/retarget-tiers/sync-missing")
-async def sync_missing_tiers(
-    db: Session = Depends(get_db)
-):
-    """Sync retarget tiers เฉพาะ page ที่ยังไม่มีข้อมูล"""
+async def sync_missing_tiers(db: Session = Depends(get_db)):
+    """Sync retarget tiers for pages without configuration"""
     try:
         result = crud.sync_missing_retarget_tiers(db)
         return {
@@ -130,64 +179,20 @@ async def sync_missing_tiers(
         logger.error(f"Error during sync: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ==================== Statistics & Monitoring APIs ====================
-
-# API สำหรับดูสถิติข้อมูล retarget tiers ทั้งหมด
 @router.get("/retarget-tiers/stats")
-async def get_retarget_tiers_stats(
-    db: Session = Depends(get_db)
-):
-    """ดูสถิติข้อมูล retarget tiers ทั้งหมด"""
+async def get_retarget_tiers_stats(db: Session = Depends(get_db)):
+    """Get comprehensive retarget tier statistics"""
     try:
-        # นับจำนวน tiers ทั้งหมด
-        total_tiers = db.query(models.RetargetTierConfig).count()
-        
-        # นับจำนวน pages ที่มี tiers
-        pages_with_tiers = db.query(
-            models.RetargetTierConfig.page_id
-        ).distinct().count()
-        
-        # หา pages ที่มี tiers มากเกิน (มากกว่า 3)
-        pages_with_excessive_tiers = db.query(
-            models.RetargetTierConfig.page_id,
-            func.count(models.RetargetTierConfig.id).label('tier_count')
-        ).group_by(
-            models.RetargetTierConfig.page_id
-        ).having(
-            func.count(models.RetargetTierConfig.id) > 3
-        ).all()
-        
-        # หา pages ที่มี tiers พอดี (3 tiers)
-        pages_with_correct_tiers = db.query(
-            models.RetargetTierConfig.page_id,
-            func.count(models.RetargetTierConfig.id).label('tier_count')
-        ).group_by(
-            models.RetargetTierConfig.page_id
-        ).having(
-            func.count(models.RetargetTierConfig.id) == 3
-        ).count()
-        
-        # หา pages ที่ยังไม่มี tiers
-        all_pages = db.query(models.FacebookPage).count()
-        pages_without_tiers = all_pages - pages_with_tiers
-        
-        # สรุปจำนวน tiers แต่ละประเภท
-        tier_summary = db.query(
-            models.RetargetTierConfig.tier_name,
-            func.count(models.RetargetTierConfig.id).label('count'),
-            func.avg(models.RetargetTierConfig.days_since_last_contact).label('avg_days')
-        ).group_by(
-            models.RetargetTierConfig.tier_name
-        ).all()
+        stats = get_tier_statistics(db)
         
         return {
             "summary": {
-                "total_tiers": total_tiers,
-                "total_pages": all_pages,
-                "pages_with_tiers": pages_with_tiers,
-                "pages_without_tiers": pages_without_tiers,
-                "pages_with_correct_tiers": pages_with_correct_tiers,
-                "pages_need_cleanup": len(pages_with_excessive_tiers)
+                "total_tiers": stats["total_tiers"],
+                "total_pages": stats["total_pages"],
+                "pages_with_tiers": stats["pages_with_tiers"],
+                "pages_without_tiers": stats["pages_without_tiers"],
+                "pages_with_correct_tiers": stats["pages_with_correct_tiers"],
+                "pages_need_cleanup": stats["pages_need_cleanup"]
             },
             "tier_types": [
                 {
@@ -195,30 +200,33 @@ async def get_retarget_tiers_stats(
                     "count": count,
                     "avg_days": round(float(avg_days), 1) if avg_days else 0
                 }
-                for tier_name, count, avg_days in tier_summary
+                for tier_name, count, avg_days in stats["tier_summary"]
             ],
             "pages_with_excessive_tiers": [
                 {
                     "page_id": page_id,
                     "tier_count": count,
-                    "excess": count - 3
+                    "excess": count - EXPECTED_TIERS_PER_PAGE
                 }
-                for page_id, count in pages_with_excessive_tiers
+                for page_id, count in stats["excessive_pages"]
             ],
-            "health_status": "Good" if len(pages_with_excessive_tiers) == 0 else "Needs Cleanup",
-            "recommendation": "Run /retarget-tiers/cleanup to fix" if len(pages_with_excessive_tiers) > 0 else "System is healthy"
+            "health_status": "Good" if stats["pages_need_cleanup"] == 0 else "Needs Cleanup",
+            "recommendation": (
+                "Run /retarget-tiers/cleanup to fix" 
+                if stats["pages_need_cleanup"] > 0 
+                else "System is healthy"
+            )
         }
     except Exception as e:
         logger.error(f"Error getting stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# API สำหรับตรวจสอบสถานะ retarget tiers ของ page เฉพาะ
 @router.get("/retarget-tiers/check/{page_id}")
 async def check_page_tiers_status(
     page_id: str,
     db: Session = Depends(get_db)
 ):
-    """ตรวจสอบสถานะ retarget tiers ของ page เฉพาะ"""
+    """Check retarget tier status for a specific page"""
     page = crud.get_page_by_page_id(db, page_id)
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
@@ -226,7 +234,9 @@ async def check_page_tiers_status(
     tiers = crud.get_retarget_tiers_by_page(db, page.ID)
     tier_count = len(tiers)
     
-    status = "OK" if tier_count == 3 else ("Missing" if tier_count == 0 else "Incorrect")
+    status = "OK" if tier_count == EXPECTED_TIERS_PER_PAGE else (
+        "Missing" if tier_count == 0 else "Incorrect"
+    )
     
     return {
         "page_id": page_id,
@@ -241,19 +251,19 @@ async def check_page_tiers_status(
             }
             for tier in tiers
         ],
-        "needs_action": tier_count != 3,
-        "action": "sync" if tier_count == 0 else ("cleanup" if tier_count > 3 else None)
+        "needs_action": tier_count != EXPECTED_TIERS_PER_PAGE,
+        "action": (
+            "sync" if tier_count == 0 else 
+            ("cleanup" if tier_count > EXPECTED_TIERS_PER_PAGE else None)
+        )
     }
 
-# ==================== Manual Operations (Development/Debug) ====================
-
-# API สำหรับ reset retarget tiers ของ page - ลบแล้ว sync ใหม่
 @router.delete("/retarget-tiers/reset/{page_id}")
 async def reset_page_tiers(
     page_id: str,
     db: Session = Depends(get_db)
 ):
-    """[DEV ONLY] Reset retarget tiers ของ page - ลบแล้ว sync ใหม่"""
+    """[DEV ONLY] Reset and resync retarget tiers for a page"""
     if not page_id:
         raise HTTPException(status_code=400, detail="Page ID required")
     
@@ -262,13 +272,14 @@ async def reset_page_tiers(
         raise HTTPException(status_code=404, detail="Page not found")
     
     try:
-        # ลบ tiers เก่าทั้งหมด
-        deleted_count = db.query(models.RetargetTierConfig).filter(
-            models.RetargetTierConfig.page_id == page.ID
-        ).delete()
+        # Delete existing tiers using raw SQL
+        deleted_count = db.execute(
+            "DELETE FROM retarget_tier_config WHERE page_id = :page_id",
+            {"page_id": page.ID}
+        ).rowcount
         db.commit()
         
-        # Sync ใหม่
+        # Sync new tiers
         new_tiers = crud.sync_retarget_tiers_from_knowledge(db, page.ID)
         
         return {

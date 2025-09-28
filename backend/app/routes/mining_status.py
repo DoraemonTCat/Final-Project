@@ -1,4 +1,3 @@
-# backend/app/routes/mining_status.py
 """
 Mining Status Management API
 จัดการสถานะการขุดของลูกค้า
@@ -6,8 +5,9 @@ Mining Status Management API
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
 from app.database.database import get_db
@@ -17,7 +17,7 @@ import logging
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Schemas
+# =============== Pydantic Schemas ===============
 class MiningStatusUpdate(BaseModel):
     customer_psids: List[str]
     status: str  # 'ยังไม่ขุด', 'ขุดแล้ว', 'มีการตอบกลับ'
@@ -29,19 +29,63 @@ class MiningStatusResponse(BaseModel):
     note: Optional[str]
     created_at: datetime
 
-# API สำหรับอัพเดทสถานะการขุด (เมื่อกดขุด)
+# =============== Helper Functions ===============
+def update_customer_mining_status(
+    db: Session,
+    customer: models.FbCustomer,
+    status: str,
+    note: Optional[str] = None
+) -> models.FBCustomerMiningStatus:
+    """Update mining status for a customer"""
+    # Delete old status records
+    db.query(models.FBCustomerMiningStatus).filter(
+        models.FBCustomerMiningStatus.customer_id == customer.id
+    ).delete()
+    
+    # Create new status
+    new_status = models.FBCustomerMiningStatus(
+        customer_id=customer.id,
+        status=status,
+        note=note or f"Updated at {datetime.now()}"
+    )
+    db.add(new_status)
+    return new_status
+
+def get_page_mining_statuses(db: Session, page_id: int) -> Dict[str, Dict[str, Any]]:
+    """Get mining statuses for all customers in a page"""
+    query = """
+        SELECT 
+            c.customer_psid,
+            ms.status,
+            ms.note,
+            ms.created_at
+        FROM fb_customers c
+        LEFT JOIN fb_customer_mining_status ms ON c.id = ms.customer_id
+        WHERE c.page_id = :page_id
+        ORDER BY c.customer_psid
+    """
+    
+    result = db.execute(text(query), {"page_id": page_id})
+    
+    statuses = {}
+    for row in result:
+        statuses[row[0]] = {
+            "status": row[1] or "ยังไม่ขุด",
+            "note": row[2],
+            "created_at": row[3]
+        }
+    
+    return statuses
+
+# =============== API Endpoints ===============
 @router.post("/mining-status/update/{page_id}")
 async def update_mining_status(
     page_id: str,
     status_update: MiningStatusUpdate,
     db: Session = Depends(get_db)
 ):
-    """
-    อัพเดทสถานะการขุดสำหรับลูกค้าหลายคน
-    เรียกใช้เมื่อกดปุ่มขุด
-    """
+    """Update mining status for multiple customers"""
     try:
-        # ดึง page record
         page = crud.get_page_by_page_id(db, page_id)
         if not page:
             raise HTTPException(status_code=404, detail="Page not found")
@@ -49,30 +93,19 @@ async def update_mining_status(
         updated_count = 0
         errors = []
         
+        # Batch process customers
         for psid in status_update.customer_psids:
             try:
-                # หา customer
                 customer = crud.get_customer_by_psid(db, page.ID, psid)
                 if not customer:
                     errors.append(f"Customer {psid} not found")
                     continue
                 
-                # ลบสถานะเก่าทั้งหมดของ customer นี้ก่อน
-                db.query(models.FBCustomerMiningStatus).filter(
-                    models.FBCustomerMiningStatus.customer_id == customer.id
-                ).delete()
-                
-                # เพิ่มสถานะใหม่
-                new_status = models.FBCustomerMiningStatus(
-                    customer_id=customer.id,
-                    status=status_update.status,
-                    note=status_update.note or f"Updated via mining action at {datetime.now()}"
+                update_customer_mining_status(
+                    db, customer, status_update.status, status_update.note
                 )
-                db.add(new_status)
                 updated_count += 1
                 
-                logger.info(f"✅ Updated mining status for {psid}: {status_update.status} (deleted old records)")
-            
             except Exception as e:
                 logger.error(f"Error updating status for {psid}: {e}")
                 errors.append(f"Error for {psid}: {str(e)}")
@@ -91,43 +124,18 @@ async def update_mining_status(
         logger.error(f"Error in update_mining_status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# API สำหรับดึงสถานะการขุดปัจจุบัน
 @router.get("/mining-status/{page_id}")
 async def get_mining_statuses(
     page_id: str,
     db: Session = Depends(get_db)
 ):
-    """
-    ดึงสถานะการขุดล่าสุดของลูกค้าทั้งหมดในเพจ
-    """
+    """Get current mining statuses for all customers in a page"""
     try:
         page = crud.get_page_by_page_id(db, page_id)
         if not page:
             raise HTTPException(status_code=404, detail="Page not found")
         
-        # Query สถานะล่าสุดของแต่ละลูกค้า (จะมีแค่ 1 record ต่อ customer เพราะเราลบเก่าออกแล้ว)
-        query = """
-            SELECT 
-                c.customer_psid,
-                ms.status,
-                ms.note,
-                ms.created_at
-            FROM fb_customers c
-            LEFT JOIN fb_customer_mining_status ms ON c.id = ms.customer_id
-            WHERE c.page_id = :page_id
-            ORDER BY c.customer_psid
-        """
-        
-        from sqlalchemy import text
-        result = db.execute(text(query), {"page_id": page.ID})
-        
-        statuses = {}
-        for row in result:
-            statuses[row[0]] = {
-                "status": row[1] or "ยังไม่ขุด",  # Default ถ้าไม่มีสถานะ
-                "note": row[2],
-                "created_at": row[3]
-            }
+        statuses = get_page_mining_statuses(db, page.ID)
         
         return {
             "success": True,
@@ -138,16 +146,13 @@ async def get_mining_statuses(
         logger.error(f"Error getting mining statuses: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# API สำหรับรีเซ็ตสถานะการขุด
 @router.post("/mining-status/reset/{page_id}")
 async def reset_mining_status(
     page_id: str,
     customer_psids: List[str],
     db: Session = Depends(get_db)
 ):
-    """
-    รีเซ็ตสถานะการขุดกลับเป็น 'ยังไม่ขุด'
-    """
+    """Reset mining status to 'ยังไม่ขุด' for selected customers"""
     try:
         page = crud.get_page_by_page_id(db, page_id)
         if not page:
@@ -157,18 +162,9 @@ async def reset_mining_status(
         for psid in customer_psids:
             customer = crud.get_customer_by_psid(db, page.ID, psid)
             if customer:
-                # ลบสถานะเก่าทั้งหมด
-                db.query(models.FBCustomerMiningStatus).filter(
-                    models.FBCustomerMiningStatus.customer_id == customer.id
-                ).delete()
-                
-                # เพิ่มสถานะใหม่เป็น "ยังไม่ขุด"
-                new_status = models.FBCustomerMiningStatus(
-                    customer_id=customer.id,
-                    status="ยังไม่ขุด",
-                    note="Reset status"
+                update_customer_mining_status(
+                    db, customer, "ยังไม่ขุด", "Reset status"
                 )
-                db.add(new_status)
                 reset_count += 1
         
         db.commit()
@@ -184,40 +180,38 @@ async def reset_mining_status(
         logger.error(f"Error resetting mining status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# API สำหรับลบประวัติสถานะการขุดเก่าทั้งหมด (maintenance)
 @router.delete("/mining-status/clean-history/{page_id}")
 async def clean_mining_history(
     page_id: str,
     db: Session = Depends(get_db)
 ):
-    """
-    ลบประวัติสถานะการขุดเก่าทั้งหมด เหลือแค่สถานะล่าสุดของแต่ละลูกค้า
-    """
+    """Clean old mining status history, keep only latest per customer"""
     try:
         page = crud.get_page_by_page_id(db, page_id)
         if not page:
             raise HTTPException(status_code=404, detail="Page not found")
         
-        # Query เพื่อหา customers ทั้งหมดของ page นี้
-        customers = db.query(models.FbCustomer).filter(
-            models.FbCustomer.page_id == page.ID
-        ).all()
+        # Use window function to identify and delete old records
+        query = """
+            DELETE FROM fb_customer_mining_status
+            WHERE id IN (
+                SELECT id FROM (
+                    SELECT id,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY customer_id 
+                               ORDER BY created_at DESC
+                           ) as rn
+                    FROM fb_customer_mining_status
+                    WHERE customer_id IN (
+                        SELECT id FROM fb_customers WHERE page_id = :page_id
+                    )
+                ) ranked
+                WHERE rn > 1
+            )
+        """
         
-        total_deleted = 0
-        
-        for customer in customers:
-            # หาสถานะล่าสุดของ customer นี้
-            latest_status = db.query(models.FBCustomerMiningStatus).filter(
-                models.FBCustomerMiningStatus.customer_id == customer.id
-            ).order_by(models.FBCustomerMiningStatus.created_at.desc()).first()
-            
-            if latest_status:
-                # ลบทุก record ที่ไม่ใช่ record ล่าสุด
-                deleted = db.query(models.FBCustomerMiningStatus).filter(
-                    models.FBCustomerMiningStatus.customer_id == customer.id,
-                    models.FBCustomerMiningStatus.id != latest_status.id
-                ).delete()
-                total_deleted += deleted
+        result = db.execute(text(query), {"page_id": page.ID})
+        total_deleted = result.rowcount
         
         db.commit()
         
