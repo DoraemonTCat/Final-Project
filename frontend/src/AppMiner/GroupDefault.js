@@ -306,134 +306,189 @@ function GroupDefault() {
 
   // Optimized add sequence function
   const addToSequence = useCallback(async () => {
-    if (currentInput.type === 'text' && !currentInput.content.trim()) {
-      alert("กรุณากรอกข้อความ");
+  if (currentInput.type === 'text' && !currentInput.content.trim()) {
+    alert("กรุณากรอกข้อความ");
+    return;
+  }
+
+  if ((currentInput.type === 'image' || currentInput.type === 'video') && !currentInput.file) {
+    alert("กรุณาเลือกไฟล์");
+    return;
+  }
+
+  try {
+    setLoading(true);
+    
+    if (!selectedGroups || selectedGroups.length === 0) {
+      alert("กรุณาเลือกกลุ่มลูกค้า");
       return;
     }
-
-    if ((currentInput.type === 'image' || currentInput.type === 'video') && !currentInput.file) {
-      alert("กรุณาเลือกไฟล์");
-      return;
+    
+    const firstGroup = selectedGroups[0];
+    const groupId = firstGroup.id || selectedGroupId;
+    
+    let imageBase64 = null;
+    if (currentInput.imageFile && (currentInput.type === 'image' || currentInput.type === 'video')) {
+      imageBase64 = await fileToBase64(currentInput.imageFile);
     }
+    
+    // บันทึกข้อความลง Database
+    let savedMessage = null;
+    
+    if (isKnowledgeGroup(groupId) && selectedPage) {
+      // Knowledge group message
+      const messageData = {
+        page_id: selectedPage,
+        customer_type_custom_id: groupId,
+        message_type: currentInput.type,
+        content: currentInput.content || currentInput.file?.name || '',
+        display_order: messageSequence.length,
+        image_data_base64: imageBase64
+      };
 
-    try {
-      setLoading(true);
-      
-      if (!selectedGroups || selectedGroups.length === 0) {
-        alert("กรุณาเลือกกลุ่มลูกค้า");
-        return;
-      }
-      
-      const firstGroup = selectedGroups[0];
-      const groupId = firstGroup.id || selectedGroupId;
-      
-      let imageBase64 = null;
-      if (currentInput.imageFile && (currentInput.type === 'image' || currentInput.type === 'video')) {
-        imageBase64 = await fileToBase64(currentInput.imageFile);
-      }
-      
-      if (isKnowledgeGroup(groupId) && selectedPage) {
-        const messageData = {
-          page_id: selectedPage,
-          customer_type_custom_id: groupId,
-          message_type: currentInput.type,
-          content: currentInput.content || currentInput.file?.name || '',
-          display_order: messageSequence.length,
-          image_data_base64: imageBase64
-        };
-
-        const response = await fetch('http://localhost:8000/knowledge-group-messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(messageData)
-        });
-
-        if (!response.ok) {
-          const responseData = await response.json();
-          throw new Error(responseData.detail || 'Failed to save message');
-        }
-        
-        const savedMessage = await response.json();
-        const newItem = {
-          id: savedMessage.id,
-          type: savedMessage.message_type,
-          content: savedMessage.content,
-          order: savedMessage.display_order,
-          dbId: savedMessage.id,
-          hasImage: savedMessage.has_image || false,
-          preview: currentInput.preview
-        };
-
-        setMessageSequence(prev => [...prev, newItem]);
-        
-      } else if (selectedGroupId && firstGroup && !firstGroup.isDefault && pageDbId) {
-        const messageData = {
-          page_id: pageDbId,
-          customer_type_custom_id: selectedGroupId,
-          message_type: currentInput.type,
-          content: currentInput.content || currentInput.file?.name || '',
-          display_order: messageSequence.length,
-          image_data_base64: imageBase64
-        };
-
-        const response = await fetch('http://localhost:8000/group-messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(messageData)
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error('Failed to save message');
-        }
-        
-        const savedMessage = await response.json();
-        
-        const newItem = {
-          id: savedMessage.id,
-          type: savedMessage.message_type,
-          content: savedMessage.content,
-          order: savedMessage.display_order,
-          dbId: savedMessage.id,
-          hasImage: savedMessage.has_image || false,
-          preview: currentInput.preview
-        };
-
-        setMessageSequence(prev => [...prev, newItem]);
-      } else {
-        const newItem = {
-          id: Date.now(),
-          type: currentInput.type,
-          content: currentInput.content || currentInput.file?.name || '',
-          file: currentInput.file,
-          preview: currentInput.preview,
-          imageFile: currentInput.imageFile,
-          order: messageSequence.length
-        };
-
-        setMessageSequence(prev => [...prev, newItem]);
-      }
-
-      // Reset input
-      if (currentInput.preview) {
-        URL.revokeObjectURL(currentInput.preview);
-      }
-      
-      setCurrentInput({
-        type: 'text',
-        content: '',
-        file: null,
-        preview: null,
-        imageFile: null
+      const response = await fetch('http://localhost:8000/knowledge-group-messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messageData)
       });
 
-    } catch (error) {
-      console.error('Error adding message:', error);
-      alert('เกิดข้อผิดพลาดในการเพิ่มข้อความ: ' + error.message);
-    } finally {
-      setLoading(false);
+      if (!response.ok) {
+        throw new Error('Failed to save message');
+      }
+      
+      savedMessage = await response.json();
+      
+    } else if (selectedGroupId && firstGroup && !firstGroup.isDefault && pageDbId) {
+      // User group message
+      const messageData = {
+        page_id: pageDbId,
+        customer_type_custom_id: selectedGroupId,
+        message_type: currentInput.type,
+        content: currentInput.content || currentInput.file?.name || '',
+        display_order: messageSequence.length,
+        image_data_base64: imageBase64
+      };
+
+      const response = await fetch('http://localhost:8000/group-messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messageData)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save message');
+      }
+      
+      savedMessage = await response.json();
     }
-  }, [currentInput, selectedGroups, selectedGroupId, messageSequence.length, selectedPage, pageDbId, isKnowledgeGroup]);
+    
+    // 🆕 ถ้าอยู่ใน Edit Mode และมีข้อความที่บันทึกแล้ว ให้เพิ่ม Schedule ให้ข้อความใหม่ด้วย
+    if (isEditMode && savedMessage && savedMessage.id) {
+      await addScheduleToNewMessage(savedMessage.id);
+    }
+    
+    // เพิ่มเข้า UI
+    const newItem = {
+      id: savedMessage?.id || Date.now(),
+      type: savedMessage?.message_type || currentInput.type,
+      content: savedMessage?.content || currentInput.content,
+      order: savedMessage?.display_order || messageSequence.length,
+      dbId: savedMessage?.id,
+      hasImage: savedMessage?.has_image || false,
+      preview: currentInput.preview
+    };
+
+    setMessageSequence(prev => [...prev, newItem]);
+    
+    // Reset input
+    if (currentInput.preview) {
+      URL.revokeObjectURL(currentInput.preview);
+    }
+    
+    setCurrentInput({
+      type: 'text',
+      content: '',
+      file: null,
+      preview: null,
+      imageFile: null
+    });
+
+  } catch (error) {
+    console.error('Error adding message:', error);
+    alert('เกิดข้อผิดพลาดในการเพิ่มข้อความ: ' + error.message);
+  } finally {
+    setLoading(false);
+  }
+}, [currentInput, selectedGroups, selectedGroupId, messageSequence.length, selectedPage, pageDbId, isKnowledgeGroup, isEditMode]);
+
+// 🆕 เพิ่มฟังก์ชันสร้าง Schedule สำหรับข้อความใหม่
+const addScheduleToNewMessage = useCallback(async (messageId) => {
+  try {
+    // ดึง Schedule เดิมของกลุ่มนี้
+    const groupId = selectedGroups[0].id;
+    const dbId = await getPageDbId(selectedPage);
+    
+    let existingSchedule = null;
+    
+    if (isKnowledgeGroup(groupId)) {
+      const searchGroupId = `group_knowledge_${groupId.replace('knowledge_', '')}`;
+      const response = await fetch(`http://localhost:8000/message-schedules/group/${dbId}/${searchGroupId}`);
+      if (response.ok) {
+        const schedules = await response.json();
+        existingSchedule = schedules[0];
+      }
+    } else {
+      const response = await fetch(`http://localhost:8000/message-schedules/group/${dbId}/${groupId}`);
+      if (response.ok) {
+        const schedules = await response.json();
+        existingSchedule = schedules[0];
+      }
+    }
+    
+    // ถ้ามี Schedule เดิมอยู่แล้ว ให้สร้าง Schedule แบบเดียวกันสำหรับข้อความใหม่
+    if (existingSchedule) {
+      const newScheduleData = {
+        customer_type_message_id: messageId,
+        send_type: existingSchedule.send_type,
+        scheduled_at: existingSchedule.scheduled_at,
+        send_after_inactive: existingSchedule.send_after_inactive,
+        frequency: existingSchedule.frequency
+      };
+      
+      const response = await fetch('http://localhost:8000/message-schedules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newScheduleData)
+      });
+      
+      if (response.ok) {
+        console.log('✅ Schedule added to new message');
+      }
+    } else {
+      // ถ้าไม่มี Schedule เดิม สร้าง default schedule (immediate)
+      const defaultScheduleData = {
+        customer_type_message_id: messageId,
+        send_type: 'immediate',
+        scheduled_at: null,
+        send_after_inactive: null,
+        frequency: 'once'
+      };
+      
+      const response = await fetch('http://localhost:8000/message-schedules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(defaultScheduleData)
+      });
+      
+      if (response.ok) {
+        console.log('✅ Default schedule added to new message');
+      }
+    }
+  } catch (error) {
+    console.error('Error adding schedule to new message:', error);
+    // ไม่ throw error เพื่อให้การเพิ่มข้อความยังสำเร็จ
+  }
+}, [selectedGroups, selectedPage, getPageDbId, isKnowledgeGroup]);
 
   // Optimized remove function
   const removeFromSequence = useCallback(async (id) => {
