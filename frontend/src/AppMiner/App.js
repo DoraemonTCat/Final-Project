@@ -887,24 +887,40 @@ function App() {
   
   // Background refresh with longer interval
   useEffect(() => {
-    if (!selectedPage) return;
+  if (!selectedPage) return;
 
-    let refreshTimeout;
-    const backgroundRefresh = async () => {
-      if (!state.loading && !state.isBackgroundLoading) {
-        await handleloadConversations(false, false, true);
-        await loadMiningStatuses(selectedPage);
+  let refreshTimeout;
+  let isMounted = true; // ✅ เพิ่ม flag เช็คว่า component ยัง mount อยู่
+
+  const backgroundRefresh = async () => {
+    // ✅ เช็คว่า component ยัง mount และ selectedPage ยังคงเป็นเพจเดิม
+    if (!isMounted || !state.loading && !state.isBackgroundLoading) {
+      // ✅ เช็ค selectedPage อีกครั้งก่อน sync
+      const currentPage = localStorage.getItem("selectedPage");
+      
+      if (currentPage !== selectedPage) {
+        console.warn(`⚠️ Page changed during background refresh. Skipping sync.`);
+        return;
       }
-      // Increase interval to 60 seconds
+
+      await handleloadConversations(false, false, true);
+      await loadMiningStatuses(selectedPage);
+    }
+    
+    // ✅ เช็คอีกครั้งก่อนตั้ง timeout ใหม่
+    if (isMounted) {
       refreshTimeout = setTimeout(backgroundRefresh, 60000);
-    };
+    }
+  };
 
-    refreshTimeout = setTimeout(backgroundRefresh, 60000);
+  // เริ่ม background refresh
+  refreshTimeout = setTimeout(backgroundRefresh, 60000);
 
-    return () => {
-      if (refreshTimeout) clearTimeout(refreshTimeout);
-    };
-  }, [selectedPage, state.loading, state.isBackgroundLoading, handleloadConversations, loadMiningStatuses]);
+  return () => {
+    isMounted = false; // ✅ ตั้ง flag เมื่อ unmount
+    if (refreshTimeout) clearTimeout(refreshTimeout);
+  };
+}, [selectedPage, state.loading, state.isBackgroundLoading, handleloadConversations, loadMiningStatuses]);
 
   // Apply filters with debounce
   useEffect(() => {

@@ -92,7 +92,12 @@ def parse_iso_datetime(date_str: str) -> Optional[datetime]:
         return None
 
 # API สำหรับสร้างข้อมูลลูกค้า
-def build_customer_data(participant_id, user_name, first_msg_time, last_msg_time, updated_time, installed_at, page_id, access_token, convo_id) -> Optional[dict]:
+def build_customer_data(participant_id, user_name, first_msg_time, last_msg_time, 
+                       updated_time, installed_at, page_id, access_token, convo_id) -> Optional[dict]:
+    """
+    สร้างข้อมูลลูกค้าพร้อมกำหนด source_type
+    ✅ ไม่กรอง user เก่าออก - เก็บทุกคน
+    """
     first_interaction = parse_iso_datetime(first_msg_time) if first_msg_time else None
     last_interaction = parse_iso_datetime(last_msg_time) if last_msg_time else None
 
@@ -102,13 +107,10 @@ def build_customer_data(participant_id, user_name, first_msg_time, last_msg_time
     if not last_interaction:
         last_interaction = first_interaction
 
-    one_year_ago = datetime.now(bangkok_tz) - timedelta(days=365)
-    min_valid_date = max(one_year_ago, installed_at)
+    # ✅ เอาการกรองออก - เก็บข้อมูลทุกคน
+    # ถ้าต้องการกรองให้ทำที่ frontend แทน
 
-    if last_interaction and last_interaction < min_valid_date:
-        print(f"⏳ ข้ามข้อมูลเก่า last_interaction: {last_interaction} < {min_valid_date}")
-        return None
-
+    # ดึงชื่อ User
     if not user_name:
         user_info = get_user_info_from_psid(participant_id, access_token)
         user_name = user_info.get("name")
@@ -116,7 +118,15 @@ def build_customer_data(participant_id, user_name, first_msg_time, last_msg_time
     if not user_name or user_name.startswith("User"):
         user_name = get_name_from_messages(convo_id, access_token, page_id) or f"User...{participant_id[-8:]}"
 
-    source_type = "new" if first_interaction >= installed_at else "imported"
+    # ✅ แก้ไข: ตรวจสอบ timezone ให้ชัดเจน
+    if installed_at.tzinfo is None:
+        installed_at = bangkok_tz.localize(installed_at)
+    
+    if first_interaction and first_interaction.tzinfo is None:
+        first_interaction = bangkok_tz.localize(first_interaction)
+
+    # ✅ เปรียบเทียบ timezone ที่ตรงกัน
+    source_type = "new" if (first_interaction and first_interaction >= installed_at) else "imported"
 
     return {
         'customer_psid': participant_id,
@@ -138,7 +148,11 @@ def build_historical_customer_data(
     access_token: str,
     convo_id: str
 ) -> Optional[dict]:
-    """สร้างข้อมูลลูกค้าที่มาจากการ sync ย้อนหลัง โดยไม่สนใจเวลาปัจจุบัน 1 ปี"""
+    """
+    สร้างข้อมูลลูกค้าที่มาจากการ sync ย้อนหลัง
+    - ไม่สนใจเวลาปัจจุบัน 1 ปี (เพราะเป็นการ sync ย้อนหลังเฉพาะเจาะจง)
+    - กำหนด source_type ตามเวลาติดตั้งเว็บ
+    """
     
     # แปลงเวลา
     first_interaction = parse_iso_datetime(first_msg_time) if first_msg_time else None
@@ -157,11 +171,14 @@ def build_historical_customer_data(
     if not user_name or user_name.startswith("User"):
         user_name = get_name_from_messages(convo_id, access_token, page_id) or f"User...{participant_id[-8:]}"
     
-    # ตั้ง source_type เป็น 'imported' เสมอเพราะมาจากการย้อนหลัง
+    # ✅ กำหนด source_type ตามเวลาติดตั้งเว็บ
+    # สำหรับการ sync ย้อนหลัง ถ้า first_interaction < installed_at = imported
+    source_type = "new" if first_interaction >= installed_at else "imported"
+    
     return {
         'customer_psid': participant_id,
         'name': user_name,
         'first_interaction_at': first_interaction,
         'last_interaction_at': last_interaction,
-        'source_type': 'imported'
+        'source_type': source_type
     }

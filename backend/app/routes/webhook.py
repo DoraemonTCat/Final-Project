@@ -1,4 +1,3 @@
-# backend/app/routes/webhook.py
 from fastapi import APIRouter, Request, Depends, BackgroundTasks
 from fastapi.responses import PlainTextResponse
 from app.database import crud, models
@@ -49,7 +48,10 @@ async def sync_new_user_data(
     page_db_id: int,
     db: Session
 ) -> Optional[models.FbCustomer]:
-    """Sync new user data with optimized API calls"""
+    """
+    Sync new user data with optimized API calls
+    User ที่เข้ามาทาง webhook = User ใหม่ = source_type='new'
+    """
     try:
         from app.routes.facebook.auth import get_page_tokens
         
@@ -116,19 +118,20 @@ async def sync_new_user_data(
                         except:
                             pass
         
-        # Prepare customer data
+        # ✅ User ที่เข้ามาทาง webhook = User ใหม่ที่ทักหลังติดตั้งเว็บ
+        # จึงกำหนด source_type='new' เสมอ
         customer_data = {
             'name': user_name or f"User...{sender_id[-8:]}",
             'first_interaction_at': first_interaction,
             'last_interaction_at': last_interaction,
-            'source_type': 'new',
+            'source_type': 'new',  # ✅ User ใหม่เสมอ
             'profile_pic': user_info.get('profile_pic', ''),
         }
         
         # Save to database
         customer = crud.create_or_update_customer(db, page_db_id, sender_id, customer_data)
         
-        logger.info(f"✅ Auto sync successful for user: {user_name} ({sender_id})")
+        logger.info(f"✅ Auto sync successful for NEW user: {user_name} ({sender_id})")
         
         # Add notification
         add_notification(page_id, {

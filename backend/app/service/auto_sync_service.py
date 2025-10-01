@@ -1,4 +1,3 @@
-# backend/app/service/auto_sync_service.py
 import asyncio
 from datetime import datetime, timedelta
 import logging
@@ -98,22 +97,39 @@ class AutoSyncService:
     
    # API สำหรับ sync ข้อมูล conversations ของเพจเดียว
     async def sync_page_conversations(self, page_id: str, access_token: str):
-        """Sync conversations ของเพจเดียว - ทั้ง user ใหม่และอัพเดทสถานะการขุด"""
+        """
+        Sync conversations ของเพจเดียว - ทั้ง user ใหม่และอัพเดทสถานะการขุด
+        
+        ✅ กำหนด source_type:
+        - 'new': User ที่ first_interaction >= page.created_at (ติดตั้งเว็บ)
+        - 'imported': User ที่ first_interaction < page.created_at
+        """
         logger.info(f"🔄 กำลัง sync conversations สำหรับ page: {page_id}")
         
         db = SessionLocal()
         try:
-            # ดึง page จาก database
             page = crud.get_page_by_page_id(db, page_id)
             if not page:
-                logger.warning(f"⚠️ ไม่พบ page {page_id} ใน database")
                 return
+            
+            # ✅ แก้ไข: จัดการ timezone ให้ชัดเจน
+            installed_at = page.created_at or datetime.now(utc_tz)
+            
+            # แปลงเป็น UTC timezone-aware datetime
+            if installed_at.tzinfo is None:
+                # ถ้าไม่มี timezone ให้ assume เป็น Bangkok แล้วแปลงเป็น UTC
+                installed_at = bangkok_tz.localize(installed_at).astimezone(utc_tz)
+            else:
+                # ถ้ามี timezone แล้วให้แปลงเป็น UTC
+                installed_at = installed_at.astimezone(utc_tz)
+            
+            logger.info(f"📅 Installed at (UTC): {installed_at}")
             
             # ดึง conversations พร้อมข้อความล่าสุด
             endpoint = f"{page_id}/conversations"
             params = {
                 "fields": "participants,updated_time,id,messages.limit(10){created_time,from,message,id}",
-                "limit": 50  # ดึง 50 conversations ล่าสุด
+                "limit": 50
             }
             
             result = fb_get(endpoint, params, access_token)
@@ -135,11 +151,9 @@ class AutoSyncService:
                 participants = convo.get("participants", {}).get("data", [])
                 messages = convo.get("messages", {}).get("data", [])
                 
-                # ตรวจสอบแต่ละ participant
                 for participant in participants:
                     participant_id = participant.get("id")
                     if participant_id and participant_id != page_id:
-                        # ตรวจสอบว่ามี customer ในระบบหรือไม่
                         existing_customer = crud.get_customer_by_psid(db, page.ID, participant_id)
                         
                         # หาข้อความล่าสุดของ user
@@ -155,12 +169,10 @@ class AutoSyncService:
                             msg_id = latest_user_message.get("id")
                             msg_time = latest_user_message.get("created_time")
                             
-                            # แปลงเวลาให้มี timezone
                             latest_user_message_time = self.parse_facebook_time(msg_time)
                             if not latest_user_message_time:
                                 latest_user_message_time = datetime.now(utc_tz)
                             
-                            # เก็บ message ID ล่าสุด
                             is_new_message = False
                             last_seen_id = self.last_seen_messages.get(participant_id)
                             
@@ -171,7 +183,6 @@ class AutoSyncService:
                         
                         # =========== กรณี 1: User ใหม่ ===========
                         if not existing_customer:
-                            # ดึงชื่อ user
                             user_name = participant.get("name")
                             if not user_name:
                                 user_info = fb_get(participant_id, {"fields": "name,profile_pic"}, access_token)
@@ -182,7 +193,7 @@ class AutoSyncService:
                             
                             logger.info(f"🆕 พบ User ใหม่: {user_name} ({participant_id})")
                             
-                            # ดึงข้อความแรกถ้าจำเป็น
+                            # ดึงข้อความแรก
                             first_interaction = await self.get_first_message_time(
                                 convo_id, participant_id, access_token
                             )
@@ -190,18 +201,21 @@ class AutoSyncService:
                             if not first_interaction:
                                 first_interaction = latest_user_message_time or datetime.now(utc_tz)
                             
+                            # ✅ กำหนด source_type ตามเวลาติดตั้งเว็บ
+                            source_type = 'new' if first_interaction >= installed_at else 'imported'
+                            
                             customer_data = {
                                 'name': user_name,
                                 'profile_pic': profile_pic,
                                 'first_interaction_at': first_interaction,
                                 'last_interaction_at': latest_user_message_time or datetime.now(utc_tz),
-                                'source_type': 'new'
+                                'source_type': source_type
                             }
                             
                             new_customer = crud.create_or_update_customer(db, page.ID, participant_id, customer_data)
                             new_count += 1
                             
-                            # ลบสถานะการขุดเก่า (ถ้ามี) และสร้างสถานะการขุดเริ่มต้น
+                            # ลบสถานะการขุดเก่า และสร้างสถานะใหม่
                             if new_customer:
                                 db.query(models.FBCustomerMiningStatus).filter(
                                     models.FBCustomerMiningStatus.customer_id == new_customer.id
@@ -226,18 +240,19 @@ class AutoSyncService:
                                     'action': 'new',
                                     'timestamp': datetime.now().isoformat(),
                                     'profile_pic': profile_pic,
-                                    'mining_status': 'ยังไม่ขุด'
+                                    'mining_status': 'ยังไม่ขุด',
+                                    'source_type': source_type  # ✅ ส่ง source_type ไปด้วย
                                 }
                                 
                                 await customer_type_update_queue.put(update_data)
-                                logger.info(f"📡 Sent SSE new user notification for: {user_name}")
+                                logger.info(f"📡 Sent SSE new user notification: {user_name} ({source_type})")
                                 
                             except Exception as e:
                                 logger.error(f"Error sending SSE for new user: {e}")
                         
                         # =========== กรณี 2: User เดิมมีข้อความใหม่ ===========
                         elif is_new_message and latest_user_message_time:
-                            # อัพเดท last_interaction_at
+                             # อัพเดท last_interaction_at
                             existing_last_interaction = self.make_datetime_aware(existing_customer.last_interaction_at)
                             
                             if existing_last_interaction is None or latest_user_message_time > existing_last_interaction:
@@ -254,14 +269,14 @@ class AutoSyncService:
                                     models.FBCustomerMiningStatus.customer_id == existing_customer.id
                                 ).order_by(models.FBCustomerMiningStatus.created_at.desc()).first()
                                 
-                                # ถ้าสถานะปัจจุบันคือ "ขุดแล้ว" ให้เปลี่ยนเป็น "มีการตอบกลับ"
+                                 # ถ้าสถานะปัจจุบันคือ "ขุดแล้ว" ให้เปลี่ยนเป็น "มีการตอบกลับ"
                                 if current_mining_status and current_mining_status.status == "ขุดแล้ว":
-                                    # ลบสถานะเก่าทั้งหมด
+                                      # ลบสถานะเก่าทั้งหมด
                                     db.query(models.FBCustomerMiningStatus).filter(
                                         models.FBCustomerMiningStatus.customer_id == existing_customer.id
                                     ).delete()
                                     
-                                    # เพิ่มสถานะใหม่
+                                     # เพิ่มสถานะใหม่
                                     new_status = models.FBCustomerMiningStatus(
                                         customer_id=existing_customer.id,
                                         status="มีการตอบกลับ",
@@ -270,9 +285,9 @@ class AutoSyncService:
                                     db.add(new_status)
                                     db.commit()
                                     status_updated_count += 1
-                                    logger.info(f"💬 ✅ Updated mining status to 'มีการตอบกลับ' for: {existing_customer.name} (deleted old records)")
+                                    logger.info(f"💬 ✅ Updated mining status to 'มีการตอบกลับ' for: {existing_customer.name}")
                                     
-                                    # ส่ง SSE update สำหรับสถานะการขุด
+                                     # ส่ง SSE update สำหรับสถานะการขุด
                                     try:
                                         from app.routes.facebook.sse import customer_type_update_queue
                                         
@@ -300,7 +315,7 @@ class AutoSyncService:
                     logger.info(f"   - อัพเดท interaction: {updated_count} คน")
                 if status_updated_count > 0:
                     logger.info(f"   - อัพเดทสถานะการขุด: {status_updated_count} คน")
-                
+                    
         except Exception as e:
             logger.error(f"❌ Error syncing page {page_id}: {e}")
             import traceback
