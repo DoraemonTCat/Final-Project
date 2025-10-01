@@ -2,18 +2,20 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 
-export const useRealtimeUpdates = (pageId, onUpdate) => {
-  const eventSourceRef = useRef(null);
-  const reconnectTimeoutRef = useRef(null);
-  const reconnectAttemptsRef = useRef(0);
-  const lastEventIdRef = useRef(null);
+export const useRealtimeUpdates = (pages, selectedPageId, onUpdate) => {
+  const eventSourcesRef = useRef({});
+  const reconnectTimeoutsRef = useRef({});
+  const reconnectAttemptsRef = useRef({});
+  const lastEventIdsRef = useRef({});
 
-  const connect = useCallback(() => {
+  // ✅ สร้าง connection สำหรับเพจเดียว
+  const connectToPage = useCallback((pageId) => {
     if (!pageId) return;
 
-    // Close existing connection
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
+    // ปิด connection เดิม (ถ้ามี)
+    if (eventSourcesRef.current[pageId]) {
+      eventSourcesRef.current[pageId].close();
+      delete eventSourcesRef.current[pageId];
     }
 
     console.log(`🔌 Connecting to SSE for page ${pageId}`);
@@ -22,205 +24,136 @@ export const useRealtimeUpdates = (pageId, onUpdate) => {
       `http://localhost:8000/sse/customers/${pageId}`
     );
     
-    eventSourceRef.current = eventSource;
+    eventSourcesRef.current[pageId] = eventSource;
 
     eventSource.onopen = () => {
-      console.log('✅ SSE connection established');
-      reconnectAttemptsRef.current = 0;
+      console.log(`✅ SSE connection established for page ${pageId}`);
+      reconnectAttemptsRef.current[pageId] = 0;
     };
 
     eventSource.onmessage = (event) => {
-  try {
-    const data = JSON.parse(event.data);
-    
-    // เก็บ event ID เพื่อป้องกันข้อมูลซ้ำ
-    const eventId = data.id || data.timestamp;
-    if (eventId && eventId === lastEventIdRef.current) {
-      return; // Skip duplicate
-    }
-    lastEventIdRef.current = eventId;
-    
-    switch (data.type) {
-      case 'customer_update':
-        console.log('📊 Received customer updates:', data.data);
+      try {
+        const data = JSON.parse(event.data);
         
-        // ตรวจสอบว่ามี mining status update หรือไม่
-        const statusUpdates = data.data.filter(u => u.action === 'mining_status_update');
-        if (statusUpdates.length > 0) {
-          console.log('⛏️ Mining status updates detected:', statusUpdates);
-          
-          // แสดง notification สำหรับสถานะที่เปลี่ยน
-          statusUpdates.forEach(update => {
-            if (update.mining_status === 'มีการตอบกลับ') {
-              showMiningStatusNotification(update.psid, 'มีการตอบกลับ');
+        // ป้องกันข้อมูลซ้ำ
+        const eventId = data.id || data.timestamp;
+        if (eventId && eventId === lastEventIdsRef.current[pageId]) {
+          return;
+        }
+        lastEventIdsRef.current[pageId] = eventId;
+        
+        // จัดการตาม type
+        switch (data.type) {
+          case 'customer_update':
+            console.log(`📊 [${pageId}] Received customer updates:`, data.data);
+            
+            // ✅ แยกประเภทการอัปเดต
+            const statusUpdates = data.data.filter(u => 
+              u.action === 'mining_status_update' || u.mining_status
+            );
+            
+            const newUsers = data.data.filter(u => u.action === 'new');
+         
+            
+            // ส่งข้อมูลไปอัปเดต (พร้อม pageId)
+            if (onUpdate) {
+              onUpdate(pageId, data.data);
             }
-          });
+            break;
+            
+          case 'customer_type_update':
+            console.log(`🏷️ [${pageId}] Received customer type update:`, data.data);
+            if (onUpdate) {
+              onUpdate(pageId, data.data);
+            }
+            break;
+            
+          case 'heartbeat':
+            // Heartbeat - ไม่ต้องทำอะไร
+            break;
+            
+          case 'error':
+            console.error(`❌ [${pageId}] SSE Error:`, data.message);
+            break;
+            
+          default:
+            console.log(`📦 [${pageId}] Unknown event type:`, data.type);
         }
-        
-        // ตรวจสอบว่ามี user ใหม่หรือไม่
-        const newUsers = data.data.filter(u => u.action === 'new');
-        if (newUsers.length > 0) {
-          console.log('🆕 New users detected:', newUsers);
-          
-          // แสดง notification
-          newUsers.forEach(user => {
-            showNewUserNotification(user.name || 'ผู้ใช้ใหม่');
-          });
-        }
-        
-        if (onUpdate) {
-          onUpdate(data.data);
-        }
-        break;
-        
-      case 'customer_type_update':
-        console.log('🏷️ Received customer type update:', data.data);
-        if (onUpdate) {
-          onUpdate(data.data);
-        }
-        break;
-        
-      case 'heartbeat':
-        // console.log('💓 Heartbeat received');
-        break;
-        
-      case 'error':
-        console.error('❌ SSE Error:', data.message);
-        break;
-        
-      default:
-        console.log('📦 Unknown event type:', data.type);
-    }
-  } catch (error) {
-    console.error('Error parsing SSE data:', error);
-  }
-};
-
-// เพิ่ม Helper function สำหรับแสดง notification สถานะการขุด
-const showMiningStatusNotification = (psid, status) => {
-  const notification = document.createElement('div');
-  notification.className = 'mining-status-notification';
-  notification.innerHTML = `
-    <div class="notification-content">
-      <span class="notification-icon">💬</span>
-      <div class="notification-text">
-        <strong>สถานะการขุดอัพเดท!</strong>
-        <span>ลูกค้า ${psid.slice(-8)} ${status}</span>
-      </div>
-    </div>
-  `;
-  
-  notification.style.cssText = `
-    position: fixed;
-    top: 80px;
-    right: 20px;
-    z-index: 10000;
-    min-width: 300px;
-    background: linear-gradient(135deg, #3182ce 0%, #2563eb 100%);
-    color: white;
-    border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-    animation: slideInRight 0.3s ease-out;
-    padding: 16px 20px;
-  `;
-  
-  document.body.appendChild(notification);
-  
-  setTimeout(() => {
-    notification.style.animation = 'slideOutRight 0.3s ease-out';
-    setTimeout(() => notification.remove(), 300);
-  }, 5000);
-};
+      } catch (error) {
+        console.error(`Error parsing SSE data for page ${pageId}:`, error);
+      }
+    };
 
     eventSource.onerror = (error) => {
-      console.error('❌ SSE connection error:', error);
+      console.error(`❌ SSE connection error for page ${pageId}:`, error);
       eventSource.close();
+      delete eventSourcesRef.current[pageId];
       
       // Reconnect with exponential backoff
-      const attempts = reconnectAttemptsRef.current;
+      const attempts = reconnectAttemptsRef.current[pageId] || 0;
       const delay = Math.min(1000 * Math.pow(2, attempts), 30000);
       
-      console.log(`🔄 Reconnecting in ${delay}ms (attempt ${attempts + 1})`);
+      console.log(`🔄 [${pageId}] Reconnecting in ${delay}ms (attempt ${attempts + 1})`);
       
-      reconnectTimeoutRef.current = setTimeout(() => {
-        reconnectAttemptsRef.current += 1;
-        connect();
+      reconnectTimeoutsRef.current[pageId] = setTimeout(() => {
+        reconnectAttemptsRef.current[pageId] = attempts + 1;
+        connectToPage(pageId);
       }, delay);
     };
-  }, [pageId, onUpdate]);
+  }, [onUpdate]);
 
-  const disconnect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
+  // ✅ เชื่อมต่อทุกเพจ
+  const connectAllPages = useCallback(() => {
+    if (!Array.isArray(pages) || pages.length === 0) {
+      console.warn('⚠️ No pages to connect');
+      return;
     }
+
+    console.log(`🚀 Connecting to ${pages.length} pages...`);
     
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
+    pages.forEach(page => {
+      if (page && page.id) {
+        connectToPage(page.id);
+      }
+    });
+  }, [pages, connectToPage]);
+
+  // ✅ ปิดการเชื่อมต่อทั้งหมด
+  const disconnectAll = useCallback(() => {
+    console.log('🔌 Disconnecting all SSE connections...');
     
-    reconnectAttemptsRef.current = 0;
-    lastEventIdRef.current = null;
-    console.log('🔌 SSE disconnected');
+    // ปิด eventSources ทั้งหมด
+    Object.keys(eventSourcesRef.current).forEach(pageId => {
+      if (eventSourcesRef.current[pageId]) {
+        eventSourcesRef.current[pageId].close();
+      }
+    });
+    eventSourcesRef.current = {};
+    
+    // Clear reconnect timeouts
+    Object.keys(reconnectTimeoutsRef.current).forEach(pageId => {
+      if (reconnectTimeoutsRef.current[pageId]) {
+        clearTimeout(reconnectTimeoutsRef.current[pageId]);
+      }
+    });
+    reconnectTimeoutsRef.current = {};
+    
+    // Reset states
+    reconnectAttemptsRef.current = {};
+    lastEventIdsRef.current = {};
   }, []);
 
-  // Helper function สำหรับแสดง notification
-  const showNewUserNotification = (userName) => {
-    // Browser notification
-    if (Notification.permission === 'granted') {
-      new Notification('มีลูกค้าใหม่!', {
-        body: `${userName} ทักเข้ามาใหม่`,
-        icon: '🆕',
-        tag: 'new-user',
-        requireInteraction: false
-      });
-    }
-    
-    // In-app notification
-    const notification = document.createElement('div');
-    notification.className = 'new-user-notification';
-    notification.innerHTML = `
-      <div class="notification-content">
-        <span class="notification-icon">🆕</span>
-        <div class="notification-text">
-          <strong>ลูกค้าใหม่!</strong>
-          <span>${userName} ทักเข้ามาใหม่</span>
-        </div>
-      </div>
-    `;
-    
-    // Style for notification
-    notification.style.cssText = `
-      position: fixed;
-      top: 80px;
-      right: 20px;
-      z-index: 10000;
-      min-width: 300px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border-radius: 12px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-      animation: slideInRight 0.3s ease-out;
-      padding: 16px 20px;
-    `;
-    
-    document.body.appendChild(notification);
-    
-    // Auto remove after 5 seconds
-    setTimeout(() => {
-      notification.style.animation = 'slideOutRight 0.3s ease-out';
-      setTimeout(() => notification.remove(), 300);
-    }, 5000);
-  };
-
+  // ✅ Effect: เชื่อมต่อเมื่อ pages เปลี่ยน
   useEffect(() => {
-    connect();
+    connectAllPages();
     
     return () => {
-      disconnect();
+      disconnectAll();
     };
-  }, [connect, disconnect]);
+  }, [connectAllPages, disconnectAll]);
 
-  return { disconnect, reconnect: connect };
+  return { 
+    disconnect: disconnectAll, 
+    reconnect: connectAllPages 
+  };
 };

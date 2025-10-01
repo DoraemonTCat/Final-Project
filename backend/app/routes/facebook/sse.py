@@ -29,18 +29,18 @@ async def event_generator(page_id: str, db: Session) -> AsyncGenerator:
         
         while active_connections.get(client_id, False):
             try:
-                # ใช้ try-except และ rollback เมื่อเกิด error
                 try:
-                    # Check for customer type updates from queue
+                    # ✅ ตรวจสอบ queue updates ตาม page_id
                     try:
                         update = await asyncio.wait_for(
                             customer_type_update_queue.get(), 
                             timeout=1.0
                         )
                         
+                        # ✅ ส่งเฉพาะข้อมูลที่ตรงกับ page_id
                         if update.get('page_id') == page_id:
                             yield f"data: {json.dumps({'type': 'customer_type_update', 'data': [update]})}\n\n"
-                            logger.info(f"Sent customer type update for {update['psid']}")
+                            logger.info(f"Sent customer type update for {update['psid']} on page {page_id}")
                             
                     except asyncio.TimeoutError:
                         pass
@@ -48,15 +48,13 @@ async def event_generator(page_id: str, db: Session) -> AsyncGenerator:
                     # Check for new/updated customers
                     page = crud.get_page_by_page_id(db, page_id)
                     if page:
-                        # ✅ แก้ไข: เปลี่ยนจาก page.id เป็น page.ID
                         customers = crud.get_customers_updated_after(
-                            db, page.ID, last_check  # ✅ ใช้ page.ID แทน page.id
+                            db, page.ID, last_check
                         )
                         
                         if customers:
                             updates = []
                             for customer in customers:
-                                # ตรวจสอบว่า customer.current_category มีหรือไม่
                                 knowledge_name = None
                                 if customer.current_category:
                                     knowledge_name = customer.current_category.type_name
@@ -68,9 +66,9 @@ async def event_generator(page_id: str, db: Session) -> AsyncGenerator:
                                     'first_interaction': customer.first_interaction_at.isoformat() if customer.first_interaction_at else None,
                                     'last_interaction': customer.last_interaction_at.isoformat() if customer.last_interaction_at else None,
                                     'source_type': customer.source_type,
-                                    # ใช้ current_category แทน
                                     'current_category_id': customer.current_category_id,
                                     'current_category_name': knowledge_name,
+                                    'mining_status': customer.mining_statuses[0].status if customer.mining_statuses else 'ยังไม่ขุด',
                                     'action': 'update'
                                 }
                                 updates.append(update_data)
@@ -78,14 +76,11 @@ async def event_generator(page_id: str, db: Session) -> AsyncGenerator:
                             yield f"data: {json.dumps({'type': 'customer_update', 'data': updates})}\n\n"
                             last_check = datetime.now()
                     
-                    # ทำ commit เพื่อ clear transaction
                     db.commit()
                     
                 except Exception as e:
-                    # Rollback transaction เมื่อเกิด error
                     db.rollback()
-                    logger.error(f"Database error in SSE: {e}")
-                    # Continue loop แทนที่จะ raise error
+                    logger.error(f"Database error in SSE for page {page_id}: {e}")
                 
                 # Send heartbeat
                 yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': datetime.now().isoformat()})}\n\n"
@@ -93,8 +88,7 @@ async def event_generator(page_id: str, db: Session) -> AsyncGenerator:
                 await asyncio.sleep(5)
                 
             except Exception as e:
-                logger.error(f"Error in SSE generator: {e}")
-                # Rollback และ continue
+                logger.error(f"Error in SSE generator for page {page_id}: {e}")
                 try:
                     db.rollback()
                 except:
@@ -105,7 +99,6 @@ async def event_generator(page_id: str, db: Session) -> AsyncGenerator:
     finally:
         active_connections.pop(client_id, None)
         logger.info(f"SSE connection closed for {client_id}")
-        # ทำ rollback สุดท้ายก่อนปิด connection
         try:
             db.rollback()
         except:

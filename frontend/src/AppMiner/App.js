@@ -203,8 +203,9 @@ function App() {
     userInactivityData: {},
     updateQueue: [],
     isProcessing: false,
-    lastEventId: null
-  }).current;
+    lastEventId: null,
+    lastPageId: null  // ✅ เพิ่มบรรทัดนี้
+}).current;
   
   const cacheTimeout = 5 * 60 * 1000;
 
@@ -780,43 +781,54 @@ function App() {
   // SECTION 11: OPTIMIZED REALTIME UPDATE HANDLER
   // =====================================================
   
-  const handleRealtimeUpdate = useCallback((updates) => {
-    if (!Array.isArray(updates) || updates.length === 0) return;
+  const handleRealtimeUpdate = useCallback((pageId, updates) => {
+  if (!Array.isArray(updates) || updates.length === 0) return;
+  
+  // ✅ อัปเดตเฉพาะเพจที่ตรงกับข้อมูล
+  // ถ้าไม่ใช่เพจที่เลือก → อัปเดต background data
+  const isCurrentPage = pageId === selectedPage;
+  
+  // Avoid duplicate updates
+  const eventId = updates[0]?.id || updates[0]?.timestamp;
+  const cacheKey = `${pageId}_${eventId}`;
+  if (eventId === refs.lastEventId && pageId === refs.lastPageId) return;
+  refs.lastEventId = eventId;
+  refs.lastPageId = pageId;
+  
+  // Batch process updates
+  requestIdleCallback(() => {
+    const miningUpdates = {};
+    const updatedUsers = [];
     
-    // Avoid duplicate updates
-    const eventId = updates[0]?.id || updates[0]?.timestamp;
-    if (eventId === refs.lastEventId) return;
-    refs.lastEventId = eventId;
-    
-    // Batch process updates
-    requestIdleCallback(() => {
-      const miningUpdates = {};
-      const updatedUsers = [];
-      
-      updates.forEach(update => {
-        if (update.mining_status || update.action === 'mining_status_update') {
-          miningUpdates[update.psid] = {
-            status: update.mining_status || 'ยังไม่ขุด',
-            updatedAt: update.timestamp || new Date().toISOString()
-          };
+    updates.forEach(update => {
+      if (update.mining_status || update.action === 'mining_status_update') {
+        miningUpdates[update.psid] = {
+          status: update.mining_status || 'ยังไม่ขุด',
+          updatedAt: update.timestamp || new Date().toISOString()
+        };
+        
+        if (update.mining_status === 'มีการตอบกลับ') {
+          updatedUsers.push(update.psid);
           
-          if (update.mining_status === 'มีการตอบกลับ') {
-            updatedUsers.push(update.psid);
+          // แสดง notification เฉพาะเพจที่เลือก
+          if (isCurrentPage) {
             showNotification('info', 'สถานะอัพเดท', 
               `ลูกค้า ${update.name || update.psid?.slice(-8) || ''} มีการตอบกลับ`);
           }
         }
-      });
-      
-      if (Object.keys(miningUpdates).length > 0) {
-        dispatch({ type: 'UPDATE_MINING_STATUS', payload: miningUpdates });
       }
-      
-      updatedUsers.forEach(psid => {
-        dispatch({ type: 'ADD_RECENTLY_UPDATED', payload: psid });
-      });
     });
-  }, [showNotification, refs]);
+    
+    // ✅ อัปเดต state เฉพาะเพจที่ถูกต้อง
+    if (Object.keys(miningUpdates).length > 0 && isCurrentPage) {
+      dispatch({ type: 'UPDATE_MINING_STATUS', payload: miningUpdates });
+    }
+    
+    updatedUsers.forEach(psid => {
+      dispatch({ type: 'ADD_RECENTLY_UPDATED', payload: psid });
+    });
+  });
+}, [showNotification, refs, selectedPage]);
 
   // =====================================================
   // SECTION 12: INACTIVITY BATCH UPDATE
@@ -877,8 +889,9 @@ function App() {
   // =====================================================
   
   const { disconnect, reconnect } = useRealtimeUpdates(
-    selectedPage,
-    handleRealtimeUpdate
+    pages,              // ✅ ส่ง pages ทั้งหมด
+    selectedPage,       // ✅ ส่ง selectedPage เพื่อใช้ในการแสดง notification
+    handleRealtimeUpdate // ✅ callback รับ pageId ด้วย
   );
 
   // =====================================================

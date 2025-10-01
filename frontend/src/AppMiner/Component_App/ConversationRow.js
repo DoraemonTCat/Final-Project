@@ -238,7 +238,7 @@ const ConversationRow = React.memo(({
   }, [onToggleCheckbox, conv.conversation_id]);
 
   return (
-    <tr className={`table-row ${isSelected ? 'selected' : ''} ${isRecentlyUpdated ? 'recently-updated' : ''}`}>
+    <tr className={`table-row ${isSelected ? 'selected' : ''} `}>
       <td className="table-cell text-center">
         <div className="row-number">{idx + 1}</div>
       </td>
