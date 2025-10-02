@@ -712,8 +712,8 @@ function App() {
 
     if (successCount > 0) {   
       updateMiningCount(successCount);
-      showNotification('success', `✅ ส่งข้อความสำเร็จ ${successCount} คน`, 
-        `ใช้เวลา ${totalBatches} รอบ • ขุดไปแล้ว ${todayMiningCount + successCount}/${dailyMiningLimit} ครั้งวันนี้`);
+      showNotification('success', ` ส่งข้อความสำเร็จ ${successCount} คน`, 
+       );
     }
     if (failCount > 0) {
       showNotification('warning', `⚠️ ส่งข้อความไม่สำเร็จ ${failCount} คน`);
