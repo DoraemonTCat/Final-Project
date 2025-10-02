@@ -205,7 +205,7 @@ function App() {
     isProcessing: false,
     lastEventId: null,
     lastPageId: null  // ✅ เพิ่มบรรทัดนี้
-}).current;
+  }).current;
   
   const cacheTimeout = 5 * 60 * 1000;
 
@@ -503,10 +503,48 @@ function App() {
   }, [state.allConversations, filters, dateEntryFilter]);
 
   // =====================================================
+  // SECTION 9: NOTIFICATION FUNCTIONS
+  // =====================================================
+  
+  const showNotification = useCallback((type, message, detail = '') => {
+    const notification = document.createElement('div');
+    notification.className = `${type}-notification`;
+    
+    const icons = {
+      success: '✅',
+      error: '❌',
+      warning: '⚠️',
+      send: '🚀',
+      info: 'ℹ️'
+    };
+    
+    notification.innerHTML = `
+      <div class="notification-content">
+        <span class="notification-icon">${icons[type]}</span>
+        <div class="notification-text">
+          <strong>${message}</strong>
+          ${detail ? `<span>${detail}</span>` : ''}
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    if (type !== 'send') {
+      setTimeout(() => notification.remove(), 3000);
+    }
+  }, []);
+
+  const removeNotification = useCallback(() => {
+    const notifications = document.querySelectorAll('.send-notification');
+    notifications.forEach(n => n.remove());
+  }, []);
+
+  // =====================================================
   // SECTION 8: OPTIMIZED MESSAGE FUNCTIONS
   // =====================================================
   
-  const sendMessagesBySelectedSets = useCallback(async (messageSetIds) => {
+  const sendMessagesBySelectedSets = useCallback(async (messageSetIds, frequencySettings = null) => {
     if (!Array.isArray(messageSetIds) || state.selectedConversationIds.length === 0) {
       return;
     }
@@ -523,25 +561,87 @@ function App() {
       return;
     }
 
+    // ✅ ใช้ความถี่จากการตั้งค่า หรือใช้ค่าเริ่มต้น
+    const batchSize = frequencySettings?.batchSize || 20;
+    const delayMinutes = frequencySettings?.delayMinutes || 60;
+    const delayMs = delayMinutes * 60 * 1000;
+
     try {
       let successCount = 0;
       let failCount = 0;
       const successfulPsids = [];
 
-      showNotification('send', 'กำลังส่งข้อความ...', `ส่งไปยัง ${state.selectedConversationIds.length} การสนทนา`);
-
-      // Process in batches to avoid blocking
-      const batchSize = 5;
+      // ✅ แบ่ง conversations ออกเป็น batches
+      const totalBatches = Math.ceil(state.selectedConversationIds.length / batchSize);
+      const batches = [];
       for (let i = 0; i < state.selectedConversationIds.length; i += batchSize) {
-        const batch = state.selectedConversationIds.slice(i, i + batchSize);
+        batches.push(state.selectedConversationIds.slice(i, i + batchSize));
+      }
+
+      console.log(`🚀 เริ่มขุด ${selectedCount} คน แบ่งเป็น ${totalBatches} รอบ`);
+      console.log(`⏱️ แต่ละรอบ ${batchSize} คน หน่วงเวลา ${delayMinutes} นาที`);
+
+      // ✅ สร้าง Progress Modal
+      const progressOverlay = document.createElement('div');
+      progressOverlay.className = 'mining-progress-overlay';
+      progressOverlay.innerHTML = `
+        <div class="mining-progress-modal">
+          <div class="mining-progress-header">
+            <h2>⛏️ กำลังขุดข้อมูล</h2>
+            <p style="color: #718096; margin: 0;">โปรดรอสักครู่...</p>
+          </div>
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill" style="width: 0%">
+              <span id="progress-text">0%</span>
+            </div>
+          </div>
+          <div class="progress-stats">
+            <div class="progress-stat">
+              <div class="progress-stat-value" id="current-batch">0</div>
+              <div class="progress-stat-label">รอบปัจจุบัน</div>
+            </div>
+            <div class="progress-stat">
+              <div class="progress-stat-value">${totalBatches}</div>
+              <div class="progress-stat-label">ทั้งหมด</div>
+            </div>
+            <div class="progress-stat">
+              <div class="progress-stat-value" id="success-count">0</div>
+              <div class="progress-stat-label">สำเร็จ</div>
+            </div>
+          </div>
+          <div style="margin-top: 20px; text-align: center; color: #718096; font-size: 14px;">
+            <div id="next-batch-info"></div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(progressOverlay);
+
+      // ✅ ส่งข้อความแบบ batch ต่อ batch
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const currentBatch = batches[batchIndex];
         
-        await Promise.all(batch.map(async (conversationId) => {
+        // อัพเดท UI
+        const progress = ((batchIndex + 1) / totalBatches) * 100;
+        const progressBar = progressOverlay.querySelector('.progress-bar-fill');
+        const progressText = progressOverlay.querySelector('#progress-text');
+        const currentBatchEl = progressOverlay.querySelector('#current-batch');
+        const successCountEl = progressOverlay.querySelector('#success-count');
+        const nextBatchInfo = progressOverlay.querySelector('#next-batch-info');
+
+        progressBar.style.width = `${progress}%`;
+        progressText.textContent = `${Math.round(progress)}%`;
+        currentBatchEl.textContent = batchIndex + 1;
+
+        console.log(`\n📦 รอบที่ ${batchIndex + 1}/${totalBatches} - ส่งไปยัง ${currentBatch.length} คน`);
+
+        // ส่งข้อความให้กับคนใน batch นี้
+        for (const conversationId of currentBatch) {
           const selectedConv = displayData.find(conv => conv.conversation_id === conversationId);
           const psid = selectedConv?.raw_psid;
 
           if (!psid) {
             failCount++;
-            return;
+            continue;
           }
 
           try {
@@ -579,13 +679,43 @@ function App() {
             
             successCount++;
             successfulPsids.push(psid);
+            successCountEl.textContent = successCount;
+            
           } catch (err) {
-            console.error(`ส่งข้อความไม่สำเร็จสำหรับ ${conversationId}:`, err);
+            console.error(`❌ ส่งข้อความไม่สำเร็จสำหรับ ${conversationId}:`, err);
             failCount++;
           }
-        }));
+        }
+
+        // ✅ หน่วงเวลาก่อนรอบถัดไป (ยกเว้นรอบสุดท้าย)
+        if (batchIndex < batches.length - 1) {
+          console.log(`⏳ หน่วงเวลา ${delayMinutes} นาทีก่อนรอบถัดไป...`);
+          
+          // แสดงข้อความรอ
+          let remainingTime = delayMs;
+          const updateInterval = 1000;
+          
+          const countdownInterval = setInterval(() => {
+            remainingTime -= updateInterval;
+            const remainingMinutes = Math.floor(remainingTime / 60000);
+            const remainingSeconds = Math.floor((remainingTime % 60000) / 1000);
+            
+            nextBatchInfo.innerHTML = `
+              ⏱️ รอบถัดไปในอีก <strong>${remainingMinutes}:${remainingSeconds.toString().padStart(2, '0')}</strong>
+            `;
+            
+            if (remainingTime <= 0) {
+              clearInterval(countdownInterval);
+              nextBatchInfo.innerHTML = '';
+            }
+          }, updateInterval);
+          
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          clearInterval(countdownInterval);
+        }
       }
 
+      // ✅ อัพเดทสถานะการขุด
       if (successfulPsids.length > 0) {
         const updateResponse = await fetch(`http://localhost:8000/mining-status/update/${selectedPage}`, {
           method: "POST",
@@ -611,61 +741,32 @@ function App() {
         }
       }
 
-      removeNotification();
+      // ลบ progress overlay
+      progressOverlay.remove();
 
       if (successCount > 0) {   
         updateMiningCount(successCount);
-        showNotification('success', `ส่งข้อความและอัพเดทสถานะสำเร็จ ${successCount} การสนทนา`, 
-          `ขุดไปแล้ว ${todayMiningCount + successCount}/${dailyMiningLimit} ครั้งวันนี้`);
+        showNotification('success', `✅ ส่งข้อความสำเร็จ ${successCount} คน`, 
+          `ใช้เวลา ${totalBatches} รอบ • ขุดไปแล้ว ${todayMiningCount + successCount}/${dailyMiningLimit} ครั้งวันนี้`);
         dispatch({ type: 'CLEAR_SELECTION' });
-      } else {
-        showNotification('error', `ส่งข้อความไม่สำเร็จ ${failCount} การสนทนา`);
+      }
+      if (failCount > 0) {
+        showNotification('warning', `⚠️ ส่งข้อความไม่สำเร็จ ${failCount} คน`);
       }
       
     } catch (error) {
       console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
-      alert("เกิดข้อผิดพลาดในการส่งข้อความ");
+      
+      // ลบ progress overlay ถ้ามี error
+      const progressOverlay = document.querySelector('.mining-progress-overlay');
+      if (progressOverlay) {
+        progressOverlay.remove();
+      }
+      
+      showNotification('error', 'เกิดข้อผิดพลาด', error.message);
     }
   }, [state.selectedConversationIds, selectedPage, displayData, remainingMines, dailyMiningLimit, 
-      todayMiningCount, updateMiningCount]);
-
-  // =====================================================
-  // SECTION 9: NOTIFICATION FUNCTIONS
-  // =====================================================
-  
-  const showNotification = useCallback((type, message, detail = '') => {
-    const notification = document.createElement('div');
-    notification.className = `${type}-notification`;
-    
-    const icons = {
-      success: '✅',
-      error: '❌',
-      warning: '⚠️',
-      send: '🚀',
-      info: 'ℹ️'
-    };
-    
-    notification.innerHTML = `
-      <div class="notification-content">
-        <span class="notification-icon">${icons[type]}</span>
-        <div class="notification-text">
-          <strong>${message}</strong>
-          ${detail ? `<span>${detail}</span>` : ''}
-        </div>
-      </div>
-    `;
-    
-    document.body.appendChild(notification);
-    
-    if (type !== 'send') {
-      setTimeout(() => notification.remove(), 3000);
-    }
-  }, []);
-
-  const removeNotification = useCallback(() => {
-    const notifications = document.querySelectorAll('.send-notification');
-    notifications.forEach(n => n.remove());
-  }, []);
+      todayMiningCount, updateMiningCount, dispatch, showNotification]);
 
   // =====================================================
   // SECTION 10: OPTIMIZED CALLBACK FUNCTIONS
@@ -730,10 +831,10 @@ function App() {
     setIsPopupOpen(false);
   }, []);
 
-  const handleConfirmPopup = useCallback((checkedSetIds) => {
+  const handleConfirmPopup = useCallback((checkedSetIds, frequencySettings) => {
     setSelectedMessageSetIds(checkedSetIds);
     setIsPopupOpen(false);
-    sendMessagesBySelectedSets(checkedSetIds);
+    sendMessagesBySelectedSets(checkedSetIds, frequencySettings);
   }, [sendMessagesBySelectedSets]);
 
   const handleClearDateFilter = useCallback(() => {
@@ -782,53 +883,53 @@ function App() {
   // =====================================================
   
   const handleRealtimeUpdate = useCallback((pageId, updates) => {
-  if (!Array.isArray(updates) || updates.length === 0) return;
-  
-  // ✅ อัปเดตเฉพาะเพจที่ตรงกับข้อมูล
-  // ถ้าไม่ใช่เพจที่เลือก → อัปเดต background data
-  const isCurrentPage = pageId === selectedPage;
-  
-  // Avoid duplicate updates
-  const eventId = updates[0]?.id || updates[0]?.timestamp;
-  const cacheKey = `${pageId}_${eventId}`;
-  if (eventId === refs.lastEventId && pageId === refs.lastPageId) return;
-  refs.lastEventId = eventId;
-  refs.lastPageId = pageId;
-  
-  // Batch process updates
-  requestIdleCallback(() => {
-    const miningUpdates = {};
-    const updatedUsers = [];
+    if (!Array.isArray(updates) || updates.length === 0) return;
     
-    updates.forEach(update => {
-      if (update.mining_status || update.action === 'mining_status_update') {
-        miningUpdates[update.psid] = {
-          status: update.mining_status || 'ยังไม่ขุด',
-          updatedAt: update.timestamp || new Date().toISOString()
-        };
-        
-        if (update.mining_status === 'มีการตอบกลับ') {
-          updatedUsers.push(update.psid);
+    // ✅ อัปเดตเฉพาะเพจที่ตรงกับข้อมูล
+    // ถ้าไม่ใช่เพจที่เลือก → อัปเดต background data
+    const isCurrentPage = pageId === selectedPage;
+    
+    // Avoid duplicate updates
+    const eventId = updates[0]?.id || updates[0]?.timestamp;
+    const cacheKey = `${pageId}_${eventId}`;
+    if (eventId === refs.lastEventId && pageId === refs.lastPageId) return;
+    refs.lastEventId = eventId;
+    refs.lastPageId = pageId;
+    
+    // Batch process updates
+    requestIdleCallback(() => {
+      const miningUpdates = {};
+      const updatedUsers = [];
+      
+      updates.forEach(update => {
+        if (update.mining_status || update.action === 'mining_status_update') {
+          miningUpdates[update.psid] = {
+            status: update.mining_status || 'ยังไม่ขุด',
+            updatedAt: update.timestamp || new Date().toISOString()
+          };
           
-          // แสดง notification เฉพาะเพจที่เลือก
-          if (isCurrentPage) {
-            showNotification('info', 'สถานะอัพเดท', 
-              `ลูกค้า ${update.name || update.psid?.slice(-8) || ''} มีการตอบกลับ`);
+          if (update.mining_status === 'มีการตอบกลับ') {
+            updatedUsers.push(update.psid);
+            
+            // แสดง notification เฉพาะเพจที่เลือก
+            if (isCurrentPage) {
+              showNotification('info', 'สถานะอัพเดท', 
+                `ลูกค้า ${update.name || update.psid?.slice(-8) || ''} มีการตอบกลับ`);
+            }
           }
         }
+      });
+      
+      // ✅ อัปเดต state เฉพาะเพจที่ถูกต้อง
+      if (Object.keys(miningUpdates).length > 0 && isCurrentPage) {
+        dispatch({ type: 'UPDATE_MINING_STATUS', payload: miningUpdates });
       }
+      
+      updatedUsers.forEach(psid => {
+        dispatch({ type: 'ADD_RECENTLY_UPDATED', payload: psid });
+      });
     });
-    
-    // ✅ อัปเดต state เฉพาะเพจที่ถูกต้อง
-    if (Object.keys(miningUpdates).length > 0 && isCurrentPage) {
-      dispatch({ type: 'UPDATE_MINING_STATUS', payload: miningUpdates });
-    }
-    
-    updatedUsers.forEach(psid => {
-      dispatch({ type: 'ADD_RECENTLY_UPDATED', payload: psid });
-    });
-  });
-}, [showNotification, refs, selectedPage]);
+  }, [showNotification, refs, selectedPage]);
 
   // =====================================================
   // SECTION 12: INACTIVITY BATCH UPDATE
@@ -900,40 +1001,40 @@ function App() {
   
   // Background refresh with longer interval
   useEffect(() => {
-  if (!selectedPage) return;
+    if (!selectedPage) return;
 
-  let refreshTimeout;
-  let isMounted = true; // ✅ เพิ่ม flag เช็คว่า component ยัง mount อยู่
+    let refreshTimeout;
+    let isMounted = true; // ✅ เพิ่ม flag เช็คว่า component ยัง mount อยู่
 
-  const backgroundRefresh = async () => {
-    // ✅ เช็คว่า component ยัง mount และ selectedPage ยังคงเป็นเพจเดิม
-    if (!isMounted || !state.loading && !state.isBackgroundLoading) {
-      // ✅ เช็ค selectedPage อีกครั้งก่อน sync
-      const currentPage = localStorage.getItem("selectedPage");
-      
-      if (currentPage !== selectedPage) {
-        console.warn(`⚠️ Page changed during background refresh. Skipping sync.`);
-        return;
+    const backgroundRefresh = async () => {
+      // ✅ เช็คว่า component ยัง mount และ selectedPage ยังคงเป็นเพจเดิม
+      if (!isMounted || !state.loading && !state.isBackgroundLoading) {
+        // ✅ เช็ค selectedPage อีกครั้งก่อน sync
+        const currentPage = localStorage.getItem("selectedPage");
+        
+        if (currentPage !== selectedPage) {
+          console.warn(`⚠️ Page changed during background refresh. Skipping sync.`);
+          return;
+        }
+
+        await handleloadConversations(false, false, true);
+        await loadMiningStatuses(selectedPage);
       }
+      
+      // ✅ เช็คอีกครั้งก่อนตั้ง timeout ใหม่
+      if (isMounted) {
+        refreshTimeout = setTimeout(backgroundRefresh, 60000);
+      }
+    };
 
-      await handleloadConversations(false, false, true);
-      await loadMiningStatuses(selectedPage);
-    }
-    
-    // ✅ เช็คอีกครั้งก่อนตั้ง timeout ใหม่
-    if (isMounted) {
-      refreshTimeout = setTimeout(backgroundRefresh, 60000);
-    }
-  };
+    // เริ่ม background refresh
+    refreshTimeout = setTimeout(backgroundRefresh, 60000);
 
-  // เริ่ม background refresh
-  refreshTimeout = setTimeout(backgroundRefresh, 60000);
-
-  return () => {
-    isMounted = false; // ✅ ตั้ง flag เมื่อ unmount
-    if (refreshTimeout) clearTimeout(refreshTimeout);
-  };
-}, [selectedPage, state.loading, state.isBackgroundLoading, handleloadConversations, loadMiningStatuses]);
+    return () => {
+      isMounted = false; // ✅ ตั้ง flag เมื่อ unmount
+      if (refreshTimeout) clearTimeout(refreshTimeout);
+    };
+  }, [selectedPage, state.loading, state.isBackgroundLoading, handleloadConversations, loadMiningStatuses]);
 
   // Apply filters with debounce
   useEffect(() => {

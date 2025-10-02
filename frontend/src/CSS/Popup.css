@@ -212,3 +212,531 @@
 .draggable-item {
   animation: slideIn 0.2s ease;
 }
+/* ✅ Frequency Control Panel Styles - COMPACT VERSION */
+.frequency-control-panel {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 15px 0;
+    color: white;
+    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.25);
+}
+
+.frequency-control-panel h3 {
+    margin: 0 0 12px 0;
+    font-size: 15px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.frequency-settings {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.frequency-input-group {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 10px;
+    border-radius: 8px;
+    backdrop-filter: blur(10px);
+}
+
+.frequency-input-group label {
+    display: flex;
+    align-items: center;
+    font-weight: 600;
+    margin-bottom: 6px;
+    font-size: 12px;
+    gap: 4px;
+}
+
+.frequency-input-group input {
+    width: 100%;
+    padding: 6px 10px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.95);
+    transition: all 0.3s ease;
+}
+
+.frequency-input-group input:focus {
+    outline: none;
+    border-color: #48bb78;
+    box-shadow: 0 0 0 2px rgba(72, 187, 120, 0.2);
+}
+
+.input-hint {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 12px;
+    opacity: 0.9;
+}
+
+/* Summary Cards - COMPACT */
+.frequency-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.summary-card {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    padding: 10px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.summary-icon {
+    font-size: 24px;
+}
+
+.summary-label {
+    font-size: 10px;
+    opacity: 0.9;
+    margin-bottom: 2px;
+}
+
+.summary-value {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+/* Presets - COMPACT */
+.frequency-presets {
+    margin-bottom: 12px;
+}
+
+.frequency-presets label {
+    font-weight: 600;
+    font-size: 12px;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.frequency-presets > div {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.frequency-presets button {
+    padding: 6px 12px !important;
+    border: none;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    cursor: pointer;
+    font-size: 12px !important;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+
+.frequency-presets button:hover {
+    background: rgba(255, 255, 255, 0.3) !important;
+    transform: scale(1.05) !important;
+}
+
+.frequency-presets button:active {
+    transform: scale(0.95) !important;
+}
+
+/* Mining Progress Bar */
+.mining-progress-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.mining-progress-modal {
+    background: white;
+    border-radius: 16px;
+    padding: 30px;
+    max-width: 450px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.mining-progress-header {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.mining-progress-header h2 {
+    margin: 0 0 8px 0;
+    color: #2d3748;
+    font-size: 22px;
+}
+
+.mining-progress-header p {
+    margin: 0;
+    color: #718096;
+    font-size: 14px;
+}
+
+.progress-bar-container {
+    background: #e2e8f0;
+    height: 28px;
+    border-radius: 14px;
+    overflow: hidden;
+    margin: 16px 0;
+    position: relative;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        #48bb78 0%,
+        #38a169 50%,
+        #48bb78 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+    transition: width 0.5s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.progress-stats {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 16px;
+}
+
+.progress-stat {
+    text-align: center;
+}
+
+.progress-stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: #2d3748;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.progress-stat-label {
+    font-size: 11px;
+    color: #718096;
+    margin-top: 4px;
+}
+
+/* Animations */
+@keyframes shimmer {
+    0% {
+        background-position: -1000px 0;
+    }
+    100% {
+        background-position: 1000px 0;
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.08);
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+    .frequency-settings {
+        grid-template-columns: 1fr;
+    }
+    
+    .frequency-summary {
+        grid-template-columns: 1fr;
+    }
+    
+    .frequency-presets > div {
+        justify-content: center;
+    }
+}
+
+/* ✅ ปุ่มปิดมุมบนขวา */
+.progress-close-btn {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: rgba(252, 129, 129, 0.1);
+    border: 2px solid #fc8181;
+    color: #fc8181;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.progress-close-btn:hover {
+    background: #fc8181;
+    color: white;
+    transform: rotate(90deg) scale(1.1);
+}
+
+/* ✅ ปุ่มควบคุม (Pause/Resume/Cancel) */
+.progress-controls {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    justify-content: center;
+}
+
+.control-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.pause-btn {
+    background: linear-gradient(135deg, #f6ad55, #ed8936);
+    color: white;
+}
+
+.pause-btn:hover {
+    background: linear-gradient(135deg, #ed8936, #dd6b20);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(237, 137, 54, 0.3);
+}
+
+.resume-btn {
+    background: linear-gradient(135deg, #48bb78, #38a169);
+    color: white;
+}
+
+.resume-btn:hover {
+    background: linear-gradient(135deg, #38a169, #2f855a);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(72, 187, 120, 0.3);
+}
+
+.cancel-btn {
+    background: linear-gradient(135deg, #fc8181, #f56565);
+    color: white;
+}
+
+.cancel-btn:hover {
+    background: linear-gradient(135deg, #f56565, #e53e3e);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(245, 101, 101, 0.3);
+}
+
+.control-btn:active {
+    transform: scale(0.95);
+}
+
+/* ✅ แสดงเวลาที่เหลือ */
+.remaining-time-info {
+    margin-top: 16px;
+    text-align: center;
+    color: #718096;
+    font-size: 14px;
+    padding: 10px;
+    background: rgba(102, 126, 234, 0.1);
+    border-radius: 8px;
+}
+
+.remaining-time-info strong {
+    color: #667eea;
+    font-size: 16px;
+}
+
+/* ✅ ส่วนรายละเอียด (Details) */
+.progress-details {
+    margin-top: 20px;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 15px;
+}
+
+.details-toggle {
+    width: 100%;
+    padding: 10px;
+    background: #f7fafc;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+    color: #2d3748;
+    transition: all 0.3s ease;
+}
+
+.details-toggle:hover {
+    background: #edf2f7;
+    border-color: #cbd5e0;
+    transform: translateY(-1px);
+}
+
+.details-content {
+    margin-top: 15px;
+    padding: 15px;
+    background: #f7fafc;
+    border-radius: 8px;
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.details-content h4 {
+    margin: 0 0 12px 0;
+    color: #2d3748;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.detail-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.detail-item:last-child {
+    border-bottom: none;
+}
+
+.detail-label {
+    color: #718096;
+    font-size: 13px;
+}
+
+.detail-value {
+    color: #2d3748;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+/* ✅ รายชื่อผู้ใช้ที่กำลังขุด */
+.current-users-section {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.current-users-section h5 {
+    margin: 0 0 10px 0;
+    color: #2d3748;
+    font-size: 13px;
+}
+
+.current-users-list {
+    max-height: 150px;
+    overflow-y: auto;
+    padding: 5px;
+}
+
+.user-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: white;
+    border-radius: 6px;
+    margin-bottom: 5px;
+    font-size: 12px;
+    color: #2d3748;
+}
+
+.user-item.more {
+    color: #718096;
+    font-style: italic;
+    justify-content: center;
+}
+
+.user-icon {
+    font-size: 14px;
+}
+
+.user-name {
+    font-weight: 500;
+}
+
+/* ✅ Scrollbar สำหรับรายชื่อผู้ใช้ */
+.current-users-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.current-users-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.current-users-list::-webkit-scrollbar-thumb {
+    background: #cbd5e0;
+    border-radius: 3px;
+}
+
+.current-users-list::-webkit-scrollbar-thumb:hover {
+    background: #a0aec0;
+}
+
+/* ✅ Responsive */
+@media (max-width: 600px) {
+    .mining-progress-modal {
+        padding: 20px;
+        max-width: 95%;
+    }
+    
+    .progress-controls {
+        flex-direction: column;
+    }
+    
+    .control-btn {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .progress-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+}
