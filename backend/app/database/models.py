@@ -238,7 +238,7 @@ class FBCustomerMiningStatus(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('ยังไม่ขุด', 'ขุดแล้ว', 'มีการตอบกลับ')",
+            "status IN ('ยังไม่ขุด', 'ขุดแล้ว', 'มีการตอบกลับ' , 'รอส่งข้อความ')",
             name="fb_customer_mining_status_check"
         ),
     )

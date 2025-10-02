@@ -44,6 +44,7 @@ import ActionBar from './Component_App/ActionBar';
 import LoadingState from './Component_App/LoadingState';
 import EmptyState from './Component_App/EmptyState';
 import DailyMiningLimit from './Component_App/DailyMiningLimit';
+import MiniProgressBar from './Component_App/MiniProgressBar';
 
 // =====================================================
 // OPTIMIZED STATE REDUCER
@@ -545,228 +546,189 @@ function App() {
   // =====================================================
   
   const sendMessagesBySelectedSets = useCallback(async (messageSetIds, frequencySettings = null) => {
-    if (!Array.isArray(messageSetIds) || state.selectedConversationIds.length === 0) {
-      return;
-    }
+  if (!Array.isArray(messageSetIds) || state.selectedConversationIds.length === 0) {
+    return;
+  }
 
-    const selectedCount = state.selectedConversationIds.length;
+  const selectedCount = state.selectedConversationIds.length;
+  
+  if (remainingMines === 0) {
+    showNotification('error', 'ถึงขีดจำกัดประจำวันแล้ว', `คุณได้ขุดครบ ${dailyMiningLimit} ครั้งแล้ววันนี้`);
+    return;
+  }
+  
+  if (selectedCount > remainingMines) {
+    showNotification('warning', 'เกินขีดจำกัด', `คุณสามารถขุดได้อีก ${remainingMines} ครั้งเท่านั้นในวันนี้`);
+    return;
+  }
+
+  // ✅ เคลียร์ selection ทันที
+  dispatch({ type: 'CLEAR_SELECTION' });
+
+  // ✅ ใช้ความถี่จากการตั้งค่า หรือใช้ค่าเริ่มต้น
+  const batchSize = frequencySettings?.batchSize || 20;
+  const delayMinutes = frequencySettings?.delayMinutes || 60;
+  const delayMs = delayMinutes * 60 * 1000;
+
+  try {
+    let successCount = 0;
+    let failCount = 0;
+    const successfulPsids = [];
+
+    // ✅ แบ่ง conversations ออกเป็น batches
+    const totalBatches = Math.ceil(selectedCount / batchSize);
+    const batches = [];
     
-    if (remainingMines === 0) {
-      showNotification('error', 'ถึงขีดจำกัดประจำวันแล้ว', `คุณได้ขุดครบ ${dailyMiningLimit} ครั้งแล้ววันนี้`);
-      return;
-    }
+    // ✅ เก็บ conversation IDs ก่อนเคลียร์
+    const conversationIdsToProcess = [...state.selectedConversationIds];
     
-    if (selectedCount > remainingMines) {
-      showNotification('warning', 'เกินขีดจำกัด', `คุณสามารถขุดได้อีก ${remainingMines} ครั้งเท่านั้นในวันนี้`);
-      return;
+    for (let i = 0; i < conversationIdsToProcess.length; i += batchSize) {
+      batches.push(conversationIdsToProcess.slice(i, i + batchSize));
     }
 
-    // ✅ ใช้ความถี่จากการตั้งค่า หรือใช้ค่าเริ่มต้น
-    const batchSize = frequencySettings?.batchSize || 20;
-    const delayMinutes = frequencySettings?.delayMinutes || 60;
-    const delayMs = delayMinutes * 60 * 1000;
+    console.log(`🚀 เริ่มขุด ${selectedCount} คน แบ่งเป็น ${totalBatches} รอบ`);
+    console.log(`⏱️ แต่ละรอบ ${batchSize} คน หน่วงเวลา ${delayMinutes} นาที`);
 
-    try {
-      let successCount = 0;
-      let failCount = 0;
-      const successfulPsids = [];
+    // ✅ เก็บสถานะลง localStorage
+    const miningState = {
+      totalBatches,
+      currentBatch: 0,
+      successCount: 0,
+      failCount: 0,
+      batchSize,
+      delayMinutes,
+      lastBatchCompletedAt: null,
+      startTime: Date.now(),
+      pageId: selectedPage,
+      messageSetIds
+    };
+    localStorage.setItem('miningProgress', JSON.stringify(miningState));
 
-      // ✅ แบ่ง conversations ออกเป็น batches
-      const totalBatches = Math.ceil(state.selectedConversationIds.length / batchSize);
-      const batches = [];
-      for (let i = 0; i < state.selectedConversationIds.length; i += batchSize) {
-        batches.push(state.selectedConversationIds.slice(i, i + batchSize));
-      }
+    // ✅ ส่งข้อความแบบ batch ต่อ batch
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const currentBatch = batches[batchIndex];
+      
+      // อัพเดท localStorage
+      miningState.currentBatch = batchIndex + 1;
+      miningState.successCount = successCount;
+      miningState.failCount = failCount;
+      miningState.lastBatchCompletedAt = Date.now(); 
+      localStorage.setItem('miningProgress', JSON.stringify(miningState));
 
-      console.log(`🚀 เริ่มขุด ${selectedCount} คน แบ่งเป็น ${totalBatches} รอบ`);
-      console.log(`⏱️ แต่ละรอบ ${batchSize} คน หน่วงเวลา ${delayMinutes} นาที`);
+      console.log(`\n📦 รอบที่ ${batchIndex + 1}/${totalBatches} - ส่งไปยัง ${currentBatch.length} คน`);
 
-      // ✅ สร้าง Progress Modal
-      const progressOverlay = document.createElement('div');
-      progressOverlay.className = 'mining-progress-overlay';
-      progressOverlay.innerHTML = `
-        <div class="mining-progress-modal">
-          <div class="mining-progress-header">
-            <h2>⛏️ กำลังขุดข้อมูล</h2>
-            <p style="color: #718096; margin: 0;">โปรดรอสักครู่...</p>
-          </div>
-          <div class="progress-bar-container">
-            <div class="progress-bar-fill" style="width: 0%">
-              <span id="progress-text">0%</span>
-            </div>
-          </div>
-          <div class="progress-stats">
-            <div class="progress-stat">
-              <div class="progress-stat-value" id="current-batch">0</div>
-              <div class="progress-stat-label">รอบปัจจุบัน</div>
-            </div>
-            <div class="progress-stat">
-              <div class="progress-stat-value">${totalBatches}</div>
-              <div class="progress-stat-label">ทั้งหมด</div>
-            </div>
-            <div class="progress-stat">
-              <div class="progress-stat-value" id="success-count">0</div>
-              <div class="progress-stat-label">สำเร็จ</div>
-            </div>
-          </div>
-          <div style="margin-top: 20px; text-align: center; color: #718096; font-size: 14px;">
-            <div id="next-batch-info"></div>
-          </div>
-        </div>
-      `;
-      document.body.appendChild(progressOverlay);
+      // ส่งข้อความให้กับคนใน batch นี้
+      for (const conversationId of currentBatch) {
+        const selectedConv = displayData.find(conv => conv.conversation_id === conversationId);
+        const psid = selectedConv?.raw_psid;
 
-      // ✅ ส่งข้อความแบบ batch ต่อ batch
-      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-        const currentBatch = batches[batchIndex];
-        
-        // อัพเดท UI
-        const progress = ((batchIndex + 1) / totalBatches) * 100;
-        const progressBar = progressOverlay.querySelector('.progress-bar-fill');
-        const progressText = progressOverlay.querySelector('#progress-text');
-        const currentBatchEl = progressOverlay.querySelector('#current-batch');
-        const successCountEl = progressOverlay.querySelector('#success-count');
-        const nextBatchInfo = progressOverlay.querySelector('#next-batch-info');
+        if (!psid) {
+          failCount++;
+          continue;
+        }
 
-        progressBar.style.width = `${progress}%`;
-        progressText.textContent = `${Math.round(progress)}%`;
-        currentBatchEl.textContent = batchIndex + 1;
+        try {
+          for (const setId of messageSetIds) {
+            const response = await fetch(`http://localhost:8000/custom_messages/${setId}`);
+            if (!response.ok) continue;
+            
+            const messages = await response.json();
+            const sortedMessages = messages.sort((a, b) => a.display_order - b.display_order);
 
-        console.log(`\n📦 รอบที่ ${batchIndex + 1}/${totalBatches} - ส่งไปยัง ${currentBatch.length} คน`);
+            for (const messageObj of sortedMessages) {
+              let messageContent = messageObj.content;
 
-        // ส่งข้อความให้กับคนใน batch นี้
-        for (const conversationId of currentBatch) {
-          const selectedConv = displayData.find(conv => conv.conversation_id === conversationId);
-          const psid = selectedConv?.raw_psid;
-
-          if (!psid) {
-            failCount++;
-            continue;
-          }
-
-          try {
-            for (const setId of messageSetIds) {
-              const response = await fetch(`http://localhost:8000/custom_messages/${setId}`);
-              if (!response.ok) continue;
-              
-              const messages = await response.json();
-              const sortedMessages = messages.sort((a, b) => a.display_order - b.display_order);
-
-              for (const messageObj of sortedMessages) {
-                let messageContent = messageObj.content;
-
-                if (messageObj.message_type === "image") {
-                  messageContent = `http://localhost:8000/images/${messageContent.replace('[IMAGE] ', '')}`;
-                } else if (messageObj.message_type === "video") {
-                  messageContent = `http://localhost:8000/videos/${messageContent.replace('[VIDEO] ', '')}`;
-                }
-
-                await fetch(`http://localhost:8000/send/${selectedPage}/${psid}`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ 
-                    message: messageContent,
-                    type: messageObj.message_type,
-                    is_system_message: true
-                  }),
-                });
-
-                await new Promise(resolve => setTimeout(resolve, 500));
+              if (messageObj.message_type === "image") {
+                messageContent = `http://localhost:8000/images/${messageContent.replace('[IMAGE] ', '')}`;
+              } else if (messageObj.message_type === "video") {
+                messageContent = `http://localhost:8000/videos/${messageContent.replace('[VIDEO] ', '')}`;
               }
-              
-              await new Promise(resolve => setTimeout(resolve, 1000));
+
+              await fetch(`http://localhost:8000/send/${selectedPage}/${psid}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                  message: messageContent,
+                  type: messageObj.message_type,
+                  is_system_message: true
+                }),
+              });
+
+              await new Promise(resolve => setTimeout(resolve, 500));
             }
             
-            successCount++;
-            successfulPsids.push(psid);
-            successCountEl.textContent = successCount;
-            
-          } catch (err) {
-            console.error(`❌ ส่งข้อความไม่สำเร็จสำหรับ ${conversationId}:`, err);
-            failCount++;
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
-        }
-
-        // ✅ หน่วงเวลาก่อนรอบถัดไป (ยกเว้นรอบสุดท้าย)
-        if (batchIndex < batches.length - 1) {
-          console.log(`⏳ หน่วงเวลา ${delayMinutes} นาทีก่อนรอบถัดไป...`);
           
-          // แสดงข้อความรอ
-          let remainingTime = delayMs;
-          const updateInterval = 1000;
+          successCount++;
+          successfulPsids.push(psid);
           
-          const countdownInterval = setInterval(() => {
-            remainingTime -= updateInterval;
-            const remainingMinutes = Math.floor(remainingTime / 60000);
-            const remainingSeconds = Math.floor((remainingTime % 60000) / 1000);
-            
-            nextBatchInfo.innerHTML = `
-              ⏱️ รอบถัดไปในอีก <strong>${remainingMinutes}:${remainingSeconds.toString().padStart(2, '0')}</strong>
-            `;
-            
-            if (remainingTime <= 0) {
-              clearInterval(countdownInterval);
-              nextBatchInfo.innerHTML = '';
-            }
-          }, updateInterval);
-          
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-          clearInterval(countdownInterval);
+        } catch (err) {
+          console.error(`❌ ส่งข้อความไม่สำเร็จสำหรับ ${conversationId}:`, err);
+          failCount++;
         }
       }
 
-      // ✅ อัพเดทสถานะการขุด
-      if (successfulPsids.length > 0) {
-        const updateResponse = await fetch(`http://localhost:8000/mining-status/update/${selectedPage}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            customer_psids: successfulPsids,
-            status: "ขุดแล้ว",
-            note: `Mined with message sets: ${messageSetIds.join(', ')}`
-          })
-        });
+      // อัพเดท localStorage อีกครั้งหลังส่งเสร็จแต่ละรอบ
+      miningState.successCount = successCount;
+      miningState.failCount = failCount;
+      localStorage.setItem('miningProgress', JSON.stringify(miningState));
 
-        if (updateResponse.ok) {
-          const updatedStatuses = {};
-          successfulPsids.forEach(psid => {
-            updatedStatuses[psid] = {
-              status: 'ขุดแล้ว',
-              note: `Mined at ${new Date().toISOString()}`,
-              created_at: new Date().toISOString()
-            };
-          });
-          
-          dispatch({ type: 'UPDATE_MINING_STATUS', payload: updatedStatuses });
-        }
+      // ✅ หน่วงเวลาก่อนรอบถัดไป (ยกเว้นรอบสุดท้าย)
+      if (batchIndex < batches.length - 1) {
+        console.log(`⏳ หน่วงเวลา ${delayMinutes} นาทีก่อนรอบถัดไป...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
       }
-
-      // ลบ progress overlay
-      progressOverlay.remove();
-
-      if (successCount > 0) {   
-        updateMiningCount(successCount);
-        showNotification('success', `✅ ส่งข้อความสำเร็จ ${successCount} คน`, 
-          `ใช้เวลา ${totalBatches} รอบ • ขุดไปแล้ว ${todayMiningCount + successCount}/${dailyMiningLimit} ครั้งวันนี้`);
-        dispatch({ type: 'CLEAR_SELECTION' });
-      }
-      if (failCount > 0) {
-        showNotification('warning', `⚠️ ส่งข้อความไม่สำเร็จ ${failCount} คน`);
-      }
-      
-    } catch (error) {
-      console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
-      
-      // ลบ progress overlay ถ้ามี error
-      const progressOverlay = document.querySelector('.mining-progress-overlay');
-      if (progressOverlay) {
-        progressOverlay.remove();
-      }
-      
-      showNotification('error', 'เกิดข้อผิดพลาด', error.message);
     }
-  }, [state.selectedConversationIds, selectedPage, displayData, remainingMines, dailyMiningLimit, 
-      todayMiningCount, updateMiningCount, dispatch, showNotification]);
+
+    // ✅ อัพเดทสถานะการขุด
+    if (successfulPsids.length > 0) {
+      const updateResponse = await fetch(`http://localhost:8000/mining-status/update/${selectedPage}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customer_psids: successfulPsids,
+          status: "ขุดแล้ว",
+          note: `Mined with message sets: ${messageSetIds.join(', ')}`
+        })
+      });
+
+      if (updateResponse.ok) {
+        const updatedStatuses = {};
+        successfulPsids.forEach(psid => {
+          updatedStatuses[psid] = {
+            status: 'ขุดแล้ว',
+            note: `Mined at ${new Date().toISOString()}`,
+            created_at: new Date().toISOString()
+          };
+        });
+        
+        dispatch({ type: 'UPDATE_MINING_STATUS', payload: updatedStatuses });
+      }
+    }
+
+    // ✅ ลบ progress จาก localStorage เมื่อเสร็จสิ้น
+    localStorage.removeItem('miningProgress');
+
+    if (successCount > 0) {   
+      updateMiningCount(successCount);
+      showNotification('success', `✅ ส่งข้อความสำเร็จ ${successCount} คน`, 
+        `ใช้เวลา ${totalBatches} รอบ • ขุดไปแล้ว ${todayMiningCount + successCount}/${dailyMiningLimit} ครั้งวันนี้`);
+    }
+    if (failCount > 0) {
+      showNotification('warning', `⚠️ ส่งข้อความไม่สำเร็จ ${failCount} คน`);
+    }
+    
+  } catch (error) {
+    console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
+    
+    // ลบ progress เมื่อเกิด error
+    localStorage.removeItem('miningProgress');
+    
+    showNotification('error', 'เกิดข้อผิดพลาด', error.message);
+  }
+}, [state.selectedConversationIds, selectedPage, displayData, remainingMines, dailyMiningLimit, 
+    todayMiningCount, updateMiningCount, dispatch, showNotification]);
 
   // =====================================================
   // SECTION 10: OPTIMIZED CALLBACK FUNCTIONS
@@ -1238,6 +1200,9 @@ function App() {
             onLimitChange={handleLimitChange}
           />
         )}
+
+         {/* ✅ Mini Progress Bar  */}
+        <MiniProgressBar />
       </main>
     </div>
   );

@@ -2678,6 +2678,206 @@ body.no-animations * {
   flex-direction: column;
   justify-content: center;
 }
+
+/* =====================================================
+   MINI PROGRESS BAR STYLES
+   ===================================================== */
+
+.mini-progress-container {
+  position: fixed;
+  bottom: 15px;
+  right: 10px;
+  z-index: 9999;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 12px 16px;
+  min-width: 280px;
+  animation: slideInUp 0.3s ease-out;
+  border: 1px solid var(--gray-200);
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mini-progress-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mini-progress-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--gray-800);
+}
+
+.mini-progress-icon {
+  font-size: 1.125rem;
+  animation: bounce 2s ease-in-out infinite;
+}
+
+.mini-progress-text {
+  flex: 1;
+}
+
+.mini-progress-percentage {
+  color: var(--primary-color);
+  font-weight: 700;
+}
+
+.mini-progress-bar {
+  height: 8px;
+  background: var(--gray-200);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.mini-progress-fill {
+  height: 100%;
+  background: var(--primary-gradient);
+  transition: width 0.3s ease;
+  animation: progressShine 1.5s ease-in-out infinite;
+}
+
+@keyframes progressShine {
+  0% {
+    background-position: -100% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.mini-progress-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 0.75rem;
+  color: var(--gray-600);
+}
+
+.mini-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+}
+
+.mini-stat.error {
+  color: var(--danger-color);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .mini-progress-container {
+    bottom: 120px;
+    right: 10px;
+    min-width: 240px;
+    padding: 10px 12px;
+  }
+  
+  .mini-progress-header {
+    font-size: 0.8rem;
+  }
+  
+  .mini-progress-stats {
+    font-size: 0.7rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .mini-progress-container {
+    left: 10px;
+    right: 10px;
+    min-width: auto;
+  }
+}
+
+/* =====================================================
+   MINI PROGRESS BAR STYLES - TIME DISPLAY
+   ===================================================== */
+
+.mini-progress-time,
+.mini-progress-countdown {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  background: var(--gray-50);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  margin-top: 4px;
+}
+
+.mini-progress-time {
+  border-left: 3px solid var(--info-color);
+}
+
+.mini-progress-countdown {
+  border-left: 3px solid var(--warning-color);
+  background: linear-gradient(135deg, rgba(237, 137, 54, 0.1), rgba(221, 107, 32, 0.05));
+}
+
+.time-label,
+.countdown-label {
+  color: var(--gray-600);
+  font-weight: 500;
+}
+
+.time-value {
+  color: var(--info-color);
+  font-weight: 700;
+}
+
+.countdown-value {
+  color: var(--warning-color);
+  font-weight: 700;
+  font-size: 0.875rem;
+  font-family: 'Courier New', monospace;
+  animation: countdownBlink 1s ease-in-out infinite;
+}
+
+@keyframes countdownBlink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .mini-progress-time,
+  .mini-progress-countdown {
+    font-size: 0.7rem;
+    padding: 4px 6px;
+  }
+  
+  .countdown-value {
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .mini-progress-time,
+  .mini-progress-countdown {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+}
 /* =====================================================
    END OF STYLESHEET
    ===================================================== */
