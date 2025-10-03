@@ -159,7 +159,8 @@ function App() {
   const [selectedMessageSetIds, setSelectedMessageSetIds] = useState([]);
   const [syncDateRange, setSyncDateRange] = useState(null);
   const [dateEntryFilter, setDateEntryFilter] = useState(null);
-  
+  const abortControllerRef = useRef(null);
+
   // Filter state - combined for fewer updates
   const [filters, setFilters] = useState({
     disappearTime: "",
@@ -562,6 +563,10 @@ function App() {
     return;
   }
 
+  // ✅ สร้าง AbortController ใหม่
+  abortControllerRef.current = new AbortController();
+  const signal = abortControllerRef.current.signal;
+
   // ✅ เคลียร์ selection ทันที
   dispatch({ type: 'CLEAR_SELECTION' });
 
@@ -570,16 +575,15 @@ function App() {
   const delayMinutes = frequencySettings?.delayMinutes || 60;
   const delayMs = delayMinutes * 60 * 1000;
 
-  try {
-    let successCount = 0;
-    let failCount = 0;
-    const successfulPsids = [];
+  // ✅ ประกาศตัวแปรนอก try-catch เพื่อใช้ใน catch block
+  let successCount = 0;
+  let failCount = 0;
+  const successfulPsids = [];
 
-    // ✅ แบ่ง conversations ออกเป็น batches
+  try {
     const totalBatches = Math.ceil(selectedCount / batchSize);
     const batches = [];
     
-    // ✅ เก็บ conversation IDs ก่อนเคลียร์
     const conversationIdsToProcess = [...state.selectedConversationIds];
     
     for (let i = 0; i < conversationIdsToProcess.length; i += batchSize) {
@@ -589,7 +593,6 @@ function App() {
     console.log(`🚀 เริ่มขุด ${selectedCount} คน แบ่งเป็น ${totalBatches} รอบ`);
     console.log(`⏱️ แต่ละรอบ ${batchSize} คน หน่วงเวลา ${delayMinutes} นาที`);
 
-    // ✅ เก็บสถานะลง localStorage
     const miningState = {
       totalBatches,
       currentBatch: 0,
@@ -600,12 +603,18 @@ function App() {
       lastBatchCompletedAt: null,
       startTime: Date.now(),
       pageId: selectedPage,
-      messageSetIds
+      messageSetIds,
+      isActive: true // ✅ เพิ่ม flag
     };
     localStorage.setItem('miningProgress', JSON.stringify(miningState));
 
-    // ✅ ส่งข้อความแบบ batch ต่อ batch
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      // ✅ เช็คว่าถูกยกเลิกหรือไม่
+      if (signal.aborted) {
+        console.log('❌ การขุดถูกยกเลิก');
+        throw new Error('MINING_CANCELLED');
+      }
+
       const currentBatch = batches[batchIndex];
       
       // อัพเดท localStorage
@@ -617,8 +626,13 @@ function App() {
 
       console.log(`\n📦 รอบที่ ${batchIndex + 1}/${totalBatches} - ส่งไปยัง ${currentBatch.length} คน`);
 
-      // ส่งข้อความให้กับคนใน batch นี้
       for (const conversationId of currentBatch) {
+        // ✅ เช็คการยกเลิกในแต่ละคน
+        if (signal.aborted) {
+          console.log('❌ การขุดถูกยกเลิกระหว่างส่งข้อความ');
+          throw new Error('MINING_CANCELLED');
+        }
+
         const selectedConv = displayData.find(conv => conv.conversation_id === conversationId);
         const psid = selectedConv?.raw_psid;
 
@@ -629,6 +643,8 @@ function App() {
 
         try {
           for (const setId of messageSetIds) {
+            if (signal.aborted) throw new Error('MINING_CANCELLED');
+
             const response = await fetch(`http://localhost:8000/custom_messages/${setId}`);
             if (!response.ok) continue;
             
@@ -636,6 +652,8 @@ function App() {
             const sortedMessages = messages.sort((a, b) => a.display_order - b.display_order);
 
             for (const messageObj of sortedMessages) {
+              if (signal.aborted) throw new Error('MINING_CANCELLED');
+
               let messageContent = messageObj.content;
 
               if (messageObj.message_type === "image") {
@@ -664,24 +682,34 @@ function App() {
           successfulPsids.push(psid);
           
         } catch (err) {
+          if (err.message === 'MINING_CANCELLED') throw err;
           console.error(`❌ ส่งข้อความไม่สำเร็จสำหรับ ${conversationId}:`, err);
           failCount++;
         }
       }
 
-      // อัพเดท localStorage อีกครั้งหลังส่งเสร็จแต่ละรอบ
       miningState.successCount = successCount;
       miningState.failCount = failCount;
       localStorage.setItem('miningProgress', JSON.stringify(miningState));
 
-      // ✅ หน่วงเวลาก่อนรอบถัดไป (ยกเว้นรอบสุดท้าย)
+      // ✅ หน่วงเวลาพร้อมเช็คการยกเลิก
       if (batchIndex < batches.length - 1) {
         console.log(`⏳ หน่วงเวลา ${delayMinutes} นาทีก่อนรอบถัดไป...`);
-        await new Promise(resolve => setTimeout(resolve, delayMs));
+        
+        const checkInterval = 1000;
+        const totalChecks = Math.ceil(delayMs / checkInterval);
+        
+        for (let i = 0; i < totalChecks; i++) {
+          if (signal.aborted) {
+            console.log('❌ การขุดถูกยกเลิกระหว่างหน่วงเวลา');
+            throw new Error('MINING_CANCELLED');
+          }
+          await new Promise(resolve => setTimeout(resolve, checkInterval));
+        }
       }
     }
 
-    // ✅ อัพเดทสถานะการขุด
+    // อัพเดทสถานะการขุด
     if (successfulPsids.length > 0) {
       const updateResponse = await fetch(`http://localhost:8000/mining-status/update/${selectedPage}`, {
         method: "POST",
@@ -707,28 +735,41 @@ function App() {
       }
     }
 
-    // ✅ ลบ progress จาก localStorage เมื่อเสร็จสิ้น
     localStorage.removeItem('miningProgress');
 
     if (successCount > 0) {   
       updateMiningCount(successCount);
-      showNotification('success', ` ส่งข้อความสำเร็จ ${successCount} คน`, 
-       );
+      showNotification('success', ` ส่งข้อความสำเร็จ ${successCount} คน`);
     }
     if (failCount > 0) {
       showNotification('warning', `⚠️ ส่งข้อความไม่สำเร็จ ${failCount} คน`);
     }
     
   } catch (error) {
-    console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
+    if (error.message === 'MINING_CANCELLED') {
+      // ✅ ใช้ตัวแปรที่ประกาศไว้ข้างนอก
+      showNotification('warning', ' ยกเลิกการขุด', 
+       );
+    } else {
+      console.error("เกิดข้อผิดพลาดในการส่งข้อความ:", error);
+      showNotification('error', 'เกิดข้อผิดพลาด', error.message);
+    }
     
-    // ลบ progress เมื่อเกิด error
     localStorage.removeItem('miningProgress');
-    
-    showNotification('error', 'เกิดข้อผิดพลาด', error.message);
+  } finally {
+    // ✅ ล้าง AbortController
+    abortControllerRef.current = null;
   }
 }, [state.selectedConversationIds, selectedPage, displayData, remainingMines, dailyMiningLimit, 
     todayMiningCount, updateMiningCount, dispatch, showNotification]);
+
+  // ✅ เพิ่มฟังก์ชันยกเลิกการขุด
+  const handleCancelMining = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      showNotification('info', '⚠️ กำลังยกเลิกการขุด...', 'กรุณารอสักครู่');
+    }
+  }, [showNotification]);
 
   // =====================================================
   // SECTION 10: OPTIMIZED CALLBACK FUNCTIONS
@@ -1203,6 +1244,8 @@ function App() {
 
          {/* ✅ Mini Progress Bar  */}
         <MiniProgressBar />
+
+        <MiniProgressBar onCancel={handleCancelMining} />
       </main>
     </div>
   );
