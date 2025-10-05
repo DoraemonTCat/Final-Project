@@ -9,6 +9,8 @@ from app.database.database import SessionLocal
 import json
 from app.routes.facebook.sse import send_customer_type_update
 from app.database import models
+from datetime import datetime, timezone
+import pytz
 
 logger = logging.getLogger(__name__)
 
@@ -242,7 +244,10 @@ class MessageScheduler:
             await self.handle_repeat(page_id, schedule, current_time)
     
     async def check_user_inactivity_v2(self, page_id: str, schedule: Dict[str, Any], group_type: str = ""):
-        """ตรวจสอบ user ที่หายไปโดยใช้ข้อมูลจาก frontend พร้อมแสดงประเภท"""
+        """
+        🔥 แก้ไข: ตรวจสอบ user ที่หายไปโดยใช้ข้อมูลจาก database
+        และ validate ว่า user อยู่ในเพจที่ถูกต้อง
+        """
         try:
             inactivity_period = int(schedule.get('inactivityPeriod', 1))
             inactivity_unit = schedule.get('inactivityUnit', 'days')
@@ -261,22 +266,9 @@ class MessageScheduler:
             else:  # months
                 target_minutes = inactivity_period * 30 * 24 * 60
 
-            logger.info(f"[{group_type}] Checking inactivity for schedule {schedule_id}: target={target_minutes} minutes")
+            logger.info(f"[{group_type}] Checking inactivity for page {page_id}, schedule {schedule_id}: target={target_minutes} minutes")
 
-            # ดึงข้อมูล inactivity ของ page นี้
-            page_inactivity_data = self.user_inactivity_data.get(page_id, {})
-            if not page_inactivity_data:
-                logger.warning(f"[{group_type}] No inactivity data for page {page_id}")
-                await self.update_inactivity_from_conversations(page_id)
-                page_inactivity_data = self.user_inactivity_data.get(page_id, {})
-
-            # ดึง access token
-            access_token = self.page_tokens.get(page_id)
-            if not access_token:
-                logger.warning(f"No access token for page {page_id}")
-                return
-
-            # 🔥 เพิ่มการตรวจสอบ users ที่อยู่ในกลุ่ม knowledge
+            # 🔥 แก้ไข: ดึงข้อมูลจาก database แทน frontend
             db = SessionLocal()
             try:
                 # หา page record
@@ -285,6 +277,15 @@ class MessageScheduler:
                     logger.error(f"Page {page_id} not found")
                     return
 
+                # ดึง access token
+                access_token = self.page_tokens.get(page_id)
+                if not access_token:
+                    logger.warning(f"No access token for page {page_id}")
+                    return
+
+                # 🔥 ใช้ composite key สำหรับ tracking
+                tracking_key = f"{page_id}_{schedule_id}"
+                
                 # ตรวจสอบว่าเป็น knowledge group หรือไม่
                 knowledge_group_ids = []
                 for group_id in groups:
@@ -292,17 +293,44 @@ class MessageScheduler:
                         knowledge_id = int(str(group_id).replace('knowledge_', ''))
                         knowledge_group_ids.append(knowledge_id)
 
+                # 🔥 ดึง customers จาก database
+                query = db.query(models.FbCustomer).filter(
+                    models.FbCustomer.page_id == page.ID,
+                    models.FbCustomer.last_interaction_at.isnot(None)
+                )
+                
+                # ถ้าเป็น knowledge group ให้กรองเฉพาะ users ในกลุ่มนั้น
+                if knowledge_group_ids:
+                    query = query.filter(
+                        models.FbCustomer.current_category_id.in_(knowledge_group_ids)
+                    )
+                
+                customers = query.all()
+                
                 inactive_users = []
-                sent_users = self.sent_tracking.get(schedule_id, set())
-
-                # ตรวจสอบแต่ละ user
-                for user_id, user_data in page_inactivity_data.items():
-                    # ตรวจสอบว่าเคยส่งให้ user นี้แล้วหรือยัง
-                    if user_id in sent_users:
+                sent_users = self.sent_tracking.get(tracking_key, set())
+                
+                # คำนวณเวลาปัจจุบัน
+                now = datetime.now(timezone.utc)
+                
+                # ตรวจสอบแต่ละ customer
+                for customer in customers:
+                    # ✅ ตรวจสอบว่าเคยส่งให้ user นี้แล้วหรือยัง
+                    if customer.customer_psid in sent_users:
                         continue
 
-                    # ดึงระยะเวลาที่หายไป (เป็นนาที)
-                    user_inactivity_minutes = user_data.get('inactivity_minutes', 0)
+                    # ✅ คำนวณระยะเวลาที่หายไป (นาที)
+                    last_interaction = customer.last_interaction_at
+                    
+                    # แปลงเป็น UTC timezone-aware ถ้ายังไม่เป็น
+                    if last_interaction.tzinfo is None:
+                        last_interaction = pytz.utc.localize(last_interaction)
+                    else:
+                        last_interaction = last_interaction.astimezone(pytz.utc)
+                    
+                    # คำนวณความแตกต่างเป็นนาที
+                    time_diff = now - last_interaction
+                    user_inactivity_minutes = time_diff.total_seconds() / 60
 
                     # ตรวจสอบว่าอยู่ในช่วงที่ตรงกับเงื่อนไข
                     tolerance = target_minutes * 0.02  # 2% ของเป้าหมาย
@@ -312,37 +340,35 @@ class MessageScheduler:
                     upper_bound = target_minutes + min_tolerance
                     
                     if lower_bound <= user_inactivity_minutes <= upper_bound:
-                        # 🔥 ถ้าเป็น knowledge group ต้องตรวจสอบว่า user อยู่ในกลุ่มหรือไม่
+                        # ถ้าเป็น knowledge group ต้องตรวจสอบว่า user อยู่ในกลุ่มหรือไม่
                         if knowledge_group_ids:
-                            customer = crud.get_customer_by_psid(db, page.ID, user_id)
-                            if not customer:
-                                logger.debug(f"[{group_type}] User {user_id} not found in database")
-                                continue
-                            
-                            # ตรวจสอบว่า customer อยู่ใน knowledge group ที่ต้องการหรือไม่
                             if not customer.current_category_id or customer.current_category_id not in knowledge_group_ids:
-                                logger.info(f"[{group_type}] User {user_id} not in knowledge group {knowledge_group_ids}, skipping")
+                                logger.info(f"[{group_type}] User {customer.customer_psid} not in knowledge group {knowledge_group_ids}, skipping")
                                 continue
                             
-                            logger.info(f"[{group_type}] User {user_id} is in knowledge group {customer.current_category_id}")
+                            logger.info(f"[{group_type}] ✅ User {customer.customer_psid} is in knowledge group {customer.current_category_id}")
                         
-                        inactive_users.append(user_id)
-                        logger.info(f"[{group_type}] User {user_id} matches: {user_inactivity_minutes} min (target: {target_minutes}±{min_tolerance})")
+                        inactive_users.append(customer.customer_psid)
+                        logger.info(f"[{group_type}] ✅ User {customer.customer_psid} ({customer.name}) matches: {user_inactivity_minutes:.1f} min (target: {target_minutes}±{min_tolerance})")
 
                 # ส่งข้อความให้ users ที่ตรงเงื่อนไข
                 if inactive_users:
-                    logger.info(f"[{group_type}] Found {len(inactive_users)} inactive users for schedule {schedule['id']}")
+                    logger.info(f"[{group_type}] Found {len(inactive_users)} inactive users for schedule {schedule['id']} on page {page_id}")
                     await self.send_messages_to_users(page_id, inactive_users, schedule['messages'], access_token, schedule, group_type)
 
                     # เพิ่ม users ที่ส่งแล้วเข้า tracking
-                    self.sent_tracking[schedule_id].update(inactive_users)
+                    self.sent_tracking[tracking_key].update(inactive_users)
                     schedule['last_sent'] = datetime.now().isoformat()
+                else:
+                    logger.info(f"[{group_type}] No inactive users found for schedule {schedule['id']} on page {page_id}")
 
             finally:
                 db.close()
 
         except Exception as e:
             logger.error(f"[{group_type}] Error checking user inactivity: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
     
     async def process_schedule(self, page_id: str, schedule: Dict[str, Any], group_type: str = ""):
         """ประมวลผลและส่งข้อความตาม schedule พร้อมแสดงประเภท"""
