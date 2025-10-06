@@ -17,8 +17,9 @@ const Popup = ({ onClose, onConfirm, count, selectedPage, remainingMines, curren
     const [selectedSets, setSelectedSets] = useState([]);
 
     // ✅ เพิ่ม State สำหรับความถี่การขุด
-    const [batchSize, setBatchSize] = useState(20); // จำนวนคนต่อรอบ
-    const [delayMinutes, setDelayMinutes] = useState(60); // เวลาหน่วง (นาที)
+    const [batchSize, setBatchSize] = useState(20);
+    const [delayValue, setDelayValue] = useState(60); // ค่าเวลา
+    const [delayUnit, setDelayUnit] = useState('minutes'); // หน่วยเวลา: 'minutes' หรือ 'hours'
 
     useEffect(() => {
         if (!selectedPage) return;
@@ -100,7 +101,11 @@ const Popup = ({ onClose, onConfirm, count, selectedPage, remainingMines, curren
             return;
         }
 
-        // ✅ ส่งข้อมูลความถี่ไปด้วย
+        // ✅ แปลงเป็นนาทีก่อนส่ง
+        const delayMinutes = delayUnit === 'hours' 
+            ? delayValue * 60 
+            : delayValue;
+
         const orderedIds = selectedSets.map(set => set.id);
         onConfirm(orderedIds, { batchSize, delayMinutes });
         onClose();
@@ -108,21 +113,35 @@ const Popup = ({ onClose, onConfirm, count, selectedPage, remainingMines, curren
 
     const exceedsLimit = remainingMines !== undefined && count > remainingMines;
 
-    // ✅ คำนวณจำนวนรอบและเวลาโดยประมาณ
+    // ✅ คำนวณจำนวนรอบและเวลาโดยประมาณ (แปลงเป็นนาทีสำหรับคำนวณ)
     const totalBatches = Math.ceil(count / batchSize);
+    const delayMinutes = delayUnit === 'hours' ? delayValue * 60 : delayValue;
     const estimatedMinutes = (totalBatches - 1) * delayMinutes;
 
-    // ========== ✅ FREQUENCY PRESETS (ใส่ตรงนี้) ==========
+    // ✅ ฟังก์ชันแสดงเวลาโดยประมาณ
+    const formatEstimatedTime = (minutes) => {
+        if (minutes < 60) {
+            return `${minutes} นาที`;
+        }
+        const hours = Math.floor(minutes / 60);
+        const remainingMinutes = minutes % 60;
+        return remainingMinutes > 0 
+            ? `${hours} ชั่วโมง ${remainingMinutes} นาที`
+            : `${hours} ชั่วโมง`;
+    };
+
+    // ========== ✅ FREQUENCY PRESETS (อัพเดทให้มีทั้งนาทีและชั่วโมง) ==========
     const frequencyPresets = [
-        { name: '🚀 เร็ว', batch: 50, delay: 30 },
-        { name: '⚡ ปกติ', batch: 20, delay: 60 },
-        { name: '🐢 ช้า', batch: 10, delay: 120 },
-        { name: '🎯 ปลอดภัย', batch: 5, delay: 180 }
+        { name: '🚀 เร็ว', batch: 50, delay: 30, unit: 'minutes' },
+        { name: '⚡ ปกติ', batch: 20, delay: 1, unit: 'hours' },
+        { name: '🐢 ช้า', batch: 10, delay: 2, unit: 'hours' },
+        { name: '🎯 ปลอดภัย', batch: 5, delay: 3, unit: 'hours' }
     ];
 
     const applyPreset = (preset) => {
         setBatchSize(preset.batch);
-        setDelayMinutes(preset.delay);
+        setDelayValue(preset.delay);
+        setDelayUnit(preset.unit);
     };
 
     return (
@@ -165,10 +184,9 @@ const Popup = ({ onClose, onConfirm, count, selectedPage, remainingMines, curren
                     }}>
                         <FontAwesomeIcon icon={faClock} />
                         ⚙️ ควบคุมความถี่การขุด
-                    </h3
-                    >
+                    </h3>
                     
-                    {/* ✅ ✅ PRESETS SECTION (ใส่ตรงนี้) ✅ ✅ */}
+                    {/* ✅ PRESETS SECTION */}
                     <div className="frequency-presets">
                         <label style={{ marginBottom: '10px', display: 'block' }}>
                             ⚡ ค่าตั้งต้น:
@@ -227,6 +245,7 @@ const Popup = ({ onClose, onConfirm, count, selectedPage, remainingMines, curren
                             <span className="input-hint">คน</span>
                         </div>
 
+                        {/* ✅ เวลาหน่วง + เลือกหน่วย */}
                         <div className="frequency-input-group">
                             <label>
                                 <FontAwesomeIcon icon={faClock} style={{ marginRight: '8px' }} />
@@ -234,8 +253,8 @@ const Popup = ({ onClose, onConfirm, count, selectedPage, remainingMines, curren
                             </label>
                             <input 
                                 type="number"
-                                value={delayMinutes}
-                                onChange={(e) => setDelayMinutes(Math.max(0, parseInt(e.target.value) || 0))}
+                                value={delayValue}
+                                onChange={(e) => setDelayValue(Math.max(0, parseInt(e.target.value) || 0))}
                                 min="0"
                                 style={{
                                     padding: '8px 12px',
@@ -245,14 +264,25 @@ const Popup = ({ onClose, onConfirm, count, selectedPage, remainingMines, curren
                                     width: '100px'
                                 }}
                             />
-                            <span className="input-hint">นาที</span>
+                            <select 
+                                value={delayUnit}
+                                onChange={(e) => setDelayUnit(e.target.value)}
+                                style={{
+                                    padding: '8px 12px',
+                                    border: '2px solid #e2e8f0',
+                                    borderRadius: '8px',
+                                    fontSize: '14px',
+                                    cursor: 'pointer',
+                                    backgroundColor: 'white',
+                                    marginLeft: '8px'
+                                }}
+                            >
+                                <option value="minutes">นาที</option>
+                                <option value="hours">ชั่วโมง</option>
+                            </select>
                         </div>
                     </div>
 
-                
-                    
-                       
-                   
                 </div>
 
                 <div style={{ display: 'flex', gap: '20px', marginTop: '20px' }}>
