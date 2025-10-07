@@ -176,45 +176,6 @@ async def send_sse_update(
     except Exception as e:
         logger.error(f"Error sending SSE update: {e}")
 
-async def update_mining_status_on_reply(
-    db: Session,
-    customer: models.FbCustomer,
-    page_id: str,
-    sender_id: str
-):
-    """Update mining status when customer replies"""
-    try:
-        current_mining_status = db.query(models.FBCustomerMiningStatus).filter(
-            models.FBCustomerMiningStatus.customer_id == customer.id
-        ).order_by(models.FBCustomerMiningStatus.created_at.desc()).first()
-        
-        if current_mining_status and current_mining_status.status == "ขุดแล้ว":
-            # Delete old status
-            db.query(models.FBCustomerMiningStatus).filter(
-                models.FBCustomerMiningStatus.customer_id == customer.id
-            ).delete()
-            
-            # Add new status
-            new_status = models.FBCustomerMiningStatus(
-                customer_id=customer.id,
-                status="มีการตอบกลับ",
-                note=f"User replied at {datetime.now()}"
-            )
-            db.add(new_status)
-            db.commit()
-            
-            logger.info(f"💬 Updated mining status to 'มีการตอบกลับ' for: {sender_id}")
-            
-            # Send SSE update
-            await send_sse_update(
-                page_id,
-                sender_id,
-                {'mining_status': 'มีการตอบกลับ'},
-                'mining_status_update'
-            )
-    
-    except Exception as e:
-        logger.error(f"Error updating mining status: {e}")
 
 # =============== API Endpoints ===============
 @router.get("/webhook")
@@ -270,13 +231,7 @@ async def webhook_post(
                     crud.update_customer_interaction(db, page.ID, sender_id)
                     logger.info(f"📝 Updated interaction for: {existing_customer.name}")
                     
-                    # Update mining status if needed
-                    await update_mining_status_on_reply(
-                        db,
-                        existing_customer,
-                        page_id,
-                        sender_id
-                    )
+                   
             
             except Exception as e:
                 logger.error(f"Error processing webhook: {e}")
