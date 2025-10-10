@@ -9,6 +9,7 @@ from app.service.facebook_api import fb_get
 import logging
 import asyncio
 from typing import Dict, List, Optional, Any
+from app.celery_task.webhook_task import sync_new_user_data_task
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -176,7 +177,6 @@ async def send_sse_update(
     except Exception as e:
         logger.error(f"Error sending SSE update: {e}")
 
-
 # =============== API Endpoints ===============
 @router.get("/webhook")
 async def verify_webhook(request: Request):
@@ -188,54 +188,38 @@ async def verify_webhook(request: Request):
     return PlainTextResponse(content="Verification failed", status_code=403)
 
 @router.post("/webhook")
-async def webhook_post(
-    request: Request, 
-    db: Session = Depends(get_db),
-    background_tasks: BackgroundTasks = BackgroundTasks()
-):
-    """Handle webhook events from Facebook"""
+async def webhook_post(request: Request, db: Session = Depends(get_db)):
     body = await request.json()
-    
+
     for entry in body.get("entry", []):
         page_id = entry.get("id")
-        
         if not page_id:
             continue
-            
+
         page = crud.get_page_by_page_id(db, page_id)
         if not page:
             continue
-        
+
         for msg_event in entry.get("messaging", []):
             sender_id = msg_event["sender"]["id"]
-            
-            # Skip if sender is the page itself
             if sender_id == page_id:
                 continue
-            
+
             try:
                 existing_customer = crud.get_customer_by_psid(db, page.ID, sender_id)
-                
+
                 if not existing_customer:
-                    # New user - sync in background
+                    # ✅ ใช้ Celery แทน BackgroundTasks
                     logger.info(f"🆕 New user detected: {sender_id} in page {page.page_name}")
-                    background_tasks.add_task(
-                        sync_new_user_data,
-                        page_id,
-                        sender_id,
-                        page.ID,
-                        db
-                    )
+                    sync_new_user_data_task.delay(page_id, sender_id, page.ID)
+
                 else:
-                    # Existing user - update interaction
                     crud.update_customer_interaction(db, page.ID, sender_id)
                     logger.info(f"📝 Updated interaction for: {existing_customer.name}")
-                    
-                   
-            
+
             except Exception as e:
                 logger.error(f"Error processing webhook: {e}")
-    
+
     return PlainTextResponse("EVENT_RECEIVED", status_code=200)
 
 @router.get("/new-user-notifications/{page_id}")

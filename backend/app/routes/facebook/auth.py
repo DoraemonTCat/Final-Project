@@ -19,6 +19,7 @@ from app.database.database import get_db
 from app import config
 from app.service.message_scheduler import message_scheduler
 from app.service.auto_sync_service import auto_sync_service
+from app.utils.redis_helper import store_page_token
 
 router = APIRouter()
 
@@ -310,14 +311,14 @@ async def connect_facebook_page():
 def facebook_callback(code: str, db: Session = Depends(get_db)):
     """จัดการ OAuth callback จาก Facebook"""
     print(f"🔗 Facebook callback received with code: {code[:20]}...")
-    
-    # ดึง access token
+
+    # 1️⃣ ดึง user access token
     token_url = "https://graph.facebook.com/v14.0/oauth/access_token"
     params = {
         "client_id": config.FB_APP_ID,
         "redirect_uri": config.REDIRECT_URI,
         "client_secret": config.FB_APP_SECRET,
-        "code": code
+        "code": code,
     }
 
     print("🔍 กำลังขอ access token...")
@@ -326,12 +327,12 @@ def facebook_callback(code: str, db: Session = Depends(get_db)):
 
     if "error" in token_data:
         print(f"❌ Error getting access token: {token_data['error']}")
-        return JSONResponse(status_code=400, content={"error": token_data['error']})
+        return JSONResponse(status_code=400, content={"error": token_data["error"]})
 
     user_token = token_data.get("access_token")
     print("✅ ได้รับ user access token แล้ว")
 
-    # ดึงเพจ
+    # 2️⃣ ดึงเพจทั้งหมดที่ user เป็นแอดมิน
     pages_url = "https://graph.facebook.com/me/accounts"
     print("🔍 กำลังดึงรายการเพจ...")
     pages_res = requests.get(pages_url, params={"access_token": user_token})
@@ -339,48 +340,55 @@ def facebook_callback(code: str, db: Session = Depends(get_db)):
 
     if "error" in pages:
         print(f"❌ Error getting pages: {pages['error']}")
-        return JSONResponse(status_code=400, content={"error": pages['error']})
+        return JSONResponse(status_code=400, content={"error": pages["error"]})
 
     connected_pages = []
+    page_tokens = {}
+
+    # 3️⃣ วนลูปบันทึกข้อมูลเพจ
     for page in pages.get("data", []):
         page_id = page["id"]
         access_token = page["access_token"]
         page_name = page.get("name", f"เพจ {page_id}")
-        
-        # เก็บ tokens
+
+        # ✅ เก็บ token ลง Redis
+        store_page_token(page_id, access_token)
+        print(f"✅ Stored token in Redis for page {page_name} ({page_id})")
+
+        # ✅ เก็บใน memory (optional)
         page_tokens[page_id] = access_token
-        page_names[page_id] = page_name
-        
-        # ส่ง tokens ให้ services
+
+        # ✅ อัปเดตให้ background services รู้จัก
         message_scheduler.set_page_tokens(page_tokens)
         auto_sync_service.set_page_tokens(page_tokens)
 
-        # บันทึกลงฐานข้อมูล
+        # ✅ บันทึกลงฐานข้อมูล
         existing = crud.get_page_by_page_id(db, page_id)
         if not existing:
             new_page = schemas.FacebookPageCreate(page_id=page_id, page_name=page_name)
             crud.create_page(db, new_page)
-            
-        # Auto sync retarget tiers from knowledge base
+
+        # ✅ Auto sync tiers
         try:
-            # ดึง page record ที่บันทึกแล้ว
             page_record = existing if existing else crud.get_page_by_page_id(db, page_id)
             if page_record:
                 synced_tiers = crud.sync_retarget_tiers_from_knowledge(db, page_record.ID)
-                logger.info(f"✅ Auto-synced {len(synced_tiers)} retarget tiers for page {page_name}")
+                logger.info(f"✅ Auto-synced {len(synced_tiers)} tiers for {page_name}")
         except Exception as e:
-            logger.error(f"Failed to sync retarget tiers for {page_name}: {e}")
+            logger.error(f"❌ Failed to sync tiers for {page_name}: {e}")
 
         connected_pages.append({"id": page_id, "name": page_name})
         print(f"✅ เชื่อมต่อเพจสำเร็จ: {page_name} (ID: {page_id})")
 
     print(f"✅ เชื่อมต่อเพจทั้งหมด {len(connected_pages)} เพจ")
 
+    # 4️⃣ redirect ไป frontend
     if connected_pages:
-        return RedirectResponse(url=f"http://localhost:3000/?page_id={connected_pages[0]['id']}")
+        first_page = connected_pages[0]["id"]
+        return RedirectResponse(url=f"http://localhost:3000/?page_id={first_page}")
     else:
         return RedirectResponse(url="http://localhost:3000/?error=no_pages")
-
+    
 # API สำหรับยกเลิกการเชื่อมต่อ Facebook Page
 @router.get("/pages")
 async def get_connected_pages():

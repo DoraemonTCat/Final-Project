@@ -1,0 +1,75 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - backend
+
+  db:
+    image: postgres:17
+    container_name: db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: peeframe2547
+      POSTGRES_DB: DataBase_Project
+    ports:
+      - "5432:5432"
+    networks:
+      - backend
+
+  web:
+    build: .
+    container_name: fastapi_app
+    command: uvicorn app.app:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./:/app
+    environment:
+      DATABASE_URL: postgresql://postgres:peeframe2547@db:5432/DataBase_Project
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 2
+    depends_on:
+      - redis
+      - db
+    networks:
+      - backend
+    ports:
+      - "8000:8000"
+
+  worker:
+    build: .
+    container_name: celery_worker
+    command: celery -A app.celery_worker.celery_app worker --loglevel=info
+    volumes:
+      - ./:/app
+    environment:
+      DATABASE_URL: postgresql://postgres:peeframe2547@db:5432/DataBase_Project
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 2
+    depends_on:
+      - redis
+      - db
+    networks:
+      - backend
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: test@test.com
+      PGADMIN_DEFAULT_PASSWORD: skibiditoilet
+    ports:
+      - "8083:80"
+    depends_on:
+      - db
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge

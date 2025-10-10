@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+celery[redis]
+redis
+sqlalchemy
+psycopg2-binary
+pydantic>=2.0
+pytz
+apscheduler
+google-generativeai
+requests
+python-dotenv
+Pillow

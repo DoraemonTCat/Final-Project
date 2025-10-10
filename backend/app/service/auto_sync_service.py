@@ -1,27 +1,3 @@
-"""
-แยก method หลัก
-
-    _handle_new_customer() - จัดการ user ใหม่ทั้งหมด
-    _handle_existing_customer() - จัดการ user เดิมทั้งหมด
-
-แยก helper methods:
-
-    _get_user_info() - ดึงข้อมูล user
-    _create_initial_mining_status() - สร้าง mining status
-    _send_new_customer_sse() - ส่ง SSE สำหรับ user ใหม่
-    _update_mining_status_if_needed() - อัพเดท mining status
-    _send_mining_status_sse() - ส่ง SSE สำหรับ mining status
-    _log_sync_summary() - Log สรุปผล
-
-แยก logic การ process:
-
-    _fetch_conversations() - ดึง conversations
-    _process_conversation() - process แต่ละ conversation
-    _process_participant() - process แต่ละ participant
-    _get_latest_user_message() - หาข้อความล่าสุด
-    _check_is_new_message() - ตรวจสอบข้อความใหม่
-
-"""
 import asyncio
 from datetime import datetime, timedelta
 import logging

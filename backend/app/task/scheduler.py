@@ -5,6 +5,10 @@ from app.database.database import SessionLocal
 from app.database import crud
 from app.LLM.agent import classify_and_assign_tier_hybrid
 from app.database import models
+from app.celery_task.customers import sync_customers_task
+from app.celery_task.messages import sync_customer_messages_task
+from app.celery_task.classification import scheduled_hybrid_classification_task, classify_page_tier_task
+from app.celery_task.auto_sync_tasks import sync_all_pages_task
 import logging
 
 logger = logging.getLogger(__name__)
@@ -13,20 +17,12 @@ SYNC_TIMEOUT = 60*5
 
 # ฟังก์ชันสำหรับ sync ข้อมูลลูกค้าจาก Facebook
 def schedule_facebook_sync():
-    """Sync ข้อมูลลูกค้าจาก Facebook"""
     db = SessionLocal()
     try:
         all_pages = get_all_connected_pages(db)
         for page_id in all_pages:
-            try:
-                print(f"🔁 Triggering sync for page_id={page_id}")
-                r = requests.get(
-                    f"http://localhost:8000/trigger-sync/{page_id}",
-                    timeout=SYNC_TIMEOUT
-                )
-                r.raise_for_status()
-            except Exception as e:
-                print(f"❌ Failed syncing page_id={page_id}: {e}")
+            print(f"🔁 Scheduling Celery sync for page_id={page_id}")
+            sync_customers_task.delay(page_id) 
     finally:
         db.close()
 
@@ -37,15 +33,8 @@ def schedule_facebook_messages_sync():
     try:
         all_pages = get_all_connected_pages(db)
         for page_id in all_pages:
-            try:
-                print(f"🔁 Triggering sync messages for page_id={page_id}")
-                r = requests.get(
-                    f"http://localhost:8000/trigger-messages-sync/{page_id}",
-                    timeout=SYNC_TIMEOUT
-                )
-                r.raise_for_status()
-            except Exception as e:
-                print(f"❌ Failed syncing messages for page_id={page_id}: {e}")
+            print(f"🔁 Scheduling Celery sync messages for page_id={page_id}")
+            sync_customer_messages_task.delay(page_id)  
     finally:
         db.close()
 
@@ -62,21 +51,14 @@ def sync_missing_tiers_on_startup():
         db.close()
 
 def scheduled_hybrid_classification():
-    db = SessionLocal()
-    try:
-        # ดึง pages ทั้งหมดที่ connect อยู่
-        pages = db.query(models.FacebookPage).all()
-        for page in pages:
-            try:
-                # ✅ แก้ไข: เปลี่ยนจาก page.id เป็น page.ID
-                logger.info(f"🔁 Running hybrid classification for page_id={page.ID}")
-                classify_and_assign_tier_hybrid(db, page.ID)  # ✅ ใช้ page.ID
-                logger.info(f"✅ Done hybrid classification for page_id={page.ID}")
-            except Exception as e:
-                # ✅ แก้ไข: เปลี่ยนจาก page.id เป็น page.ID
-                logger.error(f"❌ Error classifying page_id={page.ID}: {e}")
-    finally:
-        db.close()
+    """Trigger Celery hybrid classification"""
+    print("🔁 Scheduling hybrid classification via Celery...")
+    scheduled_hybrid_classification_task.delay()
+
+def scheduled_hybrid_classification():
+    """Trigger Celery hybrid classification"""
+    print("🔁 Scheduling hybrid classification via Celery...")
+    classify_page_tier_task.delay()
 
 # ฟังก์ชันสำหรับเริ่มต้น scheduler
 def start_scheduler():
@@ -87,10 +69,12 @@ def start_scheduler():
     scheduler.add_job(schedule_facebook_sync, 'interval', minutes=1)
     
     # Sync ข้อความทุกนาที (เดิม)
-    scheduler.add_job(schedule_facebook_messages_sync, 'interval', minutes=1) 
+    scheduler.add_job(schedule_facebook_messages_sync, 'interval', minutes=10) 
     
     # 🆕 แก้ไข: เปลี่ยนจาก 1 นาที
-    scheduler.add_job(scheduled_hybrid_classification, 'interval', minutes=1)
+    scheduler.add_job(scheduled_hybrid_classification, 'interval', minutes=10)
+
+    scheduler.add_job(sync_all_pages_task.delay, 'interval', minutes=10)
     
     # Sync retarget tiers เฉพาะตอนเริ่มระบบ
     sync_missing_tiers_on_startup()

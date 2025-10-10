@@ -2,7 +2,7 @@
 import axios from "axios";
 
 export const fetchPages = () => {
-  return axios.get("http://localhost:8000/pages")
+  return axios.get("http://localhost:8000/pages/")
     .then(res => res.data.pages || []);
 };
 

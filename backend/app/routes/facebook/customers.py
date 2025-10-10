@@ -145,6 +145,7 @@ async def sync_facebook_customers_enhanced(
     end_date: Optional[str] = Query(None),
     period: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    access_token: Optional[str] = None,
     build_fn=build_customer_data
 ):
     print(f"🔄 เริ่ม sync ข้อมูลลูกค้าสำหรับ page_id: {page_id}")
@@ -153,7 +154,7 @@ async def sync_facebook_customers_enhanced(
     if not page:
         return JSONResponse(status_code=400, content={"error": f"ไม่พบเพจ {page_id} ในระบบ กรุณาเชื่อมต่อเพจก่อน"})
 
-    access_token = get_page_tokens().get(page_id)
+    access_token = access_token or get_page_tokens().get(page_id)
     if not access_token:
         return JSONResponse(status_code=400, content={"error": f"ไม่พบ access_token สำหรับ page_id: {page_id}"})
 

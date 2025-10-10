@@ -12,6 +12,11 @@ from pydantic import BaseModel
 
 from app.database.database import get_db
 from app.database import models, crud
+from app.celery_task.mining_tasks import (
+    update_mining_status_task,
+    reset_mining_status_task,
+    clean_mining_history_task,
+)
 import logging
 
 router = APIRouter()
@@ -84,44 +89,24 @@ async def update_mining_status(
     status_update: MiningStatusUpdate,
     db: Session = Depends(get_db)
 ):
-    """Update mining status for multiple customers"""
+    """Trigger Celery task เพื่ออัปเดตสถานะลูกค้า"""
     try:
-        page = crud.get_page_by_page_id(db, page_id)
-        if not page:
-            raise HTTPException(status_code=404, detail="Page not found")
-        
-        updated_count = 0
-        errors = []
-        
-        # Batch process customers
-        for psid in status_update.customer_psids:
-            try:
-                customer = crud.get_customer_by_psid(db, page.ID, psid)
-                if not customer:
-                    errors.append(f"Customer {psid} not found")
-                    continue
-                
-                update_customer_mining_status(
-                    db, customer, status_update.status, status_update.note
-                )
-                updated_count += 1
-                
-            except Exception as e:
-                logger.error(f"Error updating status for {psid}: {e}")
-                errors.append(f"Error for {psid}: {str(e)}")
-        
-        db.commit()
-        
+        # ✅ ส่งงานเข้า queue
+        job = update_mining_status_task.delay(
+            page_id,
+            status_update.customer_psids,
+            status_update.status,
+            status_update.note
+        )
+
         return {
             "success": True,
-            "updated_count": updated_count,
-            "errors": errors if errors else None,
-            "message": f"Successfully updated {updated_count} customers to status: {status_update.status}"
+            "task_id": job.id,
+            "message": f"⏳ Celery job queued to update {len(status_update.customer_psids)} customers."
         }
-        
+
     except Exception as e:
-        db.rollback()
-        logger.error(f"Error in update_mining_status: {e}")
+        logger.error(f"❌ Error queuing mining update: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/mining-status/{page_id}")
@@ -152,32 +137,12 @@ async def reset_mining_status(
     customer_psids: List[str],
     db: Session = Depends(get_db)
 ):
-    """Reset mining status to 'ยังไม่ขุด' for selected customers"""
+    """Trigger Celery task เพื่อรีเซ็ตสถานะลูกค้า"""
     try:
-        page = crud.get_page_by_page_id(db, page_id)
-        if not page:
-            raise HTTPException(status_code=404, detail="Page not found")
-        
-        reset_count = 0
-        for psid in customer_psids:
-            customer = crud.get_customer_by_psid(db, page.ID, psid)
-            if customer:
-                update_customer_mining_status(
-                    db, customer, "ยังไม่ขุด", "Reset status"
-                )
-                reset_count += 1
-        
-        db.commit()
-        
-        return {
-            "success": True,
-            "reset_count": reset_count,
-            "message": f"Reset {reset_count} customers to 'ยังไม่ขุด'"
-        }
-        
+        job = reset_mining_status_task.delay(page_id, customer_psids)
+        return {"success": True, "task_id": job.id, "message": "⏳ Celery job queued to reset mining statuses."}
     except Exception as e:
-        db.rollback()
-        logger.error(f"Error resetting mining status: {e}")
+        logger.error(f"Error queuing reset task: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/mining-status/clean-history/{page_id}")
@@ -185,43 +150,10 @@ async def clean_mining_history(
     page_id: str,
     db: Session = Depends(get_db)
 ):
-    """Clean old mining status history, keep only latest per customer"""
+    """Trigger Celery task เพื่อล้าง record เก่าของสถานะ"""
     try:
-        page = crud.get_page_by_page_id(db, page_id)
-        if not page:
-            raise HTTPException(status_code=404, detail="Page not found")
-        
-        # Use window function to identify and delete old records
-        query = """
-            DELETE FROM fb_customer_mining_status
-            WHERE id IN (
-                SELECT id FROM (
-                    SELECT id,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY customer_id 
-                               ORDER BY created_at DESC
-                           ) as rn
-                    FROM fb_customer_mining_status
-                    WHERE customer_id IN (
-                        SELECT id FROM fb_customers WHERE page_id = :page_id
-                    )
-                ) ranked
-                WHERE rn > 1
-            )
-        """
-        
-        result = db.execute(text(query), {"page_id": page.ID})
-        total_deleted = result.rowcount
-        
-        db.commit()
-        
-        return {
-            "success": True,
-            "total_deleted": total_deleted,
-            "message": f"Cleaned {total_deleted} old mining status records"
-        }
-        
+        job = clean_mining_history_task.delay(page_id)
+        return {"success": True, "task_id": job.id, "message": "⏳ Celery job queued to clean mining history."}
     except Exception as e:
-        db.rollback()
-        logger.error(f"Error cleaning mining history: {e}")
+        logger.error(f"Error queuing clean task: {e}")
         raise HTTPException(status_code=500, detail=str(e))

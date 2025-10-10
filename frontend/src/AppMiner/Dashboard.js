@@ -79,7 +79,7 @@ const Dashboard = () => {
    */
   const fetchPages = async () => {
     try {
-      const response = await fetch('http://localhost:8000/pages');
+      const response = await fetch('http://localhost:8000/pages/');
       const data = await response.json();
       const pagesData = data.pages || data || [];
       setPages(pagesData);
