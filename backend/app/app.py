@@ -1,5 +1,4 @@
 # backend/app/app.py
-from backend.app.celery_task import pages_tasks
 from fastapi import FastAPI
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,7 +9,7 @@ import logging
 import uvicorn
 
 # Import routes
-from app.routes import webhook, custom_messages, fb_customer, sync, group_messages
+from app.routes import pages, webhook, custom_messages, fb_customer, sync, group_messages
 from app.routes import facebook
 from app.routes import retarget_tiers
 from app.routes import mining_status
@@ -53,7 +52,7 @@ app.add_middleware(
 )
 
 # รวม router จากแต่ละโมดูล
-app.include_router(pages_tasks.router)
+app.include_router(pages.router)
 app.include_router(webhook.router)
 app.include_router(facebook.router)
 app.include_router(mining_status.router)
