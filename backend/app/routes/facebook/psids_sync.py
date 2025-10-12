@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.database.database import get_db
 from app.service.facebook_api import fb_get
 from .auth import get_page_tokens
+from app.utils.redis_helper import get_page_token
 
 """
    -ใช้สำหรับดึงข้อมูลข้อความจาก Facebook มาเก็บในตาราง customer_messages
@@ -357,21 +358,25 @@ def get_message_content(message: Dict[str, Any]) -> Optional[str]:
 @router.get("/psids/{page_id}/sync-messages")
 async def sync_messages_for_page(page_id: str, db: Session = Depends(get_db)):
     print(f"🔄 Start sync messages for page_id: {page_id}")
-
-    page_tokens = get_page_tokens()
-    access_token = page_tokens.get(page_id)
-    if not access_token:
-        return JSONResponse(status_code=400, content={"error": f"access_token not found for page_id {page_id}"})
-
-    now_bkk = datetime.now(bangkok_tz)
-    since_dt = now_bkk - timedelta(hours=72)
-    since_utc = since_dt.astimezone(pytz.utc)
-    since_iso = since_utc.isoformat()
-
     try:
-        stats = insert_customer_messages_from_conversations(db, page_id, access_token, since_iso)
-        return JSONResponse(content={"status": "ok", "stats": stats})
+        result = await do_sync_messages_for_page(page_id, db)
+        return JSONResponse(content=result)
+    except ValueError as ve:
+        return JSONResponse(status_code=400, content={"error": str(ve)})
     except Exception as e:
         print("❌ sync error:", e)
         traceback.print_exc()
         return JSONResponse(status_code=500, content={"error": str(e)})
+    
+async def do_sync_messages_for_page(page_id: str, db: Session):
+    access_token = get_page_token(page_id)
+    if not access_token:
+        raise ValueError(f"access_token not found for page_id {page_id}")
+
+    now_bkk = datetime.now(bangkok_tz)
+    since_dt = now_bkk - timedelta(hours=2)
+    since_utc = since_dt.astimezone(pytz.utc)
+    since_iso = since_utc.isoformat()
+
+    stats = insert_customer_messages_from_conversations(db, page_id, access_token, since_iso)
+    return {"status": "ok", "stats": stats}

@@ -35,6 +35,6 @@ celery_app.conf.include = [
     "app.celery_task.classification",
     "app.celery_task.mining_tasks",
     "app.celery_task.webhook_task",
-    "app.celery_task.pages_tasks",
+    "app.celery_task.page_tasks",
     "app.celery_task.pages_admin"
 ]

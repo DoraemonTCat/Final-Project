@@ -27,6 +27,7 @@ def run_sync_customer_background(page_id: str):
         if loop:
             loop.close()
 
+# API สำหรับรัน background task เพื่อ sync ข้อความลูกค้า
 def run_sync_customer_messages_background(page_id: str):
     db = SessionLocal()
     loop = None

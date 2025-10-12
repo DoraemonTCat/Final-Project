@@ -9,6 +9,7 @@ from app.celery_task.customers import sync_customers_task
 from app.celery_task.messages import sync_customer_messages_task
 from app.celery_task.classification import scheduled_hybrid_classification_task, classify_page_tier_task
 from app.celery_task.auto_sync_tasks import sync_all_pages_task
+from app.database.models import FacebookPage
 import logging
 
 logger = logging.getLogger(__name__)
@@ -52,21 +53,24 @@ def sync_missing_tiers_on_startup():
 
 def scheduled_hybrid_classification():
     """Trigger Celery hybrid classification"""
-    print("🔁 Scheduling hybrid classification via Celery...")
-    scheduled_hybrid_classification_task.delay()
-
-def scheduled_hybrid_classification():
-    """Trigger Celery hybrid classification"""
-    print("🔁 Scheduling hybrid classification via Celery...")
-    classify_page_tier_task.delay()
-
+    db = SessionLocal()
+    try:
+        pages = db.query(FacebookPage).all()
+        print("🔁 Scheduling hybrid classification via Celery...")
+        
+        for page in pages:
+            classify_page_tier_task.delay(page.ID)
+            print(f"✅ Task scheduled for page_id={page.ID}")
+            
+    finally:
+        db.close()
 # ฟังก์ชันสำหรับเริ่มต้น scheduler
 def start_scheduler():
     """เริ่มต้น scheduler สำหรับ background tasks"""
     scheduler = BackgroundScheduler()
     
     # Sync ข้อมูลลูกค้าทุกๆ 1 นาที (เดิม)
-    scheduler.add_job(schedule_facebook_sync, 'interval', minutes=1)
+    scheduler.add_job(schedule_facebook_sync, 'interval', minutes=10)
     
     # Sync ข้อความทุกนาที (เดิม)
     scheduler.add_job(schedule_facebook_messages_sync, 'interval', minutes=10) 
