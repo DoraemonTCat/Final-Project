@@ -97,28 +97,33 @@ function GroupDefault() {
   const pageDbIdCache = useMemo(() => new Map(), []);
 
   // Optimized function with caching
-  const getPageDbId = useCallback(async (pageId) => {
-    if (pageDbIdCache.has(pageId)) {
-      return pageDbIdCache.get(pageId);
-    }
+const getPageDbId = useCallback(async (pageId) => {
+  if (pageDbIdCache.has(pageId)) {
+    return pageDbIdCache.get(pageId);
+  }
 
-    try {
-      const response = await fetch('http://localhost:8000/pages/');
-      if (!response.ok) throw new Error('Failed to fetch pages');
-      
-      const pagesData = await response.json();
-      const currentPage = pagesData.find(p => p.page_id === pageId || p.id === pageId);
-      
-      if (currentPage) {
-        pageDbIdCache.set(pageId, currentPage.ID);
-        return currentPage.ID;
-      }
-      return null;
-    } catch (error) {
-      console.error('Error getting page DB ID:', error);
-      return null;
+  try {
+    const response = await fetch('http://localhost:8000/pages/');
+    if (!response.ok) throw new Error('Failed to fetch pages');
+    
+    const data = await response.json();
+    const pagesData = data.pages || []; // ✅ เข้าถึง array ที่อยู่ใน key "pages"
+
+    const currentPage = pagesData.find(
+      p => p.page_id === pageId || p.id === pageId
+    );
+
+    if (currentPage) {
+      pageDbIdCache.set(pageId, currentPage.ID);
+      return currentPage.ID;
     }
-  }, [pageDbIdCache]);
+    return null;
+  } catch (error) {
+    console.error('Error getting page DB ID:', error);
+    return null;
+  }
+}, [pageDbIdCache]);
+
 
   const isKnowledgeGroup = useCallback((groupId) => {
     return groupId && groupId.toString().startsWith('knowledge_');

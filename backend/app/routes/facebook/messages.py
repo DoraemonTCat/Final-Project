@@ -38,16 +38,19 @@ async def send_user_message(
             raise HTTPException(status_code=400, detail="Page token not found")
 
         # 🔍 ถ้าเป็นรูป ให้ดึง binary จาก DB
-        image_binary = None
         if req.type == "image":
-            customer_msg = crud.get_customer_message_by_psid(db, psid)
-            if customer_msg and customer_msg.message_binary:
-                image_binary = customer_msg.message_binary
+            try:
+                message_id = int(req.message)
+            except ValueError:
+                logger.error(f"❌ Invalid message id for image: {req.message}")
+                raise HTTPException(status_code=400, detail="Invalid message id for image message")
+
+            custom_msg = crud.get_custom_message_by_id(db, message_id)
+            if custom_msg and custom_msg.image_data:
+                image_binary = custom_msg.image_data
+                logger.info(f"🖼 Loaded image binary ({len(image_binary)} bytes) from fb_custom_messages.id={custom_msg.id}")
             else:
-                # fallback เป็นข้อความ
-                req.type = "text"
-                if not req.message:
-                    req.message = "📷 รูปภาพไม่พร้อมส่ง"
+                logger.warning("⚠️ No image data found for this message_id")
 
         # 🚀 ส่งงานเข้า Celery
         job = send_message_task.delay(

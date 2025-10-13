@@ -13,12 +13,11 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel
-from app.database import crud, models
-from app.database.database import get_db
 import logging
 
-from app.celery_task.groups_task import get_customer_groups_task , create_customer_group_task , get_customer_group_task , update_customer_group_task , delete_customer_group_task , get_all_customer_type_knowledge_task
-from app.celery_task.groups_task import get_page_customer_type_knowledge_task  , toggle_page_knowledge_task , update_customer_type_knowledge_task , auto_group_customer_task
+from app.database import crud, models
+from app.database.database import get_db
+
 # ==================== Configuration ====================
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -60,90 +59,384 @@ async def create_customer_group(
     group_data: CustomerGroupCreate,
     db: Session = Depends(get_db)
 ):
-    """ส่งงานสร้างกลุ่มลูกค้าให้ Celery ทำใน background"""
+    """สร้างกลุ่มลูกค้าใหม่"""
     try:
-        # แปลงเป็น dict เพื่อส่งเข้า Celery task
-        task_data = {
-            "page_id": group_data.page_id,
-            "type_name": group_data.type_name,
-            "keywords": group_data.keywords,
-            "rule_description": group_data.rule_description,
-            "examples": group_data.examples
-        }
-
-        task = create_customer_group_task.delay(task_data)
-
+        new_group = crud.create_customer_type_custom(
+            db, 
+            page_id=group_data.page_id,
+            type_data={
+                'type_name': group_data.type_name,
+                'keywords': group_data.keywords,
+                'rule_description': group_data.rule_description,
+                'examples': group_data.examples,
+                'is_active': True
+            }
+        )
+        
         return {
-            "message": "กำลังสร้างกลุ่มลูกค้าใน background",
-            "task_id": task.id
+            "id": new_group.id,
+            "page_id": new_group.page_id,
+            "type_name": new_group.type_name,
+            "keywords": new_group.keywords if isinstance(new_group.keywords, list) else [],
+            "rule_description": new_group.rule_description,
+            "examples": new_group.examples if isinstance(new_group.examples, list) else [],
+            "created_at": new_group.created_at,
+            "updated_at": new_group.updated_at
         }
     except Exception as e:
-        logger.error(f"Error creating customer group task: {e}")
+        db.rollback()
+        logger.error(f"Error creating customer group: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/customer-groups/{page_id}")
-async def get_customer_groups(page_id: int, include_inactive: bool = False):
-    """ส่ง task ไปให้ Celery ทำงาน"""
-    task = get_customer_groups_task.delay(page_id, include_inactive)
-    return {"job_id": task.id, "status": "processing"}
+async def get_customer_groups(
+    page_id: int,
+    include_inactive: bool = False,
+    db: Session = Depends(get_db)
+):
+    """ดึงกลุ่มลูกค้าทั้งหมดของเพจ"""
+    try:
+        query = db.query(models.CustomerTypeCustom).filter(
+            models.CustomerTypeCustom.page_id == page_id
+        )
+        
+        if not include_inactive:
+            query = query.filter(models.CustomerTypeCustom.is_active == True)
+        
+        groups = query.order_by(models.CustomerTypeCustom.created_at.desc()).all()
+        
+        result = []
+        for group in groups:
+            # นับจำนวนลูกค้าโดยใช้ query แทนการเข้าถึง relationship โดยตรง
+            customer_count = db.query(models.FbCustomer).filter(
+                models.FbCustomer.page_id == page_id,
+                models.FbCustomer.current_category_id == group.id  # ใช้ current_category_id
+            ).count()
+            
+            result.append({
+                "id": group.id,
+                "page_id": group.page_id,
+                "type_name": group.type_name,
+                "keywords": group.keywords or [],
+                "examples": group.examples or [],
+                "rule_description": group.rule_description,
+                "is_active": group.is_active,
+                "created_at": group.created_at,
+                "updated_at": group.updated_at,
+                "customer_count": customer_count  # ใช้ค่าที่นับมา
+            })
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error fetching customer groups: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/customer-group/{group_id}")
-async def get_customer_group(group_id: int):
-    """ดึงข้อมูลกลุ่มลูกค้าตาม ID แบบ background"""
-    task = get_customer_group_task.delay(group_id)  # ส่งงานไป Celery
-    return {"task_id": task.id, "status": "processing"}
+async def get_customer_group(
+    group_id: int,
+    db: Session = Depends(get_db)
+):
+    """ดึงข้อมูลกลุ่มลูกค้าตาม ID"""
+    group = db.query(models.CustomerTypeCustom).filter(
+        models.CustomerTypeCustom.id == group_id
+    ).first()
+    
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    return {
+        "id": group.id,
+        "page_id": group.page_id,
+        "type_name": group.type_name,
+        "keywords": group.keywords.split(",") if group.keywords else [],
+        "examples": group.examples.split("\n") if group.examples else [],
+        "rule_description": group.rule_description,
+        "is_active": group.is_active,
+        "created_at": group.created_at,
+        "updated_at": group.updated_at,
+        "customer_count": len(group.customers)
+    }
 
 @router.put("/customer-groups/{group_id}")
-async def update_customer_group(group_id: int, group_update: CustomerGroupUpdate):
-    """ส่งงานอัปเดทกลุ่มลูกค้าไป Celery"""
-    update_data = {}
-    if group_update.type_name is not None:
-        update_data['type_name'] = group_update.type_name
-    if group_update.keywords is not None:
-        update_data['keywords'] = group_update.keywords
-    if group_update.rule_description is not None:
-        update_data['rule_description'] = group_update.rule_description
-    if group_update.examples is not None:
-        update_data['examples'] = group_update.examples
-    if group_update.is_active is not None:
-        update_data['is_active'] = group_update.is_active
-
-    task = update_customer_group_task.delay(group_id, update_data)
-    return {"task_id": task.id, "status": "processing"}
+async def update_customer_group(
+    group_id: int,
+    group_update: CustomerGroupUpdate,
+    db: Session = Depends(get_db)
+):
+    """อัพเดทข้อมูลกลุ่มลูกค้า"""
+    group = db.query(models.CustomerTypeCustom).filter(
+        models.CustomerTypeCustom.id == group_id
+    ).first()
+    
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    try:
+        update_data = {}
+        if group_update.type_name is not None:
+            update_data['type_name'] = group_update.type_name
+        if group_update.keywords is not None:
+            update_data['keywords'] = group_update.keywords
+        if group_update.rule_description is not None:
+            update_data['rule_description'] = group_update.rule_description
+        if group_update.examples is not None:
+            update_data['examples'] = group_update.examples
+        if group_update.is_active is not None:
+            update_data['is_active'] = group_update.is_active
+            
+        updated_group = crud.update_customer_type_custom(db, group_id, update_data)
+        
+        return {
+            "id": updated_group.id,
+            "type_name": updated_group.type_name,
+            "keywords": updated_group.keywords if isinstance(updated_group.keywords, list) else [],
+            "rule_description": updated_group.rule_description,
+            "examples": updated_group.examples if isinstance(updated_group.examples, list) else [],
+            "updated_at": updated_group.updated_at
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating customer group: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.delete("/customer-groups/{group_id}")
-async def delete_customer_group_endpoint(group_id: int, hard_delete: bool = False):
-    """ส่งงานลบกลุ่มลูกค้าไป Celery"""
-    task = delete_customer_group_task.delay(group_id, hard_delete)
-    return {"task_id": task.id, "status": "processing"}
+async def delete_customer_group(
+    group_id: int,
+    hard_delete: bool = False,
+    db: Session = Depends(get_db)
+):
+    """ลบกลุ่มลูกค้า (soft delete หรือ hard delete)"""
+    group = db.query(models.CustomerTypeCustom).filter(
+        models.CustomerTypeCustom.id == group_id
+    ).first()
+    
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    try:
+        if hard_delete:
+            db.delete(group)
+        else:
+            group.is_active = False
+            group.updated_at = datetime.now()
+        
+        db.commit()
+        
+        return {
+            "status": "success", 
+            "message": "Group deleted successfully",
+            "hard_delete": hard_delete
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting customer group: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 # ==================== Auto-Grouping API ====================
 
 @router.post("/auto-group-customer")
-async def auto_group_customer_endpoint(page_id: str, customer_psid: str, message_text: str):
-    """ส่งงาน auto-group ไป Celery"""
-    task = auto_group_customer_task.delay(page_id, customer_psid, message_text)
-    return {"task_id": task.id, "status": "processing"}
+async def auto_group_customer(
+    page_id: str,
+    customer_psid: str,
+    message_text: str,
+    db: Session = Depends(get_db)
+):
+    """ตรวจสอบข้อความและจัดกลุ่มลูกค้าอัตโนมัติตาม keywords"""
+    page = crud.get_page_by_page_id(db, page_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    
+    # ดึงกลุ่มที่ active ทั้งหมดของเพจ
+    groups = db.query(models.CustomerTypeCustom).filter(
+        models.CustomerTypeCustom.page_id == page.ID,
+        models.CustomerTypeCustom.is_active == True
+    ).all()
+    
+    # ตรวจสอบ keywords
+    detected_group = None
+    message_lower = message_text.lower()
+    
+    for group in groups:
+        if group.keywords:
+            keywords = [k.strip().lower() for k in group.keywords.split(",")]
+            for keyword in keywords:
+                if keyword and keyword in message_lower:
+                    detected_group = group
+                    break
+        if detected_group:
+            break
+    
+    if detected_group:
+        # อัพเดทกลุ่มของลูกค้า
+        customer = crud.get_customer_by_psid(db, page.ID, customer_psid)
+        if customer:
+            customer.customer_type_custom_id = detected_group.id
+            customer.updated_at = datetime.now()
+            db.commit()
+            
+            return {
+                "status": "success",
+                "group_detected": detected_group.type_name,
+                "keywords_matched": True,
+                "customer_psid": customer_psid
+            }
+    
+    return {
+        "status": "no_match",
+        "message": "No keywords matched",
+        "customer_psid": customer_psid
+    }
 
 # ==================== Knowledge Type APIs ====================
 
 @router.get("/customer-type-knowledge")
-async def get_all_customer_type_knowledge_endpoint():
-    """ส่งงานดึงข้อมูล customer type knowledge ไป Celery"""
-    task = get_all_customer_type_knowledge_task.delay()
-    return {"task_id": task.id, "status": "processing"}
+async def get_all_customer_type_knowledge(
+    db: Session = Depends(get_db)
+):
+    """ดึงข้อมูล customer type knowledge ทั้งหมด"""
+    try:
+        knowledge_types = db.query(models.CustomerTypeKnowledge).all()
+        
+        result = []
+        for kt in knowledge_types:
+            result.append({
+                "id": f"knowledge_{kt.id}",  # ใช้ prefix เพื่อแยกจาก user groups
+                "knowledge_id": kt.id,
+                "type_name": kt.type_name,
+                "rule_description": kt.rule_description,
+                "examples": kt.examples,
+                "keywords": kt.keywords,
+                "logic": kt.logic,
+                "supports_image": kt.supports_image,
+                "image_label_keywords": kt.image_label_keywords,
+                "is_knowledge": True  # flag เพื่อระบุว่าเป็น knowledge type
+            })
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error fetching customer type knowledge: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/page-customer-type-knowledge/{page_id}")
-async def get_page_customer_type_knowledge_endpoint(page_id: str):
-    """ส่งงานดึง knowledge types ของ page ไป Celery"""
-    task = get_page_customer_type_knowledge_task.delay(page_id)
-    return {"task_id": task.id, "status": "processing"}
+async def get_page_customer_type_knowledge(
+    page_id: str,
+    db: Session = Depends(get_db)
+):
+    """ดึง knowledge types ที่เชื่อมกับ page นี้"""
+    try:
+        # หา page จาก Facebook page ID
+        page = crud.get_page_by_page_id(db, page_id)
+        if not page:
+            logger.warning(f"Page not found for page_id: {page_id}")
+            return []
+        
+        page_db_id = page.ID
+        
+        # ดึง records จากตาราง page_customer_type_knowledge
+        page_knowledge_records = db.query(models.PageCustomerTypeKnowledge).filter(
+            models.PageCustomerTypeKnowledge.page_id == page_db_id
+        ).all()
+        
+        logger.info(f"Found {len(page_knowledge_records)} page_knowledge records for page {page_id}")
+        
+        # ถ้าไม่มี records สำหรับ page นี้ ให้สร้างขึ้นมาใหม่
+        if not page_knowledge_records:
+            page_knowledge_records = await _create_default_page_knowledge_records(
+                db, page_db_id
+            )
+        
+        # สร้าง response - แก้ไขการเข้าถึง relationship
+        result = []
+        for pk_record in page_knowledge_records:
+            # ใช้ knowledge แทน customer_type_knowledge (ตาม model ที่กำหนดใน models.py)
+            if pk_record.knowledge:  
+                kt = pk_record.knowledge
+                result.append({
+                    "id": f"knowledge_{kt.id}",
+                    "knowledge_id": kt.id,
+                    "page_knowledge_id": pk_record.id,
+                    "type_name": kt.type_name,
+                    "rule_description": kt.rule_description,
+                    "examples": kt.examples,
+                    "keywords": kt.keywords,
+                    "logic": kt.logic,
+                    "supports_image": kt.supports_image,
+                    "image_label_keywords": kt.image_label_keywords,
+                    "is_knowledge": True,
+                    "is_enabled": pk_record.is_enabled,
+                    "is_active": True,
+                    "created_at": pk_record.created_at.isoformat() if pk_record.created_at else None
+                })
+                
+                logger.debug(f"Added knowledge type: {kt.type_name} (ID: {kt.id})")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error fetching page customer type knowledge: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/page-customer-type-knowledge/{page_id}/{knowledge_id}/toggle")
-async def toggle_page_knowledge_endpoint(page_id: str, knowledge_id: int):
-    """ส่งงาน toggle knowledge type ไป Celery"""
-    task = toggle_page_knowledge_task.delay(page_id, knowledge_id)
-    return {"task_id": task.id, "status": "processing"}
+async def toggle_page_knowledge_type(
+    page_id: str,
+    knowledge_id: int,
+    db: Session = Depends(get_db)
+):
+    """เปิด/ปิด knowledge type สำหรับ page พร้อมจัดการ schedules"""
+    try:
+        page = crud.get_page_by_page_id(db, page_id)
+        if not page:
+            raise HTTPException(status_code=404, detail="Page not found")
+        
+        pk_record = db.query(models.PageCustomerTypeKnowledge).filter(
+            models.PageCustomerTypeKnowledge.page_id == page.ID,
+            models.PageCustomerTypeKnowledge.customer_type_knowledge_id == knowledge_id
+        ).first()
+        
+        if not pk_record:
+            raise HTTPException(status_code=404, detail="Record not found")
+        
+        # Toggle สถานะ
+        pk_record.is_enabled = not pk_record.is_enabled
+        pk_record.updated_at = datetime.now()
+        db.commit()
+        
+        # ถ้าปิดกลุ่ม ให้ปิด schedules ด้วย
+        if not pk_record.is_enabled:
+            # ปิดการทำงานของ schedules ที่เกี่ยวข้อง
+            from app.service.message_scheduler import message_scheduler
+            
+            group_id = f"knowledge_{knowledge_id}"
+            removed_count = 0
+            
+            # ลบ schedules ที่ active อยู่
+            if page_id in message_scheduler.active_schedules:
+                schedules_to_remove = []
+                for schedule in message_scheduler.active_schedules[page_id]:
+                    if group_id in schedule.get('groups', []):
+                        schedules_to_remove.append(schedule['id'])
+                
+                for schedule_id in schedules_to_remove:
+                    message_scheduler.remove_schedule(page_id, schedule_id)
+                    removed_count += 1
+            
+            logger.info(f"Disabled knowledge group {knowledge_id} and deactivated {removed_count} schedules")
+        else:
+            logger.info(f"Enabled knowledge group {knowledge_id}")
+        
+        return {
+            "status": "success", 
+            "is_enabled": pk_record.is_enabled,
+            "knowledge_id": knowledge_id,
+            "page_id": page_id
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error toggling page knowledge type: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ==================== Debug APIs ====================
 
@@ -207,7 +500,83 @@ async def _create_default_page_knowledge_records(db: Session, page_db_id: int):
     
 # เพิ่ม API สำหรับแก้ไข knowledge type
 @router.put("/customer-type-knowledge/{knowledge_id}")
-async def update_customer_type_knowledge_endpoint(knowledge_id: int, update_data: dict):
-    """ส่งงาน update knowledge type ไป Celery"""
-    task = update_customer_type_knowledge_task.delay(knowledge_id, update_data)
-    return {"task_id": task.id, "status": "processing"}
+async def update_customer_type_knowledge(
+    knowledge_id: int,
+    update_data: dict,
+    db: Session = Depends(get_db)
+):
+    """แก้ไขข้อมูล customer type knowledge"""
+    try:
+        # ค้นหา knowledge type
+        knowledge_type = db.query(models.CustomerTypeKnowledge).filter(
+            models.CustomerTypeKnowledge.id == knowledge_id
+        ).first()
+        
+        if not knowledge_type:
+            raise HTTPException(status_code=404, detail="Knowledge type not found")
+        
+        # ใช้ raw SQL สำหรับอัพเดท ARRAY fields
+        update_fields = []
+        params = {"id": knowledge_id}
+        
+        if 'type_name' in update_data:
+            update_fields.append("type_name = :type_name")
+            params["type_name"] = update_data['type_name']
+            
+        if 'rule_description' in update_data:
+            update_fields.append("rule_description = :rule_description")
+            params["rule_description"] = update_data['rule_description']
+            
+        if 'keywords' in update_data:
+            keywords_str = update_data['keywords']
+            if isinstance(keywords_str, str):
+                keywords_array = [k.strip() for k in keywords_str.split(',') if k.strip()]
+            else:
+                keywords_array = keywords_str if isinstance(keywords_str, list) else []
+            
+            # สำหรับ PostgreSQL ARRAY
+            update_fields.append("keywords = :keywords")
+            params["keywords"] = keywords_array
+            
+        if 'examples' in update_data:
+            examples_str = update_data['examples']
+            if isinstance(examples_str, str):
+                examples_array = [e.strip() for e in examples_str.split('\n') if e.strip()]
+            else:
+                examples_array = examples_str if isinstance(examples_str, list) else []
+            
+            # สำหรับ PostgreSQL ARRAY
+            update_fields.append("examples = :examples")
+            params["examples"] = examples_array
+        
+        if update_fields:
+            from sqlalchemy import text
+            
+            query = text(f"""
+                UPDATE customer_type_knowledge 
+                SET {', '.join(update_fields)}
+                WHERE id = :id
+                RETURNING id, type_name, rule_description, keywords, examples
+            """)
+            
+            result = db.execute(query, params)
+            db.commit()
+            
+            # ดึงข้อมูลที่อัพเดทแล้ว
+            updated_row = result.fetchone()
+            
+            return {
+                "id": updated_row[0],
+                "type_name": updated_row[1],
+                "rule_description": updated_row[2],
+                "keywords": updated_row[3] if updated_row[3] else [],
+                "examples": updated_row[4] if updated_row[4] else [],
+                "message": "อัพเดทข้อมูลสำเร็จ"
+            }
+        
+        return {"message": "ไม่มีข้อมูลที่ต้องอัพเดท"}
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating knowledge type: {e}")
+        raise HTTPException(status_code=400, detail=str(e))

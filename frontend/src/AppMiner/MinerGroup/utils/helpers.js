@@ -4,9 +4,13 @@ export const getPageDbId = async (pageId) => {
     const response = await fetch('http://localhost:8000/pages/');
     if (!response.ok) throw new Error('Failed to fetch pages');
     
-    const pagesData = await response.json();
-    const currentPage = pagesData.find(p => p.page_id === pageId || p.id === pageId);
-    
+    const data = await response.json();
+    const pagesData = data.pages || []; // ✅ เข้าถึง array ที่อยู่ใน key "pages"
+
+    const currentPage = pagesData.find(
+      p => p.page_id === pageId || p.id === pageId
+    );
+
     return currentPage ? currentPage.ID : null;
   } catch (error) {
     console.error('Error getting page DB ID:', error);

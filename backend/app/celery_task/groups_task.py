@@ -6,6 +6,8 @@ import logging
 from datetime import datetime
 import asyncio
 from app.service.message_scheduler import message_scheduler
+from app.routes.facebook.groups import _create_default_page_knowledge_records
+
 
 logger = logging.getLogger(__name__)
 

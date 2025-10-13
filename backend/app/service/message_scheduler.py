@@ -9,6 +9,7 @@ from app.database.database import SessionLocal
 import json
 from app.routes.facebook.sse import send_customer_type_update
 from app.database import models
+from app.utils.redis_helper import get_page_token
 
 logger = logging.getLogger(__name__)
 
@@ -271,7 +272,7 @@ class MessageScheduler:
                 page_inactivity_data = self.user_inactivity_data.get(page_id, {})
 
             # ดึง access token
-            access_token = self.page_tokens.get(page_id)
+            access_token = get_page_token(page_id)
             if not access_token:
                 logger.warning(f"No access token for page {page_id}")
                 return
@@ -358,7 +359,7 @@ class MessageScheduler:
                 return
                 
             # ดึง access token
-            access_token = self.page_tokens.get(page_id)
+            access_token = get_page_token(page_id)
             if not access_token:
                 logger.warning(f"No access token for page {page_id}")
                 return
@@ -567,7 +568,7 @@ class MessageScheduler:
     async def update_inactivity_from_conversations(self, page_id: str):
         """อัพเดทข้อมูล inactivity จาก conversations โดยตรง"""
         try:
-            access_token = self.page_tokens.get(page_id)
+            access_token = get_page_token(page_id)
             if not access_token:
                 return
 

@@ -747,3 +747,6 @@ def get_page_db_id(db: Session, page_identifier):
         ).first()
         return page.ID if page else None
     return None
+
+def get_custom_message_by_id(db: Session, message_id: int):
+    return db.query(models.FBCustomMessage).filter(models.FBCustomMessage.id == message_id).first()
