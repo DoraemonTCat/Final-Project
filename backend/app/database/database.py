@@ -3,10 +3,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.pool import StaticPool
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 import os
 from dotenv import load_dotenv
-
-
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")

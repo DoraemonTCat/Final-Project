@@ -1,0 +1,82 @@
+services:
+  redis:
+    image: redis:7
+    container_name: redis_backend
+    restart: unless-stopped
+    command: ["redis-server"]
+    networks:
+      - backend
+
+  db:
+    image: postgres:17
+    container_name: db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: peeframe2547
+      POSTGRES_DB: DataBase_Project
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - backend
+
+  backend:
+    build:
+      context: ./backend
+    container_name: fastapi_app
+    command: uvicorn app.app:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+    env_file: .env 
+    depends_on:
+      - redis
+      - db
+    networks:
+      - backend
+    ports:
+      - "8000:8000"
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: peeframesave@gmail.com
+      PGADMIN_DEFAULT_PASSWORD: peeframe2547
+    ports:
+      - "8083:80"
+    depends_on:
+      - db
+    networks:
+      - backend
+
+  worker:
+    build:
+      context: ./backend
+    container_name: celery_worker
+    command: celery -A app.celery_worker.celery_app worker --loglevel=info
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      - redis
+      - db
+    networks:
+      - backend
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: react_app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      - backend
+
+volumes:
+  db_data:
+
+networks:
+  backend:
+    driver: bridge

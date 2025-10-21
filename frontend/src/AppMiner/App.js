@@ -657,7 +657,7 @@ function App() {
               let messageContent = messageObj.content;
 
               if (messageObj.message_type === "image") {
-                messageContent = `http://localhost:8000/images/${messageContent.replace('[IMAGE] ', '')}`;
+                messageContent = messageObj.id.toString();
               } else if (messageObj.message_type === "video") {
                 messageContent = `http://localhost:8000/videos/${messageContent.replace('[VIDEO] ', '')}`;
               }

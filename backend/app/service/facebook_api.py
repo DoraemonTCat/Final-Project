@@ -3,8 +3,12 @@ from urllib.parse import urlparse
 import json
 import os
 from tempfile import NamedTemporaryFile
+import logging
+import io
 
 FB_API_URL = "https://graph.facebook.com/v14.0"
+
+logger = logging.getLogger(__name__)
 
 # API สำหรับแก้ไข URL ของภาพที่ซ้ำซ้อน
 def fix_nested_image_url(bad_url: str) -> str:
@@ -65,18 +69,11 @@ def send_message(recipient_id: str, message_text: str, access_token: str = None)
     return fb_post("me/messages", payload, access_token)
 
 # API สำหรับส่งข้อความแบบ binary (image/video)
-def send_image_binary(recipient_id: str, filepath: str, access_token: str):
-    prefix = "http://localhost:8000/images/"
-    # ตัด prefix ออกหมดเลย (ถ้ามีซ้ำๆก็หมด)
-    filepath = filepath.replace(prefix, "")
-
-    base_dir = "C:/Users/peemn/OneDrive/รูปภาพ/"
-    full_path = os.path.join(base_dir, filepath)
-
-    print("เปิดไฟล์จาก:", full_path)
-
+def send_image_binary_from_db(recipient_id: str, image_binary: bytes, access_token: str):
+    """
+    ส่งภาพจาก database (binary) ไปยัง Facebook Messenger โดยตรง
+    """
     url = f"https://graph.facebook.com/v14.0/me/messages?access_token={access_token}"
-    filename = os.path.basename(full_path)
 
     payload = {
         "recipient": {"id": recipient_id},
@@ -90,18 +87,24 @@ def send_image_binary(recipient_id: str, filepath: str, access_token: str):
         "tag": "CONFIRMED_EVENT_UPDATE"
     }
 
+    # เตรียมข้อมูล multipart
     data = {
-        'message': json.dumps(payload['message']),
-        'recipient': json.dumps(payload['recipient']),
-        'messaging_type': payload['messaging_type'],
-        'tag': payload['tag'],
+        'recipient': '{"id":"%s"}' % recipient_id,
+        'message': '{"attachment":{"type":"image","payload":{}}}',
+        'messaging_type': 'MESSAGE_TAG',
+        'tag': 'CONFIRMED_EVENT_UPDATE'
     }
 
-    with open(full_path, 'rb') as f:
-        files = {
-            'filedata': (filename, f, 'image/jpeg')
-        }
-        response = requests.post(url, data=data, files=files)
+    files = {
+        'filedata': ('image.jpg', io.BytesIO(image_binary), 'image/jpeg')
+    }
+
+    response = requests.post(url, data=data, files=files)
+
+    if not response.ok:
+        logger.error(f"❌ Error sending image: {response.status_code} {response.text}")
+    else:
+        logger.info(f"✅ Image sent successfully to PSID={recipient_id}")
 
     return response.json()
 

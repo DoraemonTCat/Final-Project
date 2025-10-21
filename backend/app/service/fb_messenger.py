@@ -1,8 +1,10 @@
 import logging
-from app.service.facebook_api import send_message, send_image_binary, send_video_binary
+from app.service.facebook_api import send_image_binary_from_db
 from app.config import image_dir, vid_dir
 from app.database import crud
 import requests
+import json
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -15,43 +17,45 @@ def send_facebook_message(
     image_binary: bytes = None,
     access_token: str = None,
     is_system_message: bool = False,
-    message_tag: str = None
+    message_tag: str = "CONFIRMED_EVENT_UPDATE"
 ):
     """
-    ส่งข้อความหรือรูปภาพผ่าน Facebook Messenger
-    - msg_type: "text" หรือ "image"
-    - image_binary: ถ้าเป็นรูป ให้ใส่ binary
+    ส่งข้อความหรือรูป (binary) ไปยัง Facebook Messenger API
     """
     url = f"https://graph.facebook.com/v14.0/me/messages?access_token={access_token}"
-    
-    if msg_type == "text":
-        if not message:
-            raise ValueError("ข้อความว่าง")
+
+    if msg_type == "image":
+        # ✅ ส่งรูปแบบ binary โดยตรง
+        if not image_binary:
+            return {"error": "⚠️ No image binary data provided"}
+
         data = {
+            "recipient": json.dumps({"id": psid}),
+            "message": json.dumps({
+                "attachment": {"type": "image", "payload": {}}
+            }),
+            "messaging_type": "MESSAGE_TAG",
+            "tag": message_tag
+        }
+
+        files = {
+            "filedata": ("image.jpg", io.BytesIO(image_binary), "image/jpeg")
+        }
+
+        logger.info(f"🖼 Sending image ({len(image_binary)} bytes) to PSID={psid}")
+        response = requests.post(url, data=data, files=files)
+
+    else:
+        # ✅ ส่งข้อความธรรมดา
+        payload = {
             "recipient": {"id": psid},
             "message": {"text": message},
+            "messaging_type": "MESSAGE_TAG",
+            "tag": message_tag
         }
-        if message_tag:
-            data["tag"] = message_tag
-        resp = requests.post(url, json=data)
-    
-    elif msg_type == "image":
-        if not image_binary:
-            raise ValueError("ไม่มีรูปภาพให้ส่ง")
-        # 🚀 multipart/form-data สำหรับไฟล์
-        data = {
-            "recipient": '{"id":"%s"}' % psid,
-            "message": '{"attachment":{"type":"image","payload":{}}}'
-        }
-        files = {
-            "filedata": ("image.jpg", image_binary, "image/jpeg")
-        }
-        if message_tag:
-            data["tag"] = message_tag
-        resp = requests.post(url, data=data, files=files)
-    
-    else:
-        raise ValueError(f"Unsupported msg_type={msg_type}")
+        logger.info(f"💬 Sending text: '{message}' to PSID={psid}")
+        response = requests.post(url, json=payload)
 
-    result = resp.json()
+    result = response.json()
+    logger.info(f"📩 Facebook response: {result}")
     return result

@@ -7,6 +7,7 @@ import asyncio
 import threading
 import logging
 import uvicorn
+import redis
 
 # Import routes
 from app.routes import pages, webhook, custom_messages, fb_customer, sync, group_messages
@@ -49,6 +50,13 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+r = redis.Redis(
+    host=os.getenv("REDIS_HOST", "redis"),
+    port=int(os.getenv("REDIS_PORT", 6379)),
+    db=int(os.getenv("REDIS_DB", 2)),
+    password=None  # ❌ เอา password ออก
 )
 
 # รวม router จากแต่ละโมดูล

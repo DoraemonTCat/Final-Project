@@ -37,18 +37,23 @@ async def send_user_message(
         if not access_token:
             raise HTTPException(status_code=400, detail="Page token not found")
 
+        image_binary = None  # ✅ ป้องกัน local variable error
+
         # 🔍 ถ้าเป็นรูป ให้ดึง binary จาก DB
         if req.type == "image":
-            try:
-                message_id = int(req.message)
-            except ValueError:
+            # ตรวจสอบก่อนว่า message เป็นเลขจริงไหม
+            if not str(req.message).isdigit():
                 logger.error(f"❌ Invalid message id for image: {req.message}")
                 raise HTTPException(status_code=400, detail="Invalid message id for image message")
 
+            message_id = int(req.message)
             custom_msg = crud.get_custom_message_by_id(db, message_id)
+
             if custom_msg and custom_msg.image_data:
                 image_binary = custom_msg.image_data
-                logger.info(f"🖼 Loaded image binary ({len(image_binary)} bytes) from fb_custom_messages.id={custom_msg.id}")
+                logger.info(
+                    f"🖼 Loaded image binary ({len(image_binary)} bytes) from fb_custom_messages.id={custom_msg.id}"
+                )
             else:
                 logger.warning("⚠️ No image data found for this message_id")
 
@@ -68,6 +73,8 @@ async def send_user_message(
             "message": f"⏳ Message queued to PSID={psid}"
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ Error in /send endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))

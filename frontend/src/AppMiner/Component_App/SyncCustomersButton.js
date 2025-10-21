@@ -27,34 +27,51 @@ export default function SyncCustomersButton({ selectedPage, onSyncComplete }) {
 
       // ตรวจสอบว่าเป็นการ sync แบบ imported หรือไม่
       if (selectedPeriod.startsWith('imported_')) {
-        // ดึงจำนวนปีจาก period เช่น imported_1y -> 1
         const years = parseInt(selectedPeriod.replace('imported_', '').replace('y', ''));
-        // ใช้ POST method และส่ง years ใน query parameters
-        endpoint = `http://localhost:8000/sync-customers/${selectedPage}?years=${years}&compare_to=installed_at&imported=true`;
-      } else {
-        // Sync แบบปกติ
-        endpoint = `http://localhost:8000/sync-customers/${selectedPage}`;
-        
-        // เตรียม query parameters สำหรับช่วงเวลา
-        if (selectedPeriod === 'custom' && dateRange.startDate && dateRange.endDate) {
-          queryParams = `?start_date=${dateRange.startDate}&end_date=${dateRange.endDate}`;
-        } else if (selectedPeriod !== 'all') {
-          queryParams = `?period=${selectedPeriod}`;
+        endpoint = `http://localhost:8000/sync/facebook/imported_customers/${selectedPage}?years=${years}&compare_to=installed_at`;
+
+        const response = await fetch(endpoint, { method: "GET" });
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Import sync failed:', errorText);
+          throw new Error(`Sync failed: ${errorText}`);
         }
+
+        const data = await response.json();
+        setSyncStatus({
+          type: 'success',
+          message: `นำเข้าข้อมูลย้อนหลัง ${years} ปี สำเร็จ!`,
+          details: data
+        });
         
-        endpoint += queryParams;
+        onSyncComplete?.(data);
+        return; // จบการทำงานที่นี่สำหรับ imported
       }
 
-      const response = await fetch(endpoint, {
+      // สำหรับ period อื่นๆ (all, today, week, month, custom)
+      if (selectedPeriod === 'all') {
+        endpoint = `http://localhost:8000/sync/facebook/customers/${selectedPage}`;
+      } else if (selectedPeriod === 'custom') {
+        endpoint = `http://localhost:8000/sync/facebook/customers/${selectedPage}`;
+        queryParams = `?start_date=${dateRange.startDate}&end_date=${dateRange.endDate}`;
+      } else {
+        // today, week, month, 3months, 6months, year
+        endpoint = `http://localhost:8000/sync/facebook/customers/${selectedPage}`;
+        queryParams = `?period=${selectedPeriod}`;
+      }
+
+      const response = await fetch(endpoint + queryParams, {
         method: 'POST'
       });
 
       if (!response.ok) {
-        throw new Error('Sync failed');
+        const errorText = await response.text();
+        console.error('Sync failed:', errorText);
+        throw new Error(`Sync failed: ${errorText}`);
       }
 
       const result = await response.json();
-      
+
       setSyncStatus({
         type: 'success',
         message: `Sync สำเร็จ! ${result.synced || 0} ข้อมูล${result.details ? ` (ใหม่: ${result.details.created || 0}, อัพเดท: ${result.details.updated || 0})` : ''}`
@@ -76,7 +93,7 @@ export default function SyncCustomersButton({ selectedPage, onSyncComplete }) {
       console.error('Sync error:', error);
       setSyncStatus({
         type: 'error',
-        message: 'เกิดข้อผิดพลาดในการ sync ข้อมูล'
+        message: `เกิดข้อผิดพลาดในการ sync ข้อมูล: ${error.message}`
       });
     } finally {
       setSyncing(false);
@@ -104,8 +121,8 @@ export default function SyncCustomersButton({ selectedPage, onSyncComplete }) {
   const getDateFromPeriod = (period) => {
     const today = new Date();
     let startDate = new Date();
-    
-    switch(period) {
+
+    switch (period) {
       case 'today':
         startDate = today;
         break;
@@ -133,7 +150,7 @@ export default function SyncCustomersButton({ selectedPage, onSyncComplete }) {
       default:
         return '';
     }
-    
+
     return startDate.toISOString().split('T')[0];
   };
 
@@ -142,8 +159,8 @@ export default function SyncCustomersButton({ selectedPage, onSyncComplete }) {
       <button
         onClick={() => setShowSyncOptions(!showSyncOptions)}
         disabled={syncing || !selectedPage}
-        className="date-filter-btn" style={{marginTop:"14px" }}
-      
+        className="date-filter-btn" style={{ marginTop: "14px" }}
+
       >
         <span className={syncing ? 'spinning' : ''}>🔄</span>
         {syncing ? 'กำลัง Sync...' : 'ดึงข้อมูลลูกค้าเก่า'}
@@ -260,18 +277,18 @@ export default function SyncCustomersButton({ selectedPage, onSyncComplete }) {
             </button>
 
             {dateRange.period === 'custom' && (
-              <div style={{ 
-                padding: '16px', 
-                background: '#f7fafc', 
+              <div style={{
+                padding: '16px',
+                background: '#f7fafc',
                 borderRadius: '8px',
                 marginTop: '12px'
               }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
-                    <label style={{ 
-                      display: 'block', 
-                      marginBottom: '6px', 
-                      fontSize: '13px', 
+                    <label style={{
+                      display: 'block',
+                      marginBottom: '6px',
+                      fontSize: '13px',
                       color: '#4a5568',
                       fontWeight: '500'
                     }}>
@@ -292,10 +309,10 @@ export default function SyncCustomersButton({ selectedPage, onSyncComplete }) {
                     />
                   </div>
                   <div>
-                    <label style={{ 
-                      display: 'block', 
-                      marginBottom: '6px', 
-                      fontSize: '13px', 
+                    <label style={{
+                      display: 'block',
+                      marginBottom: '6px',
+                      fontSize: '13px',
                       color: '#4a5568',
                       fontWeight: '500'
                     }}>
@@ -344,13 +361,13 @@ export default function SyncCustomersButton({ selectedPage, onSyncComplete }) {
           {/* Historical Data Section */}
           <div>
             <h5 style={{ margin: '0 0 12px 0', color: '#4a5568', fontSize: '14px' }}>
-              📥 ข้อมูลย้อนหลัง (ก่อนติดตั้งระบบ)
+              🔥 ข้อมูลย้อนหลัง (ก่อนติดตั้งระบบ)
             </h5>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
               {[
-                { value: 'imported_1y', label: '📥 1 ปี' },
-                { value: 'imported_2y', label: '📥 2 ปี' },
-                { value: 'imported_3y', label: '📥 3 ปี' }
+                { value: 'imported_1y', label: '🔥 1 ปี' },
+                { value: 'imported_2y', label: '🔥 2 ปี' },
+                { value: 'imported_3y', label: '🔥 3 ปี' }
               ].map(option => (
                 <button
                   key={option.value}
@@ -381,7 +398,7 @@ export default function SyncCustomersButton({ selectedPage, onSyncComplete }) {
                 </button>
               ))}
             </div>
-            
+
             <div style={{
               marginTop: '12px',
               padding: '12px',

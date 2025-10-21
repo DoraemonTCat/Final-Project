@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Set
 import logging
-from app.service.facebook_api import send_message, send_image_binary, send_video_binary
+from app.service.facebook_api import send_message, send_image_binary_from_db, send_video_binary
 from app.database import crud
 from sqlalchemy.orm import Session
 from app.database.database import SessionLocal
@@ -461,7 +461,7 @@ class MessageScheduler:
                             from app.config import image_dir
                             clean_content = content.replace('[IMAGE] ', '')
                             image_path = f"{image_dir}/{clean_content}"
-                            result = send_image_binary(psid, image_path, access_token)
+                            result = send_image_binary_from_db(psid, image_path, access_token)
                         elif message_type == 'video':
                             from app.config import vid_dir
                             clean_content = content.replace('[VIDEO] ', '')
